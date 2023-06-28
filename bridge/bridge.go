@@ -119,7 +119,7 @@ func (b *Bridge) Start(configOpts BridgeConfig) (nodeL1 *node.Node, nodeL2 *node
 
 	messageOptsL1 := p2pms.MessageOpts{
 		PkBytes:      common.Hex2Bytes(configOpts.StateChannelPK),
-		Port:         configOpts.NodeL1MsgPort,
+		TcpPort:      configOpts.NodeL1MsgPort,
 		BootPeers:    nil,
 		PublicIp:     configOpts.BridgePublicIp,
 		ExtMultiAddr: configOpts.NodeL1ExtMultiAddr,
@@ -127,7 +127,7 @@ func (b *Bridge) Start(configOpts BridgeConfig) (nodeL1 *node.Node, nodeL2 *node
 
 	messageOptsL2 := p2pms.MessageOpts{
 		PkBytes:      common.Hex2Bytes(configOpts.StateChannelPK),
-		Port:         configOpts.NodeL2MsgPort,
+		TcpPort:      configOpts.NodeL2MsgPort,
 		BootPeers:    nil,
 		PublicIp:     configOpts.BridgePublicIp,
 		ExtMultiAddr: configOpts.NodeL2ExtMultiAddr,

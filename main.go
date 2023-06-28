@@ -38,6 +38,7 @@ func main() {
 		BRIDGE_ADDRESS        = "bridgeaddress"
 		PUBLIC_IP             = "publicip"
 		MSG_PORT              = "msgport"
+		WS_MSG_PORT           = "wsmsgport"
 		RPC_PORT              = "rpcport"
 		GUI_PORT              = "guiport"
 		BOOT_PEERS            = "bootpeers"
@@ -60,7 +61,7 @@ func main() {
 		TLS_KEY_FILEPATH  = "tlskeyfilepath"
 	)
 	var pkString, chainUrl, chainAuthToken, naAddress, vpaAddress, caAddress, bridgeAddress, chainPk, durableStoreFolder, bootPeers, publicIp, extMultiAddr string
-	var msgPort, rpcPort, guiPort int
+	var msgPort, wsMsgPort, rpcPort, guiPort int
 	var chainStartBlock uint64
 	var useNats, useDurableStore, l2 bool
 
@@ -185,6 +186,13 @@ func main() {
 			Destination: &msgPort,
 		}),
 		altsrc.NewIntFlag(&cli.IntFlag{
+			Name:        WS_MSG_PORT,
+			Usage:       "Specifies the websocket port for the message service.",
+			Value:       5005,
+			Category:    "Connectivity:",
+			Destination: &wsMsgPort,
+		}),
+		altsrc.NewIntFlag(&cli.IntFlag{
 			Name:        RPC_PORT,
 			Usage:       "Specifies the tcp port for the rpc server.",
 			Value:       4005,
@@ -249,7 +257,8 @@ func main() {
 
 			messageOpts := p2pms.MessageOpts{
 				PkBytes:      common.Hex2Bytes(pkString),
-				Port:         msgPort,
+				TcpPort:      msgPort,
+				WsMsgPort:    wsMsgPort,
 				BootPeers:    peerSlice,
 				PublicIp:     publicIp,
 				ExtMultiAddr: extMultiAddr,
