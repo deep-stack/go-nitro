@@ -14,11 +14,12 @@ require (
 require (
 	github.com/BurntSushi/toml v1.3.2
 	github.com/golang-jwt/jwt/v5 v5.0.0
+	github.com/hashicorp/golang-lru/v2 v2.0.5
 	github.com/libp2p/go-libp2p-kad-dht v0.24.2
 	github.com/lmittmann/tint v1.0.2
 	github.com/tidwall/buntdb v1.2.10
 	github.com/urfave/cli/v2 v2.25.7
-
+	golang.org/x/exp v0.0.0-20231110203233-9a3e6036ecaa
 )
 
 require (
@@ -165,7 +166,6 @@ require (
 	go.uber.org/fx v1.20.0 // indirect
 	go.uber.org/multierr v1.11.0 // indirect
 	go.uber.org/zap v1.25.0 // indirect
-	golang.org/x/exp v0.0.0-20231110203233-9a3e6036ecaa // indirect
 	golang.org/x/mod v0.14.0 // indirect
 	golang.org/x/net v0.18.0 // indirect
 	golang.org/x/sync v0.5.0 // indirect

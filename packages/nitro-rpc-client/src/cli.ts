@@ -6,13 +6,9 @@ import yargs from "yargs/yargs";
 import { hideBin } from "yargs/helpers";
 
 import { NitroRpcClient } from "./rpc-client";
-<<<<<<< HEAD
 import { compactJson, getRPCUrl, logOutChannelUpdates } from "./utils";
 import { CounterChallengeAction } from "./types";
 import { ZERO_ETHEREUM_ADDRESS } from "./constants";
-=======
-import { compactJson, getCustomRPCUrl, logOutChannelUpdates } from "./utils";
->>>>>>> 27acfb19 (Changes required for running proxy server and `nitro-rpc-client` in payments stack (#14))
 
 yargs(hideBin(process.argv))
   .scriptName("nitro-rpc-client")
@@ -24,16 +20,7 @@ yargs(hideBin(process.argv))
       type: "boolean",
       description: "Whether channel notifications are printed to the console",
     },
-<<<<<<< HEAD
     h: { alias: "host", default: "127.0.0.1", type: "string" },
-=======
-    h: {
-      alias: "host",
-      default: "127.0.0.1",
-      type: "string",
-      description: "Custom hostname",
-    },
->>>>>>> 27acfb19 (Changes required for running proxy server and `nitro-rpc-client` in payments stack (#14))
   })
   .command(
     "version",
@@ -44,11 +31,7 @@ yargs(hideBin(process.argv))
       const rpcHost = yargs.h;
 
       const rpcClient = await NitroRpcClient.CreateHttpNitroClient(
-<<<<<<< HEAD
         getRPCUrl(rpcHost, rpcPort)
-=======
-        getCustomRPCUrl(rpcHost, rpcPort)
->>>>>>> 27acfb19 (Changes required for running proxy server and `nitro-rpc-client` in payments stack (#14))
       );
       const version = await rpcClient.GetVersion();
       console.log(version);
@@ -65,11 +48,7 @@ yargs(hideBin(process.argv))
       const rpcHost = yargs.h;
 
       const rpcClient = await NitroRpcClient.CreateHttpNitroClient(
-<<<<<<< HEAD
         getRPCUrl(rpcHost, rpcPort)
-=======
-        getCustomRPCUrl(rpcHost, rpcPort)
->>>>>>> 27acfb19 (Changes required for running proxy server and `nitro-rpc-client` in payments stack (#14))
       );
       const address = await rpcClient.GetAddress();
       console.log(address);
@@ -86,11 +65,7 @@ yargs(hideBin(process.argv))
       const rpcHost = yargs.h;
 
       const rpcClient = await NitroRpcClient.CreateHttpNitroClient(
-<<<<<<< HEAD
         getRPCUrl(rpcHost, rpcPort)
-=======
-        getCustomRPCUrl(rpcHost, rpcPort)
->>>>>>> 27acfb19 (Changes required for running proxy server and `nitro-rpc-client` in payments stack (#14))
       );
       const ledgers = await rpcClient.GetAllLedgerChannels();
       for (const ledger of ledgers) {
@@ -135,11 +110,7 @@ yargs(hideBin(process.argv))
       const rpcHost = yargs.h;
 
       const rpcClient = await NitroRpcClient.CreateHttpNitroClient(
-<<<<<<< HEAD
         getRPCUrl(rpcHost, rpcPort)
-=======
-        getCustomRPCUrl(rpcHost, rpcPort)
->>>>>>> 27acfb19 (Changes required for running proxy server and `nitro-rpc-client` in payments stack (#14))
       );
       const paymentChans = await rpcClient.GetPaymentChannelsByLedger(
         yargs.ledgerId
@@ -183,11 +154,7 @@ yargs(hideBin(process.argv))
       const rpcHost = yargs.h;
 
       const rpcClient = await NitroRpcClient.CreateHttpNitroClient(
-<<<<<<< HEAD
         getRPCUrl(rpcHost, rpcPort)
-=======
-        getCustomRPCUrl(rpcHost, rpcPort)
->>>>>>> 27acfb19 (Changes required for running proxy server and `nitro-rpc-client` in payments stack (#14))
       );
       if (yargs.n) logOutChannelUpdates(rpcClient);
 
@@ -227,11 +194,7 @@ yargs(hideBin(process.argv))
       const rpcHost = yargs.h;
 
       const rpcClient = await NitroRpcClient.CreateHttpNitroClient(
-<<<<<<< HEAD
         getRPCUrl(rpcHost, rpcPort)
-=======
-        getCustomRPCUrl(rpcHost, rpcPort)
->>>>>>> 27acfb19 (Changes required for running proxy server and `nitro-rpc-client` in payments stack (#14))
       );
       if (yargs.n) logOutChannelUpdates(rpcClient);
 
@@ -271,11 +234,7 @@ yargs(hideBin(process.argv))
       const rpcHost = yargs.h;
 
       const rpcClient = await NitroRpcClient.CreateHttpNitroClient(
-<<<<<<< HEAD
         getRPCUrl(rpcHost, rpcPort)
-=======
-        getCustomRPCUrl(rpcHost, rpcPort)
->>>>>>> 27acfb19 (Changes required for running proxy server and `nitro-rpc-client` in payments stack (#14))
       );
       if (yargs.n) logOutChannelUpdates(rpcClient);
 
@@ -317,11 +276,7 @@ yargs(hideBin(process.argv))
       const rpcHost = yargs.h;
 
       const rpcClient = await NitroRpcClient.CreateHttpNitroClient(
-<<<<<<< HEAD
         getRPCUrl(rpcHost, rpcPort)
-=======
-        getCustomRPCUrl(rpcHost, rpcPort)
->>>>>>> 27acfb19 (Changes required for running proxy server and `nitro-rpc-client` in payments stack (#14))
       );
 
       if (yargs.n) logOutChannelUpdates(rpcClient);
@@ -350,11 +305,7 @@ yargs(hideBin(process.argv))
       const rpcHost = yargs.h;
 
       const rpcClient = await NitroRpcClient.CreateHttpNitroClient(
-<<<<<<< HEAD
         getRPCUrl(rpcHost, rpcPort)
-=======
-        getCustomRPCUrl(rpcHost, rpcPort)
->>>>>>> 27acfb19 (Changes required for running proxy server and `nitro-rpc-client` in payments stack (#14))
       );
 
       const ledgerInfo = await rpcClient.GetLedgerChannel(yargs.channelId);
@@ -378,11 +329,7 @@ yargs(hideBin(process.argv))
       const rpcHost = yargs.h;
 
       const rpcClient = await NitroRpcClient.CreateHttpNitroClient(
-<<<<<<< HEAD
         getRPCUrl(rpcHost, rpcPort)
-=======
-        getCustomRPCUrl(rpcHost, rpcPort)
->>>>>>> 27acfb19 (Changes required for running proxy server and `nitro-rpc-client` in payments stack (#14))
       );
       const paymentChannelInfo = await rpcClient.GetPaymentChannel(
         yargs.channelId
@@ -413,11 +360,7 @@ yargs(hideBin(process.argv))
       const rpcHost = yargs.h;
 
       const rpcClient = await NitroRpcClient.CreateHttpNitroClient(
-<<<<<<< HEAD
         getRPCUrl(rpcHost, rpcPort)
-=======
-        getCustomRPCUrl(rpcHost, rpcPort)
->>>>>>> 27acfb19 (Changes required for running proxy server and `nitro-rpc-client` in payments stack (#14))
       );
       if (yargs.n) logOutChannelUpdates(rpcClient);
 
@@ -494,11 +437,7 @@ yargs(hideBin(process.argv))
       const rpcHost = yargs.h;
 
       const rpcClient = await NitroRpcClient.CreateHttpNitroClient(
-<<<<<<< HEAD
         getRPCUrl(rpcHost, rpcPort)
-=======
-        getCustomRPCUrl(rpcHost, rpcPort)
->>>>>>> 27acfb19 (Changes required for running proxy server and `nitro-rpc-client` in payments stack (#14))
       );
       if (yargs.n) logOutChannelUpdates(rpcClient);
 
