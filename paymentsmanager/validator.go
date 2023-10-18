@@ -27,27 +27,11 @@ type InProcessVoucherValidator struct {
 }
 
 func (v InProcessVoucherValidator) ValidateVoucher(voucherHash common.Hash, signerAddress common.Address, value *big.Int) error {
-	isPaymentReceived, isOfSufficientValue := v.PaymentsManager.ValidateVoucher(voucherHash, signerAddress, value)
+	success, errCode := v.PaymentsManager.ValidateVoucher(voucherHash, signerAddress, value)
 
-	if !isPaymentReceived {
-		return ErrPaymentNotReceived
+	if !success {
+		return fmt.Errorf(errCode)
 	}
 
-	if !isOfSufficientValue {
-		return ErrAmountInsufficient
-	}
-
-	return nil
-}
-
-var _ VoucherValidator = &RemoteVoucherValidator{}
-
-// When go-nitro is running remotely
-type RemoteVoucherValidator struct {
-	// client rpc.RpcClientApi
-}
-
-func (r RemoteVoucherValidator) ValidateVoucher(voucherHash common.Hash, signerAddress common.Address, value *big.Int) error {
-	// TODO: Implement
 	return nil
 }

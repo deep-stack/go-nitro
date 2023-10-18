@@ -7,19 +7,20 @@ import (
 
 	"github.com/statechannels/go-nitro/bridge"
 	"github.com/statechannels/go-nitro/node"
+	"github.com/statechannels/go-nitro/paymentsmanager"
 	"github.com/statechannels/go-nitro/rpc"
 	"github.com/statechannels/go-nitro/rpc/transport"
 	httpTransport "github.com/statechannels/go-nitro/rpc/transport/http"
 	"github.com/statechannels/go-nitro/rpc/transport/nats"
 )
 
-func InitializeNodeRpcServer(node *node.Node, rpcPort int, useNats bool, cert *tls.Certificate) (*rpc.NodeRpcServer, error) {
+func InitializeNodeRpcServer(node *node.Node, paymentManager paymentsmanager.PaymentsManager, rpcPort int, useNats bool, cert *tls.Certificate) (*rpc.NodeRpcServer, error) {
 	transport, err := initializeTransport(rpcPort, useNats, cert)
 	if err != nil {
 		return nil, err
 	}
 
-	rpcServer, err := rpc.NewNodeRpcServer(node, transport)
+	rpcServer, err := rpc.NewNodeRpcServer(node, paymentManager, transport)
 	if err != nil {
 		return nil, err
 	}

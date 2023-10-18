@@ -20,7 +20,18 @@ yargs(hideBin(process.argv))
       type: "boolean",
       description: "Whether channel notifications are printed to the console",
     },
-    h: { alias: "host", default: "127.0.0.1", type: "string" },
+    h: {
+      alias: "host",
+      default: "127.0.0.1",
+      type: "string",
+      description: "Custom hostname",
+    },
+    s: {
+      alias: "isSecure",
+      default: true,
+      type: "boolean",
+      description: "Is it a secured connection",
+    },
   })
   .command(
     "version",
@@ -29,9 +40,11 @@ yargs(hideBin(process.argv))
     async (yargs) => {
       const rpcPort = yargs.p;
       const rpcHost = yargs.h;
+      const isSecure = yargs.s;
 
       const rpcClient = await NitroRpcClient.CreateHttpNitroClient(
-        getRPCUrl(rpcHost, rpcPort)
+        getRPCUrl(rpcHost, rpcPort),
+        isSecure
       );
       const version = await rpcClient.GetVersion();
       console.log(version);
@@ -46,9 +59,11 @@ yargs(hideBin(process.argv))
     async (yargs) => {
       const rpcPort = yargs.p;
       const rpcHost = yargs.h;
+      const isSecure = yargs.s;
 
       const rpcClient = await NitroRpcClient.CreateHttpNitroClient(
-        getRPCUrl(rpcHost, rpcPort)
+        getRPCUrl(rpcHost, rpcPort),
+        isSecure
       );
       const address = await rpcClient.GetAddress();
       console.log(address);
@@ -63,9 +78,11 @@ yargs(hideBin(process.argv))
     async (yargs) => {
       const rpcPort = yargs.p;
       const rpcHost = yargs.h;
+      const isSecure = yargs.s;
 
       const rpcClient = await NitroRpcClient.CreateHttpNitroClient(
-        getRPCUrl(rpcHost, rpcPort)
+        getRPCUrl(rpcHost, rpcPort),
+        isSecure
       );
       const ledgers = await rpcClient.GetAllLedgerChannels();
       for (const ledger of ledgers) {
@@ -82,9 +99,11 @@ yargs(hideBin(process.argv))
     async (yargs) => {
       const rpcPort = yargs.p;
       const rpcHost = yargs.h;
+      const isSecure = yargs.s;
 
       const rpcClient = await NitroRpcClient.CreateHttpNitroClient(
-        getRPCUrl(rpcHost, rpcPort)
+        getRPCUrl(rpcHost, rpcPort),
+        isSecure
       );
       const ledgers = await rpcClient.GetAllL2Channels();
       for (const ledger of ledgers) {
@@ -108,9 +127,11 @@ yargs(hideBin(process.argv))
     async (yargs) => {
       const rpcPort = yargs.p;
       const rpcHost = yargs.h;
+      const isSecure = yargs.s;
 
       const rpcClient = await NitroRpcClient.CreateHttpNitroClient(
-        getRPCUrl(rpcHost, rpcPort)
+        getRPCUrl(rpcHost, rpcPort),
+        isSecure
       );
       const paymentChans = await rpcClient.GetPaymentChannelsByLedger(
         yargs.ledgerId
@@ -152,9 +173,11 @@ yargs(hideBin(process.argv))
     async (yargs) => {
       const rpcPort = yargs.p;
       const rpcHost = yargs.h;
+      const isSecure = yargs.s;
 
       const rpcClient = await NitroRpcClient.CreateHttpNitroClient(
-        getRPCUrl(rpcHost, rpcPort)
+        getRPCUrl(rpcHost, rpcPort),
+        isSecure
       );
       if (yargs.n) logOutChannelUpdates(rpcClient);
 
@@ -192,9 +215,11 @@ yargs(hideBin(process.argv))
     async (yargs) => {
       const rpcPort = yargs.p;
       const rpcHost = yargs.h;
+      const isSecure = yargs.s;
 
       const rpcClient = await NitroRpcClient.CreateHttpNitroClient(
-        getRPCUrl(rpcHost, rpcPort)
+        getRPCUrl(rpcHost, rpcPort),
+        isSecure
       );
       if (yargs.n) logOutChannelUpdates(rpcClient);
 
@@ -232,9 +257,11 @@ yargs(hideBin(process.argv))
     async (yargs) => {
       const rpcPort = yargs.p;
       const rpcHost = yargs.h;
+      const isSecure = yargs.s;
 
       const rpcClient = await NitroRpcClient.CreateHttpNitroClient(
-        getRPCUrl(rpcHost, rpcPort)
+        getRPCUrl(rpcHost, rpcPort),
+        isSecure
       );
       if (yargs.n) logOutChannelUpdates(rpcClient);
 
@@ -274,9 +301,11 @@ yargs(hideBin(process.argv))
     async (yargs) => {
       const rpcPort = yargs.p;
       const rpcHost = yargs.h;
+      const isSecure = yargs.s;
 
       const rpcClient = await NitroRpcClient.CreateHttpNitroClient(
-        getRPCUrl(rpcHost, rpcPort)
+        getRPCUrl(rpcHost, rpcPort),
+        isSecure
       );
 
       if (yargs.n) logOutChannelUpdates(rpcClient);
@@ -303,9 +332,11 @@ yargs(hideBin(process.argv))
     async (yargs) => {
       const rpcPort = yargs.p;
       const rpcHost = yargs.h;
+      const isSecure = yargs.s;
 
       const rpcClient = await NitroRpcClient.CreateHttpNitroClient(
-        getRPCUrl(rpcHost, rpcPort)
+        getRPCUrl(rpcHost, rpcPort),
+        isSecure
       );
 
       const ledgerInfo = await rpcClient.GetLedgerChannel(yargs.channelId);
@@ -327,9 +358,11 @@ yargs(hideBin(process.argv))
     async (yargs) => {
       const rpcPort = yargs.p;
       const rpcHost = yargs.h;
+      const isSecure = yargs.s;
 
       const rpcClient = await NitroRpcClient.CreateHttpNitroClient(
-        getRPCUrl(rpcHost, rpcPort)
+        getRPCUrl(rpcHost, rpcPort),
+        isSecure
       );
       const paymentChannelInfo = await rpcClient.GetPaymentChannel(
         yargs.channelId
@@ -358,9 +391,11 @@ yargs(hideBin(process.argv))
     async (yargs) => {
       const rpcPort = yargs.p;
       const rpcHost = yargs.h;
+      const isSecure = yargs.s;
 
       const rpcClient = await NitroRpcClient.CreateHttpNitroClient(
-        getRPCUrl(rpcHost, rpcPort)
+        getRPCUrl(rpcHost, rpcPort),
+        isSecure
       );
       if (yargs.n) logOutChannelUpdates(rpcClient);
 
@@ -393,9 +428,11 @@ yargs(hideBin(process.argv))
     async (yargs) => {
       const rpcPort = yargs.p;
       const rpcHost = yargs.h;
+      const isSecure = yargs.s;
 
       const rpcClient = await NitroRpcClient.CreateHttpNitroClient(
-        getRPCUrl(rpcHost, rpcPort)
+        getRPCUrl(rpcHost, rpcPort),
+        isSecure
       );
       if (yargs.n) logOutChannelUpdates(rpcClient);
 
@@ -435,9 +472,11 @@ yargs(hideBin(process.argv))
     async (yargs) => {
       const rpcPort = yargs.p;
       const rpcHost = yargs.h;
+      const isSecure = yargs.s;
 
       const rpcClient = await NitroRpcClient.CreateHttpNitroClient(
-        getRPCUrl(rpcHost, rpcPort)
+        getRPCUrl(rpcHost, rpcPort),
+        isSecure
       );
       if (yargs.n) logOutChannelUpdates(rpcClient);
 

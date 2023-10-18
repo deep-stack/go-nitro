@@ -31,6 +31,7 @@ const (
 	CreateVoucherRequestMethod        RequestMethod = "create_voucher"
 	ReceiveVoucherRequestMethod       RequestMethod = "receive_voucher"
 	CounterChallengeRequestMethod     RequestMethod = "counter_challenge"
+	ValidateVoucherRequestMethod      RequestMethod = "validate_voucher"
 
 	// Bridge methods
 	GetAllL2ChannelsRequestMethod RequestMethod = "get_all_l2_channels"
@@ -73,6 +74,12 @@ type GetPaymentChannelsByLedgerRequest struct {
 	LedgerId types.Destination
 }
 
+type ValidateVoucherRequest struct {
+	VoucherHash common.Hash
+	Signer      common.Address
+	Value       uint64
+}
+
 type (
 	NoPayloadRequest = struct{}
 )
@@ -89,7 +96,8 @@ type RequestPayload interface {
 		GetPaymentChannelsByLedgerRequest |
 		NoPayloadRequest |
 		payments.Voucher |
-		CounterChallengeRequest
+		CounterChallengeRequest |
+		ValidateVoucherRequest
 }
 
 type NotificationPayload interface {
@@ -115,6 +123,11 @@ type (
 	GetPaymentChannelsByLedgerResponse = []query.PaymentChannelInfo
 )
 
+type ValidateVoucherResponse struct {
+	Success   bool
+	ErrorCode string
+}
+
 type ResponsePayload interface {
 	directfund.ObjectiveResponse |
 		protocols.ObjectiveId |
@@ -128,7 +141,8 @@ type ResponsePayload interface {
 		common.Address |
 		string |
 		payments.ReceiveVoucherSummary |
-		CounterChallengeRequest
+		CounterChallengeRequest |
+		ValidateVoucherResponse
 }
 
 type JsonRpcSuccessResponse[T ResponsePayload] struct {
