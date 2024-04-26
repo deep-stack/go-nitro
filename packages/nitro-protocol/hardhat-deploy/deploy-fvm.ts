@@ -18,6 +18,7 @@ module.exports = async (hre: HardhatRuntimeEnvironment) => {
       // since Ethereum's legacy transaction format is not supported on FVM, we need to specify
       // maxPriorityFeePerGas to instruct hardhat to use EIP-1559 tx format
       maxPriorityFeePerGas: ethers.BigNumber.from(1500000000),
+      maxFeePerGas: ethers.BigNumber.from(1500000000),
       skipIfAlreadyDeployed: false,
       log: true,
     });
@@ -33,6 +34,7 @@ module.exports = async (hre: HardhatRuntimeEnvironment) => {
       // since Ethereum's legacy transaction format is not supported on FVM, we need to specify
       // maxPriorityFeePerGas to instruct hardhat to use EIP-1559 tx format
       maxPriorityFeePerGas: ethers.BigNumber.from(1500000000),
+      maxFeePerGas: ethers.BigNumber.from(1500000000),
       skipIfAlreadyDeployed: false,
       log: true,
     });
@@ -48,6 +50,7 @@ module.exports = async (hre: HardhatRuntimeEnvironment) => {
       // since Ethereum's legacy transaction format is not supported on FVM, we need to specify
       // maxPriorityFeePerGas to instruct hardhat to use EIP-1559 tx format
       maxPriorityFeePerGas: ethers.BigNumber.from(1500000000),
+      maxFeePerGas: ethers.BigNumber.from(1500000000),
       skipIfAlreadyDeployed: false,
       log: true,
     });
