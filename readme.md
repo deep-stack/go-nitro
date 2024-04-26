@@ -63,10 +63,11 @@ The on-chain component of Nitro (i.e. the solidity contracts) are housed in the 
     Note: On restarting the chain, make sure to remove `packages/nitro-protocol/hardhat-deployments` when redeploying contracts.
 
     ```bash
+    # In packages/nitro-protocol
     rm -rf hardhat-deployments
     ```
 
-- Generate tls certificate following [README](tls/readme.md)
+- Generate TLS certificate following [README](tls/readme.md)
 
 - Run go-nitro node for Alice:
 
@@ -93,7 +94,7 @@ The on-chain component of Nitro (i.e. the solidity contracts) are housed in the 
     export VPA_ADDRESS=0xe7f1725E7734CE288F8367e1Bb143E90bb3F0512
     export CA_ADDRESS=0x9fE46736679d2D9a65F0992F2272dE9f3c7fa6e0
 
-    go run . -chainurl ${NITRO_CHAIN_URL} -msgport 3007 -rpcport 4007 -pk $BOB_PK -chainpk $BOB_CHAIN_PK -naaddress $NA_ADDRESS -vpaaddress $VPA_ADDRESS -caaddress $CA_ADDRESS  -bootpeers "/ip4/10.18.121.160/tcp/3006/p2p/16Uiu2HAmSjXJqsyBJgcBUU2HQmykxGseafSatbpq5471XmuaUqyv" -tlskeyfilepath ./tls/statechannels.org_key.pem -tlscertfilepath ./tls/statechannels.org.pem
+    go run . -chainurl ${NITRO_CHAIN_URL} -msgport 3007 -rpcport 4007 -pk $BOB_PK -chainpk $BOB_CHAIN_PK -naaddress $NA_ADDRESS -vpaaddress $VPA_ADDRESS -caaddress $CA_ADDRESS  -bootpeers "/ip4/127.0.0.1/tcp/3006/p2p/16Uiu2HAmSjXJqsyBJgcBUU2HQmykxGseafSatbpq5471XmuaUqyv" -tlskeyfilepath ./tls/statechannels.org_key.pem -tlscertfilepath ./tls/statechannels.org.pem
     ```
 
   - Provide Alice's P2P multiaddr as a bootpeer to Bob.
