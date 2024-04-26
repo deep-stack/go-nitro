@@ -43,7 +43,7 @@ go test ./... -count=2 -shuffle=on -timeout 1m -v -failfast
 
 The on-chain component of Nitro (i.e. the solidity contracts) are housed in the [`nitro-protocol`](./packages/nitro-protocol/readme.md) directory. This directory contains an yarn workspace with a hardhat / typechain / jest toolchain.
 
-## Steps to run go-nitro nodes
+## Steps to perform payments between two go-nitro nodes
 
 - Follow this [doc](https://book.getfoundry.sh/getting-started/installation) to set up foundry to run anvil chain.
 
@@ -60,7 +60,7 @@ The on-chain component of Nitro (i.e. the solidity contracts) are housed in the 
     yarn contracts:deploy-localhost
     ```
 
-    Note: When restarting the chain, make sure to remove `packages/nitro-protocol/hardhat-deployments` when redeploying contracts.
+    Note: On restarting the chain, make sure to remove `packages/nitro-protocol/hardhat-deployments` when redeploying contracts.
 
     ```bash
     rm -rf hardhat-deployments
@@ -68,7 +68,7 @@ The on-chain component of Nitro (i.e. the solidity contracts) are housed in the 
 
 - Generate tls certificate following [README](tls/readme.md)
 
-- Run go-nitro node for alice:
+- Run go-nitro node for Alice:
 
     ```bash
     export NITRO_CHAIN_URL=ws://127.0.0.1:8545
@@ -96,7 +96,7 @@ The on-chain component of Nitro (i.e. the solidity contracts) are housed in the 
     go run . -chainurl ${NITRO_CHAIN_URL} -msgport 3007 -rpcport 4007 -pk $BOB_PK -chainpk $BOB_CHAIN_PK -naaddress $NA_ADDRESS -vpaaddress $VPA_ADDRESS -caaddress $CA_ADDRESS  -bootpeers "/ip4/10.18.121.160/tcp/3006/p2p/16Uiu2HAmSjXJqsyBJgcBUU2HQmykxGseafSatbpq5471XmuaUqyv" -tlskeyfilepath ./tls/statechannels.org_key.pem -tlscertfilepath ./tls/statechannels.org.pem
     ```
 
-  - Provide Alice's P2P multiaddress as the bootpeer flag for Bob.
+  - Provide Alice's P2P multiaddr as a bootpeer to Bob.
 
 - Change directory to `packages/nitro-rpc-client`
 
@@ -106,31 +106,31 @@ The on-chain component of Nitro (i.e. the solidity contracts) are housed in the 
     export NODE_EXTRA_CA_CERTS="$(mkcert -CAROOT)/rootCA.pem"
     ```
 
-- Run command to create ledger channel:
+- Create a ledger channel:
 
     ```bash
     npm exec -c 'nitro-rpc-client direct-fund 0xBBB676f9cFF8D242e9eaC39D063848807d3D1D94 -p 4006'
     ```
 
-- Run command to create virtual payment channel:
+- Create a virtual payment channel:
 
     ```bash
     npm exec -c 'nitro-rpc-client virtual-fund 0xBBB676f9cFF8D242e9eaC39D063848807d3D1D94 -p 4006'
     ```
 
-- Run command to make payment:
+- Make payment from Alice to Bob:
 
     ```bash
     npm exec -c 'nitro-rpc-client pay 0x66dc9aa194707f302de6d1d386a54f8ee82d47f5ba6a3e66176273741d8860e2 50 -p 4006'
     ```
 
-- Run command to close the virtual payment channel:
+- Close the virtual payment channel:
 
     ```bash
     npm exec -c 'nitro-rpc-client virtual-defund 0x66dc9aa194707f302de6d1d386a54f8ee82d47f5ba6a3e66176273741d8860e2 -p 4006'
     ```
 
-- Run command to close the ledger channel:
+- Close the ledger channel:
 
     ```bash
     npm exec -c 'nitro-rpc-client direct-defund 0x9502f6310933a3f56b43d51e2ecbab0926bd6db98a4e636004de66f2028527f5 -p 4006'
