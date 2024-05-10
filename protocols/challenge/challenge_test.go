@@ -30,11 +30,11 @@ func TestChallenge(t *testing.T) {
 	broker := messageservice.NewBroker()
 
 	// Create go-nitro nodes
-	nodeA, messageServiceA := setupNode(t, sim, bindings, ethAccounts[0], ta.Alice.PrivateKey, broker)
+	nodeA, messageServiceA := setupNode(t, sim, bindings, ethAccounts[0], ta.Alice.PrivateKey, broker, ta.Alice.Address())
 	broker.Services[*nodeA.Address] = messageServiceA
 	defer closeNode(t, &nodeA)
 
-	nodeB, messageServiceB := setupNode(t, sim, bindings, ethAccounts[1], ta.Bob.PrivateKey, broker)
+	nodeB, messageServiceB := setupNode(t, sim, bindings, ethAccounts[1], ta.Bob.PrivateKey, broker, ta.Bob.Address())
 	broker.Services[*nodeB.Address] = messageServiceB
 	defer closeNode(t, &nodeB)
 
@@ -54,13 +54,13 @@ func closeSimulatedChain(t *testing.T, chain chainservice.SimulatedChain) {
 	}
 }
 
-func setupNode(t *testing.T, sim chainservice.SimulatedChain, bindings chainservice.Bindings, txSigner *bind.TransactOpts, pk []byte, broker messageservice.Broker) (node.Node, messageservice.TestMessageService) {
+func setupNode(t *testing.T, sim chainservice.SimulatedChain, bindings chainservice.Bindings, txSigner *bind.TransactOpts, pk []byte, broker messageservice.Broker, address common.Address) (node.Node, messageservice.TestMessageService) {
 	chainService, err := chainservice.NewSimulatedBackendChainService(sim, bindings, txSigner)
 	if err != nil {
 		t.Fatal(err)
 	}
 
-	messageservice := messageservice.NewTestMessageService(ta.Alice.Address(), broker, 0)
+	messageservice := messageservice.NewTestMessageService(address, broker, 0)
 
 	memstore := store.NewMemStore(pk)
 
