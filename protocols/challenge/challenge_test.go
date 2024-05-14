@@ -1,6 +1,7 @@
 package challenge
 
 import (
+	"context"
 	"math/big"
 	"testing"
 
@@ -40,6 +41,11 @@ func TestChallenge(t *testing.T) {
 
 	// Create ledger channel
 	ledgerChannel := CreateLedgerChannel(t, nodeA, nodeB)
+
+	// Check balance of node
+	balanceNodeA, _ := sim.BalanceAt(context.Background(), ethAccounts[0].From, big.NewInt(6))
+	balanceNodeB, _ := sim.BalanceAt(context.Background(), ethAccounts[1].From, big.NewInt(6))
+	t.Log("Balance of node A", balanceNodeA, "Balance of Node B", balanceNodeB)
 
 	// Close the node B
 	closeNode(t, &nodeB)
