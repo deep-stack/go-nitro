@@ -22,6 +22,11 @@ func assetAddressForIndex(na *NitroAdjudicator.NitroAdjudicator, tx *types.Trans
 	// TODO remove the assumption that the tx incudes a candidate parameter
 	// 	concludeAndTransferAllAssets includes this parameter, but transferAllAssets, transfer, and claim do not.
 	//  https://github.com/statechannels/go-nitro/issues/759
+	value, exists := params["candidate"]
+	if !exists || value == nil {
+			return common.Address{}, nil
+	}
+
 	candidate := params["candidate"].(struct {
 		VariablePart struct {
 			Outcome []struct {

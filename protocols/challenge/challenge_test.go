@@ -48,7 +48,7 @@ func TestChallenge(t *testing.T) {
 	// Check balance of node
 	balanceNodeA, _ := sim.BalanceAt(context.Background(), ethAccounts[0].From, big.NewInt(6))
 	balanceNodeB, _ := sim.BalanceAt(context.Background(), ethAccounts[1].From, big.NewInt(6))
-	t.Log("Balance of node A", balanceNodeA, "Balance of Node B", balanceNodeB)
+	t.Log("Balance of node A", balanceNodeA, "\nBalance of Node B", balanceNodeB)
 
 	// Close the node B
 	closeNode(t, &nodeB)
@@ -58,12 +58,19 @@ func TestChallenge(t *testing.T) {
 
 	// wait for challenge duration
 
-	time.Sleep(time.Duration(challengeDuration + 10) * time.Second)
+	time.Sleep(time.Duration(challengeDuration) * time.Second)
 
 	// Node A call transfer method and check assets are liquidated
+	sim.Commit()
+	sim.Commit()
+	sim.Commit()
 	out := nodeA.ListenEvents()
 
 	nodeA.TransferTransaction(ledgerChannel)
+	balanceA, _ := sim.BalanceAt(context.Background(), ta.Alice.Address(), big.NewInt(15))
+	balanceB, _ := sim.BalanceAt(context.Background(), ta.Bob.Address(), big.NewInt(15))
+	t.Log("Balance of A", balanceA, "\nBalance of B", balanceB)
+
 	receivedEvent := <-out
 	t.Log("Received event", receivedEvent)
 }

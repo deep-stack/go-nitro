@@ -291,7 +291,6 @@ func (ecs *EthChainService) SendTransaction(tx protocols.ChainTransaction) error
 		transferState := tx.TransferState.State()
 		fromChannelId := transferState.ChannelId().Bytes()
 		outcomeBytes, err := transferState.Outcome.Encode()
-		fmt.Println("outcomebytes", outcomeBytes)
 		if err != nil {
 			return err
 		}
@@ -300,8 +299,7 @@ func (ecs *EthChainService) SendTransaction(tx protocols.ChainTransaction) error
 			return err
 		}
 		indices := make([]*big.Int, 0)
-		transaction, er := ecs.na.Transfer(ecs.defaultTxOpts(), common.Big0, [32]byte(fromChannelId),outcomeBytes, stateHash, indices)
-		fmt.Println(transaction)
+		_, er := ecs.na.Transfer(ecs.defaultTxOpts(), common.Big0, [32]byte(fromChannelId),outcomeBytes, stateHash, indices)
 		return er
 	default:
 		return fmt.Errorf("unexpected transaction type %T", tx)
