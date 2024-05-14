@@ -45,12 +45,11 @@ func TestChallenge(t *testing.T) {
 	closeNode(t, &nodeB)
 
 	// Node A call challenge method
-	// 1. Get concluded signed state
-	// 2. SignChallengeMessage
-	// 3. Send transaction to chain
-	// 4. Listen for event
+	out := nodeA.ListenEvents()
 	nodeA.ChallengeTransaction(ledgerChannel)
 
+	receivedEvent := <-out
+	t.Log("Received event", receivedEvent)
 	// wait for challenge duration
 
 	// Node A call transfer method and check assets are liquidated

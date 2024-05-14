@@ -870,12 +870,16 @@ func (e *Engine) checkError(err error) {
 	}
 }
 
+func (e *Engine) ListenEvents() <-chan chainservice.Event {
+	return e.fromChain
+}
+
 func (e *Engine) ChallengeTransaction(id types.Destination) {
-	channel, _ := e.store.GetChannelById(id)
+	consensusChannel, _ := e.store.GetConsensusChannelById(id)
 
-	signedState := channel.SignedPostFundState()
+	challengerSig, _ := NitroAdjudicator.SignChallengeMessage(consensusChannel.ConsensusVars().AsState(consensusChannel.FixedPart()), *e.store.GetChannelSecretKey())
 
-	challengerSig, _ := NitroAdjudicator.SignChallengeMessage(signedState.State(), *e.store.GetChannelSecretKey())
+	signedState := consensusChannel.SupportedSignedState()
 
 	challengeTx := protocols.NewChallengeTransaction(id, signedState, make([]state.SignedState, 0), challengerSig)
 
