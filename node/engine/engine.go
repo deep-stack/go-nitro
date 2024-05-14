@@ -15,8 +15,10 @@ import (
 	"github.com/ethereum/go-ethereum/crypto/secp256k1"
 	"github.com/statechannels/go-nitro/channel"
 	"github.com/statechannels/go-nitro/channel/consensus_channel"
+	"github.com/statechannels/go-nitro/channel/state"
 	"github.com/statechannels/go-nitro/internal/logging"
 	"github.com/statechannels/go-nitro/node/engine/chainservice"
+	NitroAdjudicator "github.com/statechannels/go-nitro/node/engine/chainservice/adjudicator"
 	"github.com/statechannels/go-nitro/node/engine/messageservice"
 	p2pms "github.com/statechannels/go-nitro/node/engine/messageservice/p2p-message-service"
 	"github.com/statechannels/go-nitro/node/engine/store"
@@ -866,4 +868,16 @@ func (e *Engine) checkError(err error) {
 
 		panic(err)
 	}
+}
+
+func (e *Engine) ChallengeTransaction(id types.Destination) {
+	channel, _ := e.store.GetChannelById(id)
+
+	signedState := channel.SignedPostFundState()
+
+	challengerSig, _ := NitroAdjudicator.SignChallengeMessage(signedState.State(), *e.store.GetChannelSecretKey())
+
+	challengeTx := protocols.NewChallengeTransaction(id, signedState, make([]state.SignedState, 0), challengerSig)
+
+	e.chain.SendTransaction(challengeTx)
 }

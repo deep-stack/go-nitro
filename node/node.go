@@ -323,3 +323,7 @@ func (n *Node) handleError(err error) {
 
 	}
 }
+
+func (n *Node) ChallengeTransaction(id types.Destination) {
+	n.engine.ChallengeTransaction(id)
+}

@@ -36,14 +36,22 @@ func TestChallenge(t *testing.T) {
 
 	nodeB, messageServiceB := setupNode(t, sim, bindings, ethAccounts[1], ta.Bob.PrivateKey, broker, ta.Bob.Address())
 	broker.Services[*nodeB.Address] = messageServiceB
-	defer closeNode(t, &nodeB)
+	// defer closeNode(t, &nodeB)
 
 	// Create ledger channel
-	CreateLedgerChannel(t, nodeA, nodeB)
+	ledgerChannel := CreateLedgerChannel(t, nodeA, nodeB)
 
 	// Close the node B
+	closeNode(t, &nodeB)
 
-	// Node A call challenge method and wait for challenge duration
+	// Node A call challenge method
+	// 1. Get concluded signed state
+	// 2. SignChallengeMessage
+	// 3. Send transaction to chain
+	// 4. Listen for event
+	nodeA.ChallengeTransaction(ledgerChannel)
+
+	// wait for challenge duration
 
 	// Node A call transfer method and check assets are liquidated
 }
