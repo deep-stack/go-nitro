@@ -885,3 +885,16 @@ func (e *Engine) ChallengeTransaction(id types.Destination) {
 
 	e.chain.SendTransaction(challengeTx)
 }
+
+func (e *Engine) TransferTransaction(id types.Destination) {
+	consensusChannel, _ := e.store.GetConsensusChannelById(id)
+
+	signedState := consensusChannel.SupportedSignedState()
+
+	transferTx := protocols.NewTransferTransaction(id, signedState)
+
+	err := e.chain.SendTransaction(transferTx)
+	if err != nil {
+		fmt.Println(err)
+	}
+}

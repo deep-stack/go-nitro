@@ -328,6 +328,10 @@ func (n *Node) ChallengeTransaction(id types.Destination) {
 	n.engine.ChallengeTransaction(id)
 }
 
+func (n *Node) TransferTransaction(id types.Destination) {
+	n.engine.TransferTransaction(id)
+}
+
 func (n *Node) ListenEvents() <-chan chainservice.Event {
 	return n.engine.ListenEvents()
 }

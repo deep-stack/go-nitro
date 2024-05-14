@@ -66,6 +66,15 @@ func NewChallengeTransaction(
 	}
 }
 
+type TransferTransaction struct {
+	ChainTransaction
+	TransferState state.SignedState
+}
+
+func NewTransferTransaction(channelId types.Destination, state state.SignedState) TransferTransaction {
+	return TransferTransaction{ChainTransaction: ChainTransactionBase{channelId: channelId}, TransferState: state}
+}
+
 // SideEffects are effects to be executed by an imperative shell
 type SideEffects struct {
 	MessagesToSend       []Message

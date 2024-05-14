@@ -4,6 +4,7 @@ import (
 	"context"
 	"math/big"
 	"testing"
+	"time"
 
 	"github.com/ethereum/go-ethereum/accounts/abi/bind"
 	"github.com/ethereum/go-ethereum/common"
@@ -17,6 +18,8 @@ import (
 	"github.com/statechannels/go-nitro/node/engine/store"
 	"github.com/statechannels/go-nitro/types"
 )
+
+const challengeDuration uint32 = 60
 
 func TestChallenge(t *testing.T) {
 	t.Log("Test challenge protocol")
@@ -51,14 +54,18 @@ func TestChallenge(t *testing.T) {
 	closeNode(t, &nodeB)
 
 	// Node A call challenge method
-	out := nodeA.ListenEvents()
 	nodeA.ChallengeTransaction(ledgerChannel)
 
-	receivedEvent := <-out
-	t.Log("Received event", receivedEvent)
 	// wait for challenge duration
 
+	time.Sleep(time.Duration(challengeDuration + 10) * time.Second)
+
 	// Node A call transfer method and check assets are liquidated
+	out := nodeA.ListenEvents()
+
+	nodeA.TransferTransaction(ledgerChannel)
+	receivedEvent := <-out
+	t.Log("Received event", receivedEvent)
 }
 
 func closeSimulatedChain(t *testing.T, chain chainservice.SimulatedChain) {
@@ -112,7 +119,7 @@ func createOutcome(first types.Address, second types.Address, x, y uint64, asset
 func CreateLedgerChannel(t *testing.T, nodeA node.Node, nodeB node.Node) types.Destination {
 	outcome := createOutcome(*nodeA.Address, *nodeB.Address, 100000, 100000, types.Address{})
 
-	response, err := nodeA.CreateLedgerChannel(*nodeB.Address, 5, outcome)
+	response, err := nodeA.CreateLedgerChannel(*nodeB.Address, challengeDuration, outcome)
 	if err != nil {
 		t.Fatal(err)
 	}
