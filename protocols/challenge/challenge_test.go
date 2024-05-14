@@ -64,15 +64,11 @@ func TestChallenge(t *testing.T) {
 	sim.Commit()
 	sim.Commit()
 	sim.Commit()
-	out := nodeA.ListenEvents()
 
 	nodeA.TransferTransaction(ledgerChannel)
 	balanceA, _ := sim.BalanceAt(context.Background(), ta.Alice.Address(), big.NewInt(15))
 	balanceB, _ := sim.BalanceAt(context.Background(), ta.Bob.Address(), big.NewInt(15))
 	t.Log("Balance of A", balanceA, "\nBalance of B", balanceB)
-
-	receivedEvent := <-out
-	t.Log("Received event", receivedEvent)
 }
 
 func closeSimulatedChain(t *testing.T, chain chainservice.SimulatedChain) {
