@@ -299,7 +299,7 @@ func (ecs *EthChainService) SendTransaction(tx protocols.ChainTransaction) error
 			return err
 		}
 		indices := make([]*big.Int, 0)
-		_, er := ecs.na.Transfer(ecs.defaultTxOpts(), common.Big0, [32]byte(fromChannelId),outcomeBytes, stateHash, indices)
+		_, er := ecs.na.Transfer(ecs.defaultTxOpts(), common.Big0, [32]byte(fromChannelId), outcomeBytes, stateHash, indices)
 		return er
 	default:
 		return fmt.Errorf("unexpected transaction type %T", tx)

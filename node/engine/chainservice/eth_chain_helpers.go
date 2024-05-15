@@ -24,7 +24,7 @@ func assetAddressForIndex(na *NitroAdjudicator.NitroAdjudicator, tx *types.Trans
 	//  https://github.com/statechannels/go-nitro/issues/759
 	value, exists := params["candidate"]
 	if !exists || value == nil {
-			return common.Address{}, nil
+		return common.Address{}, nil
 	}
 
 	candidate := params["candidate"].(struct {
