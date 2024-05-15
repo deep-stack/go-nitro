@@ -8,6 +8,7 @@ import (
 	"runtime/debug"
 	"time"
 
+	"github.com/statechannels/go-nitro/channel/state"
 	"github.com/statechannels/go-nitro/channel/state/outcome"
 	"github.com/statechannels/go-nitro/internal/safesync"
 	"github.com/statechannels/go-nitro/node/engine"
@@ -324,10 +325,7 @@ func (n *Node) handleError(err error) {
 	}
 }
 
-func (n *Node) ChallengeTransaction(id types.Destination) {
-	n.engine.ChallengeTransaction(id)
-}
-
-func (n *Node) TransferTransaction(id types.Destination) {
-	n.engine.TransferTransaction(id)
+func (n *Node) GetSignedState(id types.Destination) state.SignedState {
+	consensusChannel, _ := n.store.GetConsensusChannelById(id)
+	return consensusChannel.SupportedSignedState()
 }

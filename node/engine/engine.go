@@ -15,10 +15,8 @@ import (
 	"github.com/ethereum/go-ethereum/crypto/secp256k1"
 	"github.com/statechannels/go-nitro/channel"
 	"github.com/statechannels/go-nitro/channel/consensus_channel"
-	"github.com/statechannels/go-nitro/channel/state"
 	"github.com/statechannels/go-nitro/internal/logging"
 	"github.com/statechannels/go-nitro/node/engine/chainservice"
-	NitroAdjudicator "github.com/statechannels/go-nitro/node/engine/chainservice/adjudicator"
 	"github.com/statechannels/go-nitro/node/engine/messageservice"
 	p2pms "github.com/statechannels/go-nitro/node/engine/messageservice/p2p-message-service"
 	"github.com/statechannels/go-nitro/node/engine/store"
@@ -867,34 +865,5 @@ func (e *Engine) checkError(err error) {
 		}
 
 		panic(err)
-	}
-}
-
-func (e *Engine) ListenEvents() <-chan chainservice.Event {
-	return e.fromChain
-}
-
-func (e *Engine) ChallengeTransaction(id types.Destination) {
-	consensusChannel, _ := e.store.GetConsensusChannelById(id)
-
-	challengerSig, _ := NitroAdjudicator.SignChallengeMessage(consensusChannel.ConsensusVars().AsState(consensusChannel.FixedPart()), *e.store.GetChannelSecretKey())
-
-	signedState := consensusChannel.SupportedSignedState()
-
-	challengeTx := protocols.NewChallengeTransaction(id, signedState, make([]state.SignedState, 0), challengerSig)
-
-	e.chain.SendTransaction(challengeTx)
-}
-
-func (e *Engine) TransferTransaction(id types.Destination) {
-	consensusChannel, _ := e.store.GetConsensusChannelById(id)
-
-	signedState := consensusChannel.SupportedSignedState()
-
-	transferTx := protocols.NewTransferTransaction(id, signedState)
-
-	err := e.chain.SendTransaction(transferTx)
-	if err != nil {
-		fmt.Println(err)
 	}
 }

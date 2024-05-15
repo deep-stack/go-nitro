@@ -139,7 +139,7 @@ func SetupSimulatedBackend(numAccounts uint64) (SimulatedChain, Bindings, []*bin
 	}
 
 	// Distributed tokens to all accounts
-	INITIAL_TOKEN_BALANCE := big.NewInt(10_000_000)
+	INITIAL_TOKEN_BALANCE := big.NewInt(10_000_000_000)
 	for _, account := range accounts {
 		accountAddress := account.From
 		_, err := tokenBinding.Transfer(accounts[0], accountAddress, INITIAL_TOKEN_BALANCE)

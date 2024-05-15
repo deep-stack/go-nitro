@@ -60,7 +60,7 @@ func TestCrashTolerance(t *testing.T) {
 
 	// test successful condition for setup / teardown of unused ledger channel
 	{
-		channelId := openLedgerChannel(t, nodeA, nodeB, types.Address{})
+		channelId := openLedgerChannel(t, nodeA, nodeB, types.Address{}, 0)
 
 		closeNode(t, &nodeA)
 		anotherMessageserviceA := messageservice.NewTestMessageService(ta.Alice.Address(), broker, 0)

@@ -34,12 +34,12 @@ type TestMessageService struct {
 // allowing messages sent from one message service to be directed to the intended
 // recipient
 type Broker struct {
-	Services map[types.Address]TestMessageService
+	services map[types.Address]TestMessageService
 }
 
 func NewBroker() Broker {
 	b := Broker{
-		Services: make(map[common.Address]TestMessageService),
+		services: make(map[common.Address]TestMessageService),
 	}
 
 	return b
@@ -77,7 +77,7 @@ func (t TestMessageService) dispatchMessage(message protocols.Message) {
 		time.Sleep(randomDelay)
 	}
 
-	peer, ok := t.broker.Services[message.To]
+	peer, ok := t.broker.services[message.To]
 	if ok {
 		// To mimic a proper message service, we serialize and then
 		// deserialize the message
@@ -95,7 +95,7 @@ func (t TestMessageService) dispatchMessage(message protocols.Message) {
 
 // connect registers the message service with the broker
 func (tms TestMessageService) connect(b Broker) {
-	b.Services[tms.address] = tms
+	b.services[tms.address] = tms
 }
 
 // Send dispatches messages
