@@ -66,7 +66,7 @@ func TestChallenge(t *testing.T) {
 	sim.Commit()
 
 	// Node A call transfer method
-	transferTx := protocols.NewTransferTransaction(ledgerChannel, signedState)
+	transferTx := protocols.NewTransferAllTransaction(ledgerChannel, signedState)
 	err = testChainServiceA.SendTransaction(transferTx)
 	if err != nil {
 		t.Error(err)

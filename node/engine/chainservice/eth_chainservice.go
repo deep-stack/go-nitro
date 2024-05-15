@@ -287,20 +287,17 @@ func (ecs *EthChainService) SendTransaction(tx protocols.ChainTransaction) error
 		challengerSig := NitroAdjudicator.ConvertSignature(tx.ChallengerSig)
 		_, err := ecs.na.Challenge(ecs.defaultTxOpts(), fp, proof, candidate, challengerSig)
 		return err
-	case protocols.TransferTransaction:
+	case protocols.TransferAllTransaction:
 		transferState := tx.TransferState.State()
-		fromChannelId := transferState.ChannelId().Bytes()
-		outcomeBytes, err := transferState.Outcome.Encode()
-		if err != nil {
-			return err
-		}
-
+		channelId := transferState.ChannelId().Bytes()
 		stateHash, err := transferState.Hash()
 		if err != nil {
 			return err
 		}
-		indices := make([]*big.Int, 0)
-		_, er := ecs.na.Transfer(ecs.defaultTxOpts(), common.Big0, [32]byte(fromChannelId), outcomeBytes, stateHash, indices)
+
+		nitroVariablePart := NitroAdjudicator.ConvertVariablePart(transferState.VariablePart())
+
+		_, er := ecs.na.TransferAllAssets(ecs.defaultTxOpts(), [32]byte(channelId), nitroVariablePart.Outcome, stateHash)
 		return er
 	default:
 		return fmt.Errorf("unexpected transaction type %T", tx)
