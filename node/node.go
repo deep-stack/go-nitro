@@ -325,6 +325,7 @@ func (n *Node) handleError(err error) {
 	}
 }
 
+// TODO: Remove method once off-chain challenge protocol is handled
 func (n *Node) GetSignedState(id types.Destination) state.SignedState {
 	consensusChannel, _ := n.store.GetConsensusChannelById(id)
 	return consensusChannel.SupportedSignedState()

@@ -294,6 +294,7 @@ func (ecs *EthChainService) SendTransaction(tx protocols.ChainTransaction) error
 		if err != nil {
 			return err
 		}
+
 		stateHash, err := transferState.Hash()
 		if err != nil {
 			return err
