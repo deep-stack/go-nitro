@@ -10,7 +10,7 @@ import (
 )
 
 // assetAddressForIndex uses the input parameters of a transaction to map an asset index to an asset address
-func assetAddressForIndex(na *NitroAdjudicator.NitroAdjudicator, tx *types.Transaction, index *big.Int) (common.Address, error) {
+func assetAddressForIndex(tx *types.Transaction, index *big.Int) (common.Address, error) {
 	abi, err := NitroAdjudicator.NitroAdjudicatorMetaData.GetAbi()
 	if err != nil {
 		return common.Address{}, err
@@ -19,11 +19,13 @@ func assetAddressForIndex(na *NitroAdjudicator.NitroAdjudicator, tx *types.Trans
 	if err != nil {
 		return common.Address{}, err
 	}
-	// TODO remove the assumption that the tx incudes a candidate parameter
-	// 	concludeAndTransferAllAssets includes this parameter, but transferAllAssets, transfer, and claim do not.
-	//  https://github.com/statechannels/go-nitro/issues/759
+
 	value, exists := params["candidate"]
+	// concludeAndTransferAllAssets includes "candidate" parameter, but transferAllAssets, transfer, and claim do not.
+	// https://github.com/statechannels/go-nitro/issues/759
 	if !exists {
+		// transferAllAssets includes "outcome" parameter
+		// TODO: Handle tx processing for transfer and claim
 		outcomeValue := params["outcome"]
 
 		nitroOutcomeValue := outcomeValue.([]struct {

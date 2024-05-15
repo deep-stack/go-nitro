@@ -50,7 +50,7 @@ func TestChallenge(t *testing.T) {
 	// Close the node B
 	closeNode(t, &nodeB)
 
-	// Node A call challenge method
+	// Node A calls challenge method
 	signedState := nodeA.GetSignedState(ledgerChannel)
 	challengerSig, _ := NitroAdjudicator.SignChallengeMessage(signedState.State(), ta.Alice.PrivateKey)
 	challengeTx := protocols.NewChallengeTransaction(ledgerChannel, signedState, make([]state.SignedState, 0), challengerSig)
@@ -59,13 +59,13 @@ func TestChallenge(t *testing.T) {
 		t.Error(err)
 	}
 
-	// wait for challenge duration
+	// Wait for challenge duration
 	time.Sleep(time.Duration(ChallengeDuration) * time.Second)
 
 	// Finalize Outcome
 	sim.Commit()
 
-	// Node A call transfer method
+	// Node A calls transferAllAssets method
 	transferTx := protocols.NewTransferAllTransaction(ledgerChannel, signedState)
 	err = testChainServiceA.SendTransaction(transferTx)
 	if err != nil {

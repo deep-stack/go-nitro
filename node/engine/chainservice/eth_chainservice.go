@@ -289,7 +289,7 @@ func (ecs *EthChainService) SendTransaction(tx protocols.ChainTransaction) error
 		return err
 	case protocols.TransferAllTransaction:
 		transferState := tx.TransferState.State()
-		channelId := transferState.ChannelId().Bytes()
+		channelId := transferState.ChannelId()
 		stateHash, err := transferState.Hash()
 		if err != nil {
 			return err
@@ -297,7 +297,7 @@ func (ecs *EthChainService) SendTransaction(tx protocols.ChainTransaction) error
 
 		nitroVariablePart := NitroAdjudicator.ConvertVariablePart(transferState.VariablePart())
 
-		_, er := ecs.na.TransferAllAssets(ecs.defaultTxOpts(), [32]byte(channelId), nitroVariablePart.Outcome, stateHash)
+		_, er := ecs.na.TransferAllAssets(ecs.defaultTxOpts(), channelId, nitroVariablePart.Outcome, stateHash)
 		return er
 	default:
 		return fmt.Errorf("unexpected transaction type %T", tx)
@@ -334,7 +334,7 @@ func (ecs *EthChainService) dispatchChainEvents(logs []ethTypes.Log) error {
 				return fmt.Errorf("error in TransactionByHash: %w", err)
 			}
 
-			assetAddress, err := assetAddressForIndex(ecs.na, tx, au.AssetIndex)
+			assetAddress, err := assetAddressForIndex(tx, au.AssetIndex)
 			if err != nil {
 				return fmt.Errorf("error in assetAddressForIndex: %w", err)
 			}
