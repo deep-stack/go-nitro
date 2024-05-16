@@ -142,23 +142,25 @@ func TestCheckpoint(t *testing.T) {
 	// Node A call challenge method using old state
 	challengerSig, _ := NitroAdjudicator.SignChallengeMessage(oldState.State(), ta.Alice.PrivateKey)
 	challengeTx := protocols.NewChallengeTransaction(ledgerChannel, oldState, make([]state.SignedState, 0), challengerSig)
-	err = testChainServiceA.SendTransaction(challengeTx)
+	err = chainServiceA.SendTransaction(challengeTx)
 	if err != nil {
 		t.Error(err)
 	}
 
-	// Listen for Challenge registered event
+	// Listen for challenge registered event
 	challengeEvent := <-challengeEventChan
 	t.Log("Challenge registed event received", challengeEvent)
 
 	// Node B calls checkpoint method using new state
 	checkpointTx := protocols.NewCheckpointTransaction(ledgerChannel, newState, make([]state.SignedState, 0))
-	err = testChainServiceA.SendTransaction(checkpointTx)
+	err = chainServiceB.SendTransaction(checkpointTx)
 	if err != nil {
 		t.Error(err)
 	}
 
-	// Check status of challenge getting cleared
+	// Listen for challenge cleared event
+	challengeEvent = <-challengeEventChan
+	t.Log("Challenge cleared event received", challengeEvent)
 }
 
 func eventListener(ctx context.Context, eventChannel <-chan chainservice.Event, challengeEventChan chan chainservice.Event) {
@@ -174,7 +176,7 @@ func eventListener(ctx context.Context, eventChannel <-chan chainservice.Event, 
 
 func processEvent(event chainservice.Event, challengeEventChan chan chainservice.Event) {
 	switch e := event.(type) {
-	case chainservice.ChallengeRegisteredEvent:
+	case chainservice.ChallengeRegisteredEvent, chainservice.ChallengeClearedEvent:
 		challengeEventChan <- e
 
 	default:
