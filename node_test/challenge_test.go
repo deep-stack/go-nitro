@@ -112,7 +112,7 @@ func TestCheckpoint(t *testing.T) {
 	go eventListener(ctx, out, challengeEventChan)
 
 	// Create ledger channel
-	ledgerChannel := openLedgerChannel(t, nodeA, nodeB, types.Address{}, 0)
+	ledgerChannel := openLedgerChannel(t, nodeA, nodeB, types.Address{}, 60)
 
 	// Check balance of node
 	latestBlock, _ := sim.BlockByNumber(context.Background(), nil)
@@ -120,7 +120,13 @@ func TestCheckpoint(t *testing.T) {
 	balanceNodeB, _ := sim.BalanceAt(context.Background(), ethAccounts[1].From, latestBlock.Number())
 	t.Log("Balance of node A", balanceNodeA, "\nBalance of Node B", balanceNodeB)
 
-	// Node A call challenge method
+	// Store current state
+
+	// Conduct virtual fund and virtual defund
+
+	// Store current state
+
+	// Node A call challenge method using old state
 	signedState := nodeA.GetSignedState(ledgerChannel)
 	challengerSig, _ := NitroAdjudicator.SignChallengeMessage(signedState.State(), ta.Alice.PrivateKey)
 	challengeTx := protocols.NewChallengeTransaction(ledgerChannel, signedState, make([]state.SignedState, 0), challengerSig)
@@ -133,9 +139,15 @@ func TestCheckpoint(t *testing.T) {
 	challengeEvent := <-challengeEventChan
 	t.Log("Challenge registed event received", challengeEvent)
 
-	// Node B calls checkpoint method
+	// Node B calls checkpoint method using new state
+	signedState = nodeB.GetSignedState(ledgerChannel)
+	checkpointTx := protocols.NewCheckpointTransaction(ledgerChannel, signedState, make([]state.SignedState, 0))
+	err = testChainServiceA.SendTransaction(checkpointTx)
+	if err != nil {
+		t.Error(err)
+	}
 
-	// Check status of challenge
+	// Check status of challenge getting cleared
 }
 
 func eventListener(ctx context.Context, eventChannel <-chan chainservice.Event, challengeEventChan chan chainservice.Event) {
