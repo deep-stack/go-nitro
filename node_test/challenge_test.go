@@ -12,11 +12,12 @@ import (
 	"github.com/statechannels/go-nitro/node/engine/chainservice"
 	NitroAdjudicator "github.com/statechannels/go-nitro/node/engine/chainservice/adjudicator"
 	"github.com/statechannels/go-nitro/node/engine/messageservice"
+	"github.com/statechannels/go-nitro/node/engine/store"
 	"github.com/statechannels/go-nitro/protocols"
 	"github.com/statechannels/go-nitro/types"
 )
 
-const ChallengeDuration = 30
+const ChallengeDuration = 5
 
 func TestChallenge(t *testing.T) {
 	// Start the chain & deploy contract
@@ -34,12 +35,12 @@ func TestChallenge(t *testing.T) {
 	msgBroker := messageservice.NewBroker()
 	dataFolder, cleanup := testhelpers.GenerateTempStoreFolder()
 	defer cleanup()
-	nodeA, _ := setupNode(ta.Alice.PrivateKey, chainServiceA, msgBroker, 0, dataFolder)
+	nodeA, storeA := setupNode(ta.Alice.PrivateKey, chainServiceA, msgBroker, 0, dataFolder)
 	defer closeNode(t, &nodeA)
 	nodeB, _ := setupNode(ta.Bob.PrivateKey, chainServiceB, msgBroker, 0, dataFolder)
 
 	// Create ledger channel
-	ledgerChannel := openLedgerChannel(t, nodeA, nodeB, types.Address{}, 0)
+	ledgerChannel := openLedgerChannel(t, nodeA, nodeB, types.Address{}, ChallengeDuration)
 
 	// Check balance of node
 	latestBlock, _ := sim.BlockByNumber(context.Background(), nil)
@@ -51,7 +52,7 @@ func TestChallenge(t *testing.T) {
 	closeNode(t, &nodeB)
 
 	// Node A calls challenge method
-	signedState := nodeA.GetSignedState(ledgerChannel)
+	signedState := getLatestSignedState(storeA, ledgerChannel)
 	challengerSig, _ := NitroAdjudicator.SignChallengeMessage(signedState.State(), ta.Alice.PrivateKey)
 	challengeTx := protocols.NewChallengeTransaction(ledgerChannel, signedState, make([]state.SignedState, 0), challengerSig)
 	err = testChainServiceA.SendTransaction(challengeTx)
@@ -71,6 +72,7 @@ func TestChallenge(t *testing.T) {
 	if err != nil {
 		t.Error(err)
 	}
+	// TODO: Update off chain states
 
 	// Check assets are liquidated
 	latestBlock, _ = sim.BlockByNumber(context.Background(), nil)
@@ -79,4 +81,9 @@ func TestChallenge(t *testing.T) {
 	t.Log("Balance of A", balanceA, "\nBalance of B", balanceB)
 	testhelpers.Assert(t, balanceA.Cmp(big.NewInt(ledgerChannelDeposit)) == 0, "BalanceA (%v) should be equal to ledgerChannelDeposit (%v)", balanceA, ledgerChannelDeposit)
 	testhelpers.Assert(t, balanceB.Cmp(big.NewInt(ledgerChannelDeposit)) == 0, "BalanceB (%v) should be equal to ledgerChannelDeposit (%v)", balanceB, ledgerChannelDeposit)
+}
+
+func getLatestSignedState(store store.Store, id types.Destination) state.SignedState {
+	consensusChannel, _ := store.GetConsensusChannelById(id)
+	return consensusChannel.SupportedSignedState()
 }

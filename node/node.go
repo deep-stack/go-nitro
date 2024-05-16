@@ -8,7 +8,6 @@ import (
 	"runtime/debug"
 	"time"
 
-	"github.com/statechannels/go-nitro/channel/state"
 	"github.com/statechannels/go-nitro/channel/state/outcome"
 	"github.com/statechannels/go-nitro/internal/safesync"
 	"github.com/statechannels/go-nitro/node/engine"
@@ -323,10 +322,4 @@ func (n *Node) handleError(err error) {
 		panic(err)
 
 	}
-}
-
-// TODO: Remove method once off-chain challenge protocol is handled
-func (n *Node) GetSignedState(id types.Destination) state.SignedState {
-	consensusChannel, _ := n.store.GetConsensusChannelById(id)
-	return consensusChannel.SupportedSignedState()
 }
