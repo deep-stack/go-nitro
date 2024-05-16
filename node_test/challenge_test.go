@@ -274,6 +274,7 @@ func TestCounterChallenge(t *testing.T) {
 	if err != nil {
 		t.Error(err)
 	}
+	// TODO: Update off chain states
 
 	// Check assets are liquidated
 	latestBlock, _ = sim.BlockByNumber(context.Background(), nil)
