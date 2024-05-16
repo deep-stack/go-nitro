@@ -144,7 +144,7 @@ type ChallengeClearedEvent struct {
 }
 
 func (cc ChallengeClearedEvent) String() string {
-	return "challenge cleared for Channel " + cc.channelID.String() + " at Block " + fmt.Sprint(cc.blockNum)
+	return "Challenge cleared for Channel " + cc.channelID.String() + " at Block " + fmt.Sprint(cc.blockNum)
 }
 
 func NewChallengeClearedEvent(channelId types.Destination, blockNum uint64, txIndex uint, newTurnNumRecord *big.Int) ChallengeClearedEvent {

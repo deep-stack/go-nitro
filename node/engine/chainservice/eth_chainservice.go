@@ -359,7 +359,7 @@ func (ecs *EthChainService) dispatchChainEvents(logs []ethTypes.Log) error {
 			ecs.out <- event
 
 		case challengeRegisteredTopic:
-			ecs.logger.Debug("Processing ChallengeRegistered event")
+			ecs.logger.Debug("Processing Challenge Registered event")
 			cr, err := ecs.na.ParseChallengeRegistered(l)
 			if err != nil {
 				return fmt.Errorf("error in ParseChallengeRegistered: %w", err)
@@ -372,7 +372,7 @@ func (ecs *EthChainService) dispatchChainEvents(logs []ethTypes.Log) error {
 			}, NitroAdjudicator.ConvertBindingsSignaturesToSignatures(cr.Candidate.Sigs))
 			ecs.out <- event
 		case challengeClearedTopic:
-			ecs.logger.Debug("Processing ChallengeCleared event")
+			ecs.logger.Debug("Processing Challenge Cleared event")
 			cp, err := ecs.na.ParseChallengeCleared(l)
 			if err != nil {
 				return fmt.Errorf("error in ParseCheckpointed: %w", err)

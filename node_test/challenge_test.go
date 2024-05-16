@@ -2,7 +2,6 @@ package node_test
 
 import (
 	"context"
-	"fmt"
 	"math/big"
 	"reflect"
 	"testing"
@@ -119,7 +118,7 @@ func TestCheckpoint(t *testing.T) {
 		reflect.TypeOf(chainservice.ChallengeRegisteredEvent{}): {},
 		reflect.TypeOf(chainservice.ChallengeClearedEvent{}):    {},
 	}
-	go eventListener(ctx, out, eventChan, eventTypes)
+	go eventListener(t, ctx, out, eventChan, eventTypes)
 
 	// Create ledger channel and check balance of node
 	ledgerChannel := openLedgerChannel(t, nodeA, nodeB, types.Address{}, ChallengeDuration)
@@ -171,17 +170,17 @@ func TestCheckpoint(t *testing.T) {
 	t.Log("Challenge cleared event received", challengeEvent)
 }
 
-func eventListener(ctx context.Context, eventChannel <-chan chainservice.Event, challengeEventChan chan chainservice.Event, eventTypes map[reflect.Type]struct{}) {
+func eventListener(t *testing.T, ctx context.Context, eventChannel <-chan chainservice.Event, challengeEventChan chan chainservice.Event, eventTypes map[reflect.Type]struct{}) {
 	for {
 		select {
 		case <-ctx.Done():
 			return
 		case event := <-eventChannel:
 			if _, ok := eventTypes[reflect.TypeOf(event)]; ok {
-				fmt.Println("Processing events")
+				t.Log("Processing event")
 				challengeEventChan <- event
 			} else {
-				fmt.Println("Ignoring other events")
+				t.Log("Ignoring other events")
 			}
 		}
 	}
