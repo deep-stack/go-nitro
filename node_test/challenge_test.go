@@ -20,9 +20,9 @@ import (
 	"github.com/statechannels/go-nitro/types"
 )
 
-const ChallengeDuration = 60
-
 func TestChallenge(t *testing.T) {
+	const ChallengeDuration = 5
+
 	// Start the chain & deploy contract
 	t.Log("Starting chain")
 	sim, bindings, ethAccounts, err := chainservice.SetupSimulatedBackend(2)
@@ -90,6 +90,8 @@ func TestChallenge(t *testing.T) {
 }
 
 func TestCheckpoint(t *testing.T) {
+	const ChallengeDuration = 31
+
 	// Start the chain & deploy contract
 	t.Log("Starting chain")
 	sim, bindings, ethAccounts, err := chainservice.SetupSimulatedBackend(2)
