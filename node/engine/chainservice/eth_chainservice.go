@@ -287,6 +287,11 @@ func (ecs *EthChainService) SendTransaction(tx protocols.ChainTransaction) error
 		challengerSig := NitroAdjudicator.ConvertSignature(tx.ChallengerSig)
 		_, err := ecs.na.Challenge(ecs.defaultTxOpts(), fp, proof, candidate, challengerSig)
 		return err
+	case protocols.CheckpointTransaction:
+		fp, candidate := NitroAdjudicator.ConvertSignedStateToFixedPartAndSignedVariablePart(tx.Candidate)
+		proof := NitroAdjudicator.ConvertSignedStatesToProof(tx.Proof)
+		_, err := ecs.na.Checkpoint(ecs.defaultTxOpts(), fp, proof, candidate)
+		return err
 	case protocols.TransferAllTransaction:
 		transferState := tx.TransferState.State()
 		channelId := transferState.ChannelId()
