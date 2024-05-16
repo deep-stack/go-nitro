@@ -4,6 +4,7 @@ import (
 	"context"
 	"fmt"
 	"math/big"
+	"reflect"
 	"testing"
 	"time"
 
@@ -20,7 +21,7 @@ import (
 	"github.com/statechannels/go-nitro/types"
 )
 
-const ChallengeDuration = 5
+const ChallengeDuration = 60
 
 func TestChallenge(t *testing.T) {
 	// Start the chain & deploy contract
@@ -108,10 +109,14 @@ func TestCheckpoint(t *testing.T) {
 	// Seperate chain service to listen for events
 	ctx, cancelFunc := context.WithCancel(context.Background())
 	defer cancelFunc()
-	challengeEventChan := make(chan chainservice.Event)
+	eventChan := make(chan chainservice.Event)
 	testChainServiceA, _ := chainservice.NewSimulatedBackendChainService(sim, bindings, ethAccounts[0])
 	out := testChainServiceA.EventFeed()
-	go eventListener(ctx, out, challengeEventChan)
+	eventTypes := map[reflect.Type]struct{}{
+		reflect.TypeOf(chainservice.ChallengeRegisteredEvent{}): {},
+		reflect.TypeOf(chainservice.ChallengeClearedEvent{}):    {},
+	}
+	go eventListener(ctx, out, eventChan, eventTypes)
 
 	// Create ledger channel and check balance of node
 	ledgerChannel := openLedgerChannel(t, nodeA, nodeB, types.Address{}, ChallengeDuration)
@@ -148,7 +153,7 @@ func TestCheckpoint(t *testing.T) {
 	}
 
 	// Listen for challenge registered event
-	challengeEvent := <-challengeEventChan
+	challengeEvent := <-eventChan
 	t.Log("Challenge registed event received", challengeEvent)
 
 	// Node B calls checkpoint method using new state
@@ -159,28 +164,23 @@ func TestCheckpoint(t *testing.T) {
 	}
 
 	// Listen for challenge cleared event
-	challengeEvent = <-challengeEventChan
+	challengeEvent = <-eventChan
 	t.Log("Challenge cleared event received", challengeEvent)
 }
 
-func eventListener(ctx context.Context, eventChannel <-chan chainservice.Event, challengeEventChan chan chainservice.Event) {
+func eventListener(ctx context.Context, eventChannel <-chan chainservice.Event, challengeEventChan chan chainservice.Event, eventTypes map[reflect.Type]struct{}) {
 	for {
 		select {
 		case <-ctx.Done():
 			return
 		case event := <-eventChannel:
-			processEvent(event, challengeEventChan)
+			if _, ok := eventTypes[reflect.TypeOf(event)]; ok {
+				fmt.Println("Processing events")
+				challengeEventChan <- event
+			} else {
+				fmt.Println("Ignoring other events")
+			}
 		}
-	}
-}
-
-func processEvent(event chainservice.Event, challengeEventChan chan chainservice.Event) {
-	switch e := event.(type) {
-	case chainservice.ChallengeRegisteredEvent, chainservice.ChallengeClearedEvent:
-		challengeEventChan <- e
-
-	default:
-		fmt.Println("Ignoring other events")
 	}
 }
 
