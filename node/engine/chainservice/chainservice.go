@@ -127,7 +127,7 @@ func (cr ChallengeRegisteredEvent) SignedState(fp state.FixedPart) (state.Signed
 }
 
 func (cr ChallengeRegisteredEvent) String() string {
-	return "CHALLENGE registered for Channel " + cr.channelID.String() + " at Block " + fmt.Sprint(cr.blockNum)
+	return "Challenge registered for Channel " + cr.channelID.String() + " at Block " + fmt.Sprint(cr.blockNum)
 }
 
 func NewDepositedEvent(channelId types.Destination, blockNum uint64, txIndex uint, assetAddress common.Address, nowHeld *big.Int) DepositedEvent {
