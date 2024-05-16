@@ -138,8 +138,18 @@ func NewAllocationUpdatedEvent(channelId types.Destination, blockNum uint64, txI
 	return AllocationUpdatedEvent{commonEvent{channelId, blockNum, txIndex}, assetAndAmount{AssetAddress: assetAddress, AssetAmount: assetAmount}}
 }
 
-// todo implement other event types
-// ChallengeCleared
+type ChallengeClearedEvent struct {
+	commonEvent
+	newTurnNumRecord *big.Int
+}
+
+func (cc ChallengeClearedEvent) String() string {
+	return "challenge cleared for Channel " + cc.channelID.String() + " at Block " + fmt.Sprint(cc.blockNum)
+}
+
+func NewChallengeClearedEvent(channelId types.Destination, blockNum uint64, txIndex uint, newTurnNumRecord *big.Int) ChallengeClearedEvent {
+	return ChallengeClearedEvent{commonEvent: commonEvent{channelID: channelId, blockNum: blockNum, txIndex: txIndex}, newTurnNumRecord: newTurnNumRecord}
+}
 
 // ChainEventHandler describes an objective that can handle chain events
 type ChainEventHandler interface {
