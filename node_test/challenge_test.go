@@ -106,16 +106,7 @@ func TestCheckpoint(t *testing.T) {
 	nodeB, storeB := setupNode(ta.Bob.PrivateKey, chainServiceB, msgBroker, 0, dataFolder)
 
 	// Seperate chain service to listen for events
-	ctx, cancelFunc := context.WithCancel(context.Background())
-	defer cancelFunc()
-	eventChan := make(chan chainservice.Event)
 	testChainServiceA, _ := chainservice.NewSimulatedBackendChainService(sim, bindings, ethAccounts[0])
-	out := testChainServiceA.EventFeed()
-	eventTypes := map[reflect.Type]struct{}{
-		reflect.TypeOf(chainservice.ChallengeRegisteredEvent{}): {},
-		reflect.TypeOf(chainservice.ChallengeClearedEvent{}):    {},
-	}
-	go eventListener(t, ctx, out, eventChan, eventTypes)
 
 	// Create ledger channel and check balance of node
 	ledgerChannel := openLedgerChannel(t, nodeA, nodeB, types.Address{}, ChallengeDuration)
@@ -152,8 +143,8 @@ func TestCheckpoint(t *testing.T) {
 	}
 
 	// Listen for challenge registered event
-	challengeEvent := <-eventChan
-	t.Log("Challenge registed event received", challengeEvent)
+	event := eventListener(t, testChainServiceA.EventFeed(), chainservice.ChallengeRegisteredEvent{})
+	t.Log("Challenge registed event received", event)
 
 	// Node B calls checkpoint method using new state
 	checkpointTx := protocols.NewCheckpointTransaction(ledgerChannel, newState, make([]state.SignedState, 0))
@@ -162,25 +153,22 @@ func TestCheckpoint(t *testing.T) {
 		t.Error(err)
 	}
 
-	// Listen for challenge cleared event
-	challengeEvent = <-eventChan
-	t.Log("Challenge cleared event received", challengeEvent)
+	// // Listen for challenge cleared event
+	event = eventListener(t, testChainServiceA.EventFeed(), chainservice.ChallengeClearedEvent{})
+	t.Log("Challenge cleared event received", event)
+	_, ok := event.(chainservice.ChallengeClearedEvent)
+	testhelpers.Assert(t, ok, "Expect challenge cleared event")
 }
 
-func eventListener(t *testing.T, ctx context.Context, eventChannel <-chan chainservice.Event, challengeEventChan chan chainservice.Event, eventTypes map[reflect.Type]struct{}) {
-	for {
-		select {
-		case <-ctx.Done():
-			return
-		case event := <-eventChannel:
-			if _, ok := eventTypes[reflect.TypeOf(event)]; ok {
-				t.Log("Processing event")
-				challengeEventChan <- event
-			} else {
-				t.Log("Ignoring other events")
-			}
+func eventListener(t *testing.T, eventChannel <-chan chainservice.Event, eventType chainservice.Event) chainservice.Event {
+	for event := range eventChannel {
+		if reflect.TypeOf(event) == reflect.TypeOf(eventType) {
+			return event
+		} else {
+			t.Log("Ignoring other events")
 		}
 	}
+	return nil
 }
 
 func getLatestSignedState(store store.Store, id types.Destination) state.SignedState {
