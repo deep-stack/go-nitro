@@ -7,6 +7,7 @@ import (
 	"testing"
 	"time"
 
+	"github.com/ethereum/go-ethereum/accounts/abi/bind"
 	"github.com/ethereum/go-ethereum/common"
 	"github.com/statechannels/go-nitro/channel/state"
 	ta "github.com/statechannels/go-nitro/internal/testactors"
@@ -23,24 +24,11 @@ import (
 func TestChallenge(t *testing.T) {
 	const ChallengeDuration = 5
 
-	// Start the chain & deploy contract
-	t.Log("Starting chain")
-	sim, bindings, ethAccounts, err := chainservice.SetupSimulatedBackend(2)
+	sim, ethAccounts, nodeA, nodeB, storeA, _, _, _, testChainServiceA, cleanup := setupTestNodes(t)
 	defer closeSimulatedChain(t, sim)
-	if err != nil {
-		t.Fatal(err)
-	}
-
-	// Create go-nitro nodes
-	chainServiceA, _ := chainservice.NewSimulatedBackendChainService(sim, bindings, ethAccounts[0])
-	chainServiceB, _ := chainservice.NewSimulatedBackendChainService(sim, bindings, ethAccounts[1])
-	testChainServiceA, _ := chainservice.NewSimulatedBackendChainService(sim, bindings, ethAccounts[0])
-	msgBroker := messageservice.NewBroker()
-	dataFolder, cleanup := testhelpers.GenerateTempStoreFolder()
-	defer cleanup()
-	nodeA, storeA := setupNode(ta.Alice.PrivateKey, chainServiceA, msgBroker, 0, dataFolder)
 	defer closeNode(t, &nodeA)
-	nodeB, _ := setupNode(ta.Bob.PrivateKey, chainServiceB, msgBroker, 0, dataFolder)
+	defer cleanup()
+	defer testChainServiceA.Close()
 
 	// Create ledger channel
 	ledgerChannel := openLedgerChannel(t, nodeA, nodeB, types.Address{}, ChallengeDuration)
@@ -58,7 +46,7 @@ func TestChallenge(t *testing.T) {
 	signedState := getLatestSignedState(storeA, ledgerChannel)
 	challengerSig, _ := NitroAdjudicator.SignChallengeMessage(signedState.State(), ta.Alice.PrivateKey)
 	challengeTx := protocols.NewChallengeTransaction(ledgerChannel, signedState, make([]state.SignedState, 0), challengerSig)
-	err = testChainServiceA.SendTransaction(challengeTx)
+	err := testChainServiceA.SendTransaction(challengeTx)
 	if err != nil {
 		t.Error(err)
 	}
@@ -89,26 +77,12 @@ func TestChallenge(t *testing.T) {
 func TestCheckpoint(t *testing.T) {
 	const ChallengeDuration = 31
 
-	// Start the chain & deploy contract
-	t.Log("Starting chain")
-	sim, bindings, ethAccounts, err := chainservice.SetupSimulatedBackend(2)
+	sim, ethAccounts, nodeA, nodeB, storeA, storeB, chainServiceA, chainServiceB, testChainServiceA, cleanup := setupTestNodes(t)
 	defer closeSimulatedChain(t, sim)
-	if err != nil {
-		t.Fatal(err)
-	}
-
-	// Create go-nitro nodes
-	chainServiceA, _ := chainservice.NewSimulatedBackendChainService(sim, bindings, ethAccounts[0])
-	chainServiceB, _ := chainservice.NewSimulatedBackendChainService(sim, bindings, ethAccounts[1])
-	msgBroker := messageservice.NewBroker()
-	dataFolder, cleanup := testhelpers.GenerateTempStoreFolder()
-	defer cleanup()
-	nodeA, storeA := setupNode(ta.Alice.PrivateKey, chainServiceA, msgBroker, 0, dataFolder)
 	defer closeNode(t, &nodeA)
-	nodeB, storeB := setupNode(ta.Bob.PrivateKey, chainServiceB, msgBroker, 0, dataFolder)
-
-	// Seperate chain service to listen for events
-	testChainServiceA, _ := chainservice.NewSimulatedBackendChainService(sim, bindings, ethAccounts[0])
+	defer closeNode(t, &nodeB)
+	defer cleanup()
+	defer testChainServiceA.Close()
 
 	// Create ledger channel and check balance of node
 	ledgerChannel := openLedgerChannel(t, nodeA, nodeB, types.Address{}, ChallengeDuration)
@@ -160,6 +134,28 @@ func TestCheckpoint(t *testing.T) {
 	t.Log("Challenge cleared event received", event)
 	_, ok := event.(chainservice.ChallengeClearedEvent)
 	testhelpers.Assert(t, ok, "Expect challenge cleared event")
+}
+
+func setupTestNodes(t *testing.T) (
+	chainservice.SimulatedChain, []*bind.TransactOpts, node.Node, node.Node, store.Store, store.Store, chainservice.ChainService, chainservice.ChainService, chainservice.ChainService, func(),
+) {
+	// Start the chain & deploy contract
+	t.Log("Starting chain")
+	sim, bindings, ethAccounts, err := chainservice.SetupSimulatedBackend(2)
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	// Create go-nitro nodes
+	chainServiceA, _ := chainservice.NewSimulatedBackendChainService(sim, bindings, ethAccounts[0])
+	chainServiceB, _ := chainservice.NewSimulatedBackendChainService(sim, bindings, ethAccounts[1])
+	testChainServiceA, _ := chainservice.NewSimulatedBackendChainService(sim, bindings, ethAccounts[0])
+	msgBroker := messageservice.NewBroker()
+	dataFolder, cleanup := testhelpers.GenerateTempStoreFolder()
+	nodeA, storeA := setupNode(ta.Alice.PrivateKey, chainServiceA, msgBroker, 0, dataFolder)
+	nodeB, storeB := setupNode(ta.Bob.PrivateKey, chainServiceB, msgBroker, 0, dataFolder)
+
+	return sim, ethAccounts, nodeA, nodeB, storeA, storeB, chainServiceA, chainServiceB, testChainServiceA, cleanup
 }
 
 func eventListener(t *testing.T, eventChannel <-chan chainservice.Event, eventType chainservice.Event) chainservice.Event {
