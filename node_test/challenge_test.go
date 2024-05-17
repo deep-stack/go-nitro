@@ -31,12 +31,8 @@ func TestChallenge(t *testing.T) {
 
 	// Create ledger channel
 	ledgerChannel := openLedgerChannel(t, nodeA, nodeB, types.Address{}, ChallengeDuration)
-
-	// Check balance of node
-	latestBlock, _ := sim.BlockByNumber(context.Background(), nil)
-	balanceNodeA, _ := sim.BalanceAt(context.Background(), ethAccounts[0].From, latestBlock.Number())
-	balanceNodeB, _ := sim.BalanceAt(context.Background(), ethAccounts[1].From, latestBlock.Number())
-	t.Log("Balance of node A", balanceNodeA, "\nBalance of Node B", balanceNodeB)
+	getBalance(t, sim, ethAccounts[0].From)
+	getBalance(t, sim, ethAccounts[1].From)
 
 	// Close the node B
 	closeNode(t, &nodeB)
@@ -52,18 +48,13 @@ func TestChallenge(t *testing.T) {
 	sim.Commit()
 
 	// Node A calls transferAllAssets method
-	transferTx := protocols.NewTransferAllTransaction(ledgerChannel, signedState)
-	err := chainServiceA.SendTransaction(transferTx)
-	if err != nil {
-		t.Error(err)
-	}
+	sendTransferTransaction(t, signedState, ledgerChannel, chainServiceA)
+
 	// TODO: Update off chain states
 
 	// Check assets are liquidated
-	latestBlock, _ = sim.BlockByNumber(context.Background(), nil)
-	balanceA, _ := sim.BalanceAt(context.Background(), ta.Alice.Address(), latestBlock.Number())
-	balanceB, _ := sim.BalanceAt(context.Background(), ta.Bob.Address(), latestBlock.Number())
-	t.Log("Balance of A", balanceA, "\nBalance of B", balanceB)
+	balanceA := getBalance(t, sim, ta.Alice.Address())
+	balanceB := getBalance(t, sim, ta.Bob.Address())
 	testhelpers.Assert(t, balanceA.Cmp(big.NewInt(ledgerChannelDeposit)) == 0, "BalanceA (%v) should be equal to ledgerChannelDeposit (%v)", balanceA, ledgerChannelDeposit)
 	testhelpers.Assert(t, balanceB.Cmp(big.NewInt(ledgerChannelDeposit)) == 0, "BalanceB (%v) should be equal to ledgerChannelDeposit (%v)", balanceB, ledgerChannelDeposit)
 }
@@ -80,26 +71,14 @@ func TestCheckpoint(t *testing.T) {
 
 	// Create ledger channel and check balance of node
 	ledgerChannel := openLedgerChannel(t, nodeA, nodeB, types.Address{}, ChallengeDuration)
-	latestBlock, _ := sim.BlockByNumber(context.Background(), nil)
-	balanceNodeA, _ := sim.BalanceAt(context.Background(), ethAccounts[0].From, latestBlock.Number())
-	balanceNodeB, _ := sim.BalanceAt(context.Background(), ethAccounts[1].From, latestBlock.Number())
-	t.Log("Balance of node A", balanceNodeA, "\nBalance of Node B", balanceNodeB)
+	getBalance(t, sim, ethAccounts[0].From)
+	getBalance(t, sim, ethAccounts[1].From)
 
 	// Store current state
 	oldState := getLatestSignedState(storeA, ledgerChannel)
 
-	// Conduct virtual fund and virtual defund
-	virtualOutcome := initialPaymentOutcome(*nodeA.Address, *nodeB.Address, common.BigToAddress(common.Big0))
-	response, err := nodeA.CreatePaymentChannel([]common.Address{}, *nodeB.Address, ChallengeDuration, virtualOutcome)
-	if err != nil {
-		t.Error(err)
-	}
-	waitForObjectives(t, nodeA, nodeB, []node.Node{}, []protocols.ObjectiveId{response.Id})
-	virtualDefundResponse, err := nodeA.ClosePaymentChannel(response.ChannelId)
-	if err != nil {
-		t.Error(err)
-	}
-	waitForObjectives(t, nodeA, nodeB, []node.Node{}, []protocols.ObjectiveId{virtualDefundResponse})
+	// Create virtual channel, make payment and close virtual channel
+	makePayment(t, nodeA, nodeB, ChallengeDuration)
 
 	// Store current state
 	newState := getLatestSignedState(storeB, ledgerChannel)
@@ -113,12 +92,12 @@ func TestCheckpoint(t *testing.T) {
 
 	// Node B calls checkpoint method using new state
 	checkpointTx := protocols.NewCheckpointTransaction(ledgerChannel, newState, make([]state.SignedState, 0))
-	err = chainServiceB.SendTransaction(checkpointTx)
+	err := chainServiceB.SendTransaction(checkpointTx)
 	if err != nil {
 		t.Error(err)
 	}
 
-	// // Listen for challenge cleared event
+	// Listen for challenge cleared event
 	event = eventListener(t, testChainServiceA.EventFeed(), chainservice.ChallengeClearedEvent{})
 	t.Log("Challenge cleared event received", event)
 	_, ok := event.(chainservice.ChallengeClearedEvent)
@@ -137,29 +116,14 @@ func TestCounterChallenge(t *testing.T) {
 
 	// Create ledger channel and check balance of node
 	ledgerChannel := openLedgerChannel(t, nodeA, nodeB, types.Address{}, ChallengeDuration)
-	latestBlock, _ := sim.BlockByNumber(context.Background(), nil)
-	balanceNodeA, _ := sim.BalanceAt(context.Background(), ethAccounts[0].From, latestBlock.Number())
-	balanceNodeB, _ := sim.BalanceAt(context.Background(), ethAccounts[1].From, latestBlock.Number())
-	t.Log("Balance of node A", balanceNodeA, "\nBalance of Node B", balanceNodeB)
+	getBalance(t, sim, ethAccounts[0].From)
+	getBalance(t, sim, ethAccounts[1].From)
 
 	// Store current state
 	oldState := getLatestSignedState(storeA, ledgerChannel)
 
-	// Conduct virtual fund, make payment and virtual defund
-	virtualOutcome := initialPaymentOutcome(*nodeA.Address, *nodeB.Address, common.BigToAddress(common.Big0))
-	response, err := nodeA.CreatePaymentChannel([]common.Address{}, *nodeB.Address, ChallengeDuration, virtualOutcome)
-	if err != nil {
-		t.Error(err)
-	}
-	waitForObjectives(t, nodeA, nodeB, []node.Node{}, []protocols.ObjectiveId{response.Id})
-	nodeA.Pay(response.ChannelId, big.NewInt(virtualChannelDeposit))
-	nodeBVoucher := <-nodeB.ReceivedVouchers()
-	t.Logf("Voucher recieved %+v", nodeBVoucher)
-	virtualDefundResponse, err := nodeA.ClosePaymentChannel(response.ChannelId)
-	if err != nil {
-		t.Error(err)
-	}
-	waitForObjectives(t, nodeA, nodeB, []node.Node{}, []protocols.ObjectiveId{virtualDefundResponse})
+	// Create virtual channel, make payment and close virtual channel
+	makePayment(t, nodeA, nodeB, ChallengeDuration)
 
 	// Store current state
 	newState := getLatestSignedState(storeB, ledgerChannel)
@@ -189,25 +153,55 @@ func TestCounterChallenge(t *testing.T) {
 	sim.Commit()
 
 	// Node B calls transferAllAssets method using new state
-	transferTx := protocols.NewTransferAllTransaction(ledgerChannel, newState)
-	err = chainServiceB.SendTransaction(transferTx)
+	sendTransferTransaction(t, newState, ledgerChannel, chainServiceB)
+
+	// Check assets are liquidated
+	balanceA := getBalance(t, sim, ta.Alice.Address())
+	balanceB := getBalance(t, sim, ta.Bob.Address())
+	testhelpers.Assert(t, balanceA.Cmp(big.NewInt(ledgerChannelDeposit-virtualChannelDeposit)) == 0, "BalanceA (%v) should be equal to (%v)", balanceA, ledgerChannelDeposit-virtualChannelDeposit)
+	testhelpers.Assert(t, balanceB.Cmp(big.NewInt(ledgerChannelDeposit+virtualChannelDeposit)) == 0, "BalanceB (%v) should be equal to (%v)", balanceB, ledgerChannelDeposit+virtualChannelDeposit)
+}
+
+func makePayment(t *testing.T, nodeA node.Node, nodeB node.Node, challengeDuration uint32) {
+	virtualOutcome := initialPaymentOutcome(*nodeA.Address, *nodeB.Address, common.BigToAddress(common.Big0))
+	response, err := nodeA.CreatePaymentChannel([]common.Address{}, *nodeB.Address, challengeDuration, virtualOutcome)
 	if err != nil {
 		t.Error(err)
 	}
+	waitForObjectives(t, nodeA, nodeB, []node.Node{}, []protocols.ObjectiveId{response.Id})
+	nodeA.Pay(response.ChannelId, big.NewInt(virtualChannelDeposit))
+	nodeBVoucher := <-nodeB.ReceivedVouchers()
+	t.Logf("Voucher recieved %+v", nodeBVoucher)
+	virtualDefundResponse, err := nodeA.ClosePaymentChannel(response.ChannelId)
+	if err != nil {
+		t.Error(err)
+	}
+	waitForObjectives(t, nodeA, nodeB, []node.Node{}, []protocols.ObjectiveId{virtualDefundResponse})
+}
 
-	// Check assets are liquidated
-	latestBlock, _ = sim.BlockByNumber(context.Background(), nil)
-	balanceA, _ := sim.BalanceAt(context.Background(), ta.Alice.Address(), latestBlock.Number())
-	balanceB, _ := sim.BalanceAt(context.Background(), ta.Bob.Address(), latestBlock.Number())
-	t.Log("Balance of A", balanceA, "\nBalance of B", balanceB)
-	testhelpers.Assert(t, balanceA.Cmp(big.NewInt(ledgerChannelDeposit-virtualChannelDeposit)) == 0, "BalanceA (%v) should be equal to ledgerChannelDeposit (%v)", balanceA, ledgerChannelDeposit-virtualChannelDeposit)
-	testhelpers.Assert(t, balanceB.Cmp(big.NewInt(ledgerChannelDeposit+virtualChannelDeposit)) == 0, "BalanceB (%v) should be equal to ledgerChannelDeposit (%v)", balanceB, ledgerChannelDeposit+virtualChannelDeposit)
+func getBalance(t *testing.T, sim chainservice.SimulatedChain, address common.Address) *big.Int {
+	ctx := context.Background()
+	latestBlock, _ := sim.BlockByNumber(ctx, nil)
+	balance, err := sim.BalanceAt(ctx, address, latestBlock.Number())
+	if err != nil {
+		t.Error(err)
+	}
+	t.Logf("Balance of %s is %s\n", address, balance.String())
+	return balance
 }
 
 func sendChallengeTransaction(t *testing.T, signedState state.SignedState, privateKey []byte, ledgerChannel types.Destination, chainService chainservice.ChainService) {
 	challengerSig, _ := NitroAdjudicator.SignChallengeMessage(signedState.State(), privateKey)
 	challengeTx := protocols.NewChallengeTransaction(ledgerChannel, signedState, make([]state.SignedState, 0), challengerSig)
 	err := chainService.SendTransaction(challengeTx)
+	if err != nil {
+		t.Error(err)
+	}
+}
+
+func sendTransferTransaction(t *testing.T, signedState state.SignedState, ledgerChannel types.Destination, chainService chainservice.ChainService) {
+	transferTx := protocols.NewTransferAllTransaction(ledgerChannel, signedState)
+	err := chainService.SendTransaction(transferTx)
 	if err != nil {
 		t.Error(err)
 	}
