@@ -118,16 +118,16 @@ func RunIntegrationTestCase(tc TestCase, t *testing.T) {
 		bobLedgers := make([]types.Destination, tc.NumOfHops)
 		for i, clientI := range intermediaries {
 			// Setup and check the ledger channel between Alice and the intermediary
-			aliceLedgers[i] = openLedgerChannel(t, clientA, clientI, asset)
+			aliceLedgers[i] = openLedgerChannel(t, clientA, clientI, asset, 0)
 			checkLedgerChannel(t, aliceLedgers[i], initialLedgerOutcome(*clientA.Address, *clientI.Address, asset), query.Open, clientA)
 			// Setup and check the ledger channel between Bob and the intermediary
-			bobLedgers[i] = openLedgerChannel(t, clientI, clientB, asset)
+			bobLedgers[i] = openLedgerChannel(t, clientI, clientB, asset, 0)
 			checkLedgerChannel(t, bobLedgers[i], initialLedgerOutcome(*clientI.Address, *clientB.Address, asset), query.Open, clientB)
 
 		}
 
 		if tc.NumOfHops == 2 {
-			openLedgerChannel(t, intermediaries[0], intermediaries[1], asset)
+			openLedgerChannel(t, intermediaries[0], intermediaries[1], asset, 0)
 		}
 		// Setup virtual channels
 		objectiveIds := make([]protocols.ObjectiveId, tc.NumOfChannels)

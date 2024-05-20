@@ -37,6 +37,7 @@ type Bindings struct {
 
 type SimulatedChain interface {
 	ethChain
+	BalanceAt(ctx context.Context, account common.Address, blockNumber *big.Int) (*big.Int, error)
 	Commit() common.Hash
 	Close() error
 }

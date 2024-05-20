@@ -19,10 +19,33 @@ func assetAddressForIndex(na *NitroAdjudicator.NitroAdjudicator, tx *types.Trans
 	if err != nil {
 		return common.Address{}, err
 	}
-	// TODO remove the assumption that the tx incudes a candidate parameter
-	// 	concludeAndTransferAllAssets includes this parameter, but transferAllAssets, transfer, and claim do not.
-	//  https://github.com/statechannels/go-nitro/issues/759
-	candidate := params["candidate"].(struct {
+
+	value, exists := params["candidate"]
+	// concludeAndTransferAllAssets includes "candidate" parameter, but transferAllAssets, transfer, and claim do not.
+	// https://github.com/statechannels/go-nitro/issues/759
+	if !exists {
+		// transferAllAssets includes "outcome" parameter
+		// TODO: Handle tx processing for transfer and claim
+		outcomeValue := params["outcome"]
+
+		nitroOutcomeValue := outcomeValue.([]struct {
+			Asset         common.Address "json:\"asset\""
+			AssetMetadata struct {
+				AssetType uint8   "json:\"assetType\""
+				Metadata  []uint8 "json:\"metadata\""
+			} "json:\"assetMetadata\""
+			Allocations []struct {
+				Destination    [32]uint8 "json:\"destination\""
+				Amount         *big.Int  "json:\"amount\""
+				AllocationType uint8     "json:\"allocationType\""
+				Metadata       []uint8   "json:\"metadata\""
+			} "json:\"allocations\""
+		})
+
+		return nitroOutcomeValue[index.Int64()].Asset, nil
+	}
+
+	candidate := value.(struct {
 		VariablePart struct {
 			Outcome []struct {
 				Asset         common.Address "json:\"asset\""

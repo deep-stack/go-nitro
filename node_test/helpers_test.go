@@ -32,11 +32,11 @@ func setupNode(pk []byte, chain chainservice.ChainService, msgBroker messageserv
 	myAddress := crypto.GetAddressFromSecretKeyBytes(pk)
 
 	messageservice := messageservice.NewTestMessageService(myAddress, msgBroker, meanMessageDelay)
-	storeA, err := store.NewDurableStore(pk, dataFolder, buntdb.Config{})
+	store, err := store.NewDurableStore(pk, dataFolder, buntdb.Config{})
 	if err != nil {
 		panic(err)
 	}
-	return node.New(messageservice, chain, storeA, &engine.PermissivePolicy{}), storeA
+	return node.New(messageservice, chain, store, &engine.PermissivePolicy{}), store
 }
 
 func closeNode(t *testing.T, node *node.Node) {
@@ -159,11 +159,11 @@ func finalPaymentOutcome(alpha, beta, asset types.Address, numPayments, paymentA
 		asset)
 }
 
-func openLedgerChannel(t *testing.T, alpha node.Node, beta node.Node, asset common.Address) types.Destination {
+func openLedgerChannel(t *testing.T, alpha node.Node, beta node.Node, asset common.Address, challengeDuration uint32) types.Destination {
 	// Set up an outcome that requires both participants to deposit
 	outcome := initialLedgerOutcome(*alpha.Address, *beta.Address, asset)
 
-	response, err := alpha.CreateLedgerChannel(*beta.Address, 0, outcome)
+	response, err := alpha.CreateLedgerChannel(*beta.Address, challengeDuration, outcome)
 	if err != nil {
 		t.Fatal(err)
 	}
