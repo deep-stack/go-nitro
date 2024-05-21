@@ -287,6 +287,11 @@ func (ecs *EthChainService) SendTransaction(tx protocols.ChainTransaction) error
 		challengerSig := NitroAdjudicator.ConvertSignature(tx.ChallengerSig)
 		_, err := ecs.na.Challenge(ecs.defaultTxOpts(), fp, proof, candidate, challengerSig)
 		return err
+	case protocols.CheckpointTransaction:
+		fp, candidate := NitroAdjudicator.ConvertSignedStateToFixedPartAndSignedVariablePart(tx.Candidate)
+		proof := NitroAdjudicator.ConvertSignedStatesToProof(tx.Proof)
+		_, err := ecs.na.Checkpoint(ecs.defaultTxOpts(), fp, proof, candidate)
+		return err
 	case protocols.TransferAllTransaction:
 		transferState := tx.TransferState.State()
 		channelId := transferState.ChannelId()
@@ -354,6 +359,7 @@ func (ecs *EthChainService) dispatchChainEvents(logs []ethTypes.Log) error {
 			ecs.out <- event
 
 		case challengeRegisteredTopic:
+			ecs.logger.Debug("Processing Challenge Registered event")
 			cr, err := ecs.na.ParseChallengeRegistered(l)
 			if err != nil {
 				return fmt.Errorf("error in ParseChallengeRegistered: %w", err)
@@ -363,10 +369,16 @@ func (ecs *EthChainService) dispatchChainEvents(logs []ethTypes.Log) error {
 				Outcome: NitroAdjudicator.ConvertBindingsExitToExit(cr.Candidate.VariablePart.Outcome),
 				TurnNum: cr.Candidate.VariablePart.TurnNum.Uint64(),
 				IsFinal: cr.Candidate.VariablePart.IsFinal,
-			}, NitroAdjudicator.ConvertBindingsSignaturesToSignatures(cr.Candidate.Sigs))
+			}, NitroAdjudicator.ConvertBindingsSignaturesToSignatures(cr.Candidate.Sigs), cr.FinalizesAt)
 			ecs.out <- event
 		case challengeClearedTopic:
-			ecs.logger.Info("Ignoring Challenge Cleared event")
+			ecs.logger.Debug("Processing Challenge Cleared event")
+			cp, err := ecs.na.ParseChallengeCleared(l)
+			if err != nil {
+				return fmt.Errorf("error in ParseCheckpointed: %w", err)
+			}
+			event := NewChallengeClearedEvent(cp.ChannelId, l.BlockNumber, l.TxIndex, cp.NewTurnNumRecord)
+			ecs.out <- event
 		default:
 			ecs.logger.Info("Ignoring unknown chain event topic", "topic", l.Topics[0].String())
 

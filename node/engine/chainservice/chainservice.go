@@ -82,6 +82,7 @@ type ChallengeRegisteredEvent struct {
 	commonEvent
 	candidate           state.VariablePart
 	candidateSignatures []state.Signature
+	FinalizesAt         *big.Int
 }
 
 // NewChallengeRegisteredEvent constructs a ChallengeRegisteredEvent
@@ -91,6 +92,7 @@ func NewChallengeRegisteredEvent(
 	txIndex uint,
 	variablePart state.VariablePart,
 	sigs []state.Signature,
+	finalizesAt *big.Int,
 ) ChallengeRegisteredEvent {
 	return ChallengeRegisteredEvent{
 		commonEvent: commonEvent{channelID: channelId, blockNum: blockNum, txIndex: txIndex},
@@ -100,6 +102,7 @@ func NewChallengeRegisteredEvent(
 			TurnNum: variablePart.TurnNum,
 			IsFinal: variablePart.IsFinal,
 		}, candidateSignatures: sigs,
+		FinalizesAt: finalizesAt,
 	}
 }
 
@@ -127,7 +130,7 @@ func (cr ChallengeRegisteredEvent) SignedState(fp state.FixedPart) (state.Signed
 }
 
 func (cr ChallengeRegisteredEvent) String() string {
-	return "CHALLENGE registered for Channel " + cr.channelID.String() + " at Block " + fmt.Sprint(cr.blockNum)
+	return "Challenge registered for Channel " + cr.channelID.String() + " at Block " + fmt.Sprint(cr.blockNum)
 }
 
 func NewDepositedEvent(channelId types.Destination, blockNum uint64, txIndex uint, assetAddress common.Address, nowHeld *big.Int) DepositedEvent {
@@ -138,8 +141,18 @@ func NewAllocationUpdatedEvent(channelId types.Destination, blockNum uint64, txI
 	return AllocationUpdatedEvent{commonEvent{channelId, blockNum, txIndex}, assetAndAmount{AssetAddress: assetAddress, AssetAmount: assetAmount}}
 }
 
-// todo implement other event types
-// ChallengeCleared
+type ChallengeClearedEvent struct {
+	commonEvent
+	newTurnNumRecord *big.Int
+}
+
+func (cc ChallengeClearedEvent) String() string {
+	return "Challenge cleared for Channel " + cc.channelID.String() + " at Block " + fmt.Sprint(cc.blockNum)
+}
+
+func NewChallengeClearedEvent(channelId types.Destination, blockNum uint64, txIndex uint, newTurnNumRecord *big.Int) ChallengeClearedEvent {
+	return ChallengeClearedEvent{commonEvent: commonEvent{channelID: channelId, blockNum: blockNum, txIndex: txIndex}, newTurnNumRecord: newTurnNumRecord}
+}
 
 // ChainEventHandler describes an objective that can handle chain events
 type ChainEventHandler interface {

@@ -75,6 +75,24 @@ func NewTransferAllTransaction(channelId types.Destination, state state.SignedSt
 	return TransferAllTransaction{ChainTransaction: ChainTransactionBase{channelId: channelId}, TransferState: state}
 }
 
+type CheckpointTransaction struct {
+	ChainTransaction
+	Candidate state.SignedState
+	Proof     []state.SignedState
+}
+
+func NewCheckpointTransaction(
+	channelId types.Destination,
+	candidate state.SignedState,
+	proof []state.SignedState,
+) CheckpointTransaction {
+	return CheckpointTransaction{
+		ChainTransaction: ChainTransactionBase{channelId: channelId},
+		Candidate:        candidate,
+		Proof:            proof,
+	}
+}
+
 // SideEffects are effects to be executed by an imperative shell
 type SideEffects struct {
 	MessagesToSend       []Message
