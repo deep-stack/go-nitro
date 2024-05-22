@@ -73,10 +73,8 @@ func TestChallenge(t *testing.T) {
 	latestBlock, _ = sim.BlockByNumber(context.Background(), nil)
 	testhelpers.Assert(t, challengeRegisteredEvent.FinalizesAt.Uint64() <= latestBlock.Header().Time, "Expected channel to be finalized")
 
-	signedStateHash, _ := signedState.State().Hash()
-
 	// Alice calls transferAllAssets method
-	transferTx := protocols.NewTransferAllTransaction(ledgerChannel, signedState.State(), signedStateHash)
+	transferTx := protocols.NewTransferAllTransaction(ledgerChannel, signedState)
 	err = chainServiceA.SendTransaction(transferTx)
 	if err != nil {
 		t.Error(err)
@@ -172,8 +170,7 @@ func TestCheckpoint(t *testing.T) {
 	testhelpers.Assert(t, challengeRegisteredEvent.FinalizesAt.Uint64() <= latestBlock.Header().Time, "Expected challenge duration to be completed")
 
 	// Alice attempts to liquidate the asset after the challenge duration, but the attempt fails because the outcome has not been finalized
-	oldStateHash, _ := oldState.State().Hash()
-	transferTx := protocols.NewTransferAllTransaction(ledgerChannel, oldState.State(), oldStateHash)
+	transferTx := protocols.NewTransferAllTransaction(ledgerChannel, oldState)
 	err = chainServiceA.SendTransaction(transferTx)
 	testhelpers.Assert(t, err.Error() == "execution reverted: Channel not finalized.", "Expected execution reverted error")
 }
@@ -269,14 +266,12 @@ func TestCounterChallenge(t *testing.T) {
 	testhelpers.Assert(t, challengeRegisteredEvent.FinalizesAt.Uint64() <= latestBlock.Header().Time, "Expected channel to be finalized")
 
 	// Alice attempts to liquidate an asset with an outdated state but fails
-	oldStateHash, _ := oldState.State().Hash()
-	transferTx := protocols.NewTransferAllTransaction(ledgerChannel, oldState.State(), oldStateHash)
+	transferTx := protocols.NewTransferAllTransaction(ledgerChannel, oldState)
 	err = chainServiceB.SendTransaction(transferTx)
 	testhelpers.Assert(t, err.Error() == "execution reverted: incorrect fingerprint", "Expected execution reverted error")
 
 	// Bob calls transferAllAssets method using new state
-	newStateHash, _ := newState.State().Hash()
-	transferTx = protocols.NewTransferAllTransaction(ledgerChannel, newState.State(), newStateHash)
+	transferTx = protocols.NewTransferAllTransaction(ledgerChannel, newState)
 	err = chainServiceB.SendTransaction(transferTx)
 	if err != nil {
 		t.Error(err)
@@ -330,7 +325,7 @@ func TestVirtualPaymentChannel(t *testing.T) {
 	closeNode(t, &nodeB)
 
 	signedLedgerState := getLatestSignedState(storeA, ledgerChannel)
-	signedVirtualState, _ := getVirtualSignedState(storeA, virtualResponse.ChannelId)
+	signedVirtualState := getVirtualSignedState(storeA, virtualResponse.ChannelId)
 
 	// Node A calls challenge method on virtual channel
 	virtualChallengerSig, _ := NitroAdjudicator.SignChallengeMessage(signedVirtualState.State(), ta.Alice.PrivateKey)
@@ -383,45 +378,39 @@ func TestVirtualPaymentChannel(t *testing.T) {
 	// Get latest ledger channel state
 	latestLedgerState := getLatestSignedState(storeA, ledgerChannel)
 
-	constructedVariablePart := state.VariablePart{
-		TurnNum: latestLedgerState.State().TurnNum + 1,
-		IsFinal: latestLedgerState.State().IsFinal,
-		Outcome: outcome.Exit{
-			{
-				Asset:         latestLedgerState.State().Outcome[0].Asset,
-				AssetMetadata: latestLedgerState.State().Outcome[0].AssetMetadata,
-				Allocations: outcome.Allocations{
-					{
-						Destination:    latestLedgerState.State().Outcome[0].Allocations[0].Destination,
-						Amount:         alliceOutcomeAllocationAmount,
-						AllocationType: outcome.NormalAllocationType,
-						Metadata:       latestLedgerState.State().Outcome[0].Allocations[0].Metadata,
-					},
-					{
-						Destination:    latestLedgerState.State().Outcome[0].Allocations[1].Destination,
-						Amount:         bobOutcomeAllocationAmount,
-						AllocationType: outcome.NormalAllocationType,
-						Metadata:       latestLedgerState.State().Outcome[0].Allocations[1].Metadata,
-					},
-				},
-			},
-		},
-	}
+	latestState := latestLedgerState.State()
 
-	constructedState := state.StateFromFixedAndVariablePart(latestLedgerState.State().FixedPart(), constructedVariablePart)
-	constructedStateHash, _ := constructedState.Hash()
+	latestState.Outcome[0].Allocations = outcome.Allocations{
+			{
+				Destination:    latestLedgerState.State().Outcome[0].Allocations[0].Destination,
+				Amount:         alliceOutcomeAllocationAmount,
+				AllocationType: outcome.NormalAllocationType,
+				Metadata:       latestLedgerState.State().Outcome[0].Allocations[0].Metadata,
+			},
+			{
+				Destination:    latestLedgerState.State().Outcome[0].Allocations[1].Destination,
+				Amount:         bobOutcomeAllocationAmount,
+				AllocationType: outcome.NormalAllocationType,
+				Metadata:       latestLedgerState.State().Outcome[0].Allocations[1].Metadata,
+			},
+		}
+
+	signedConstructedState := state.NewSignedState(latestState)
 
 	// Node A calls transferAllAssets method
-	transferTx := protocols.NewTransferAllTransaction(ledgerChannel, constructedState, constructedStateHash)
+	transferTx := protocols.NewTransferAllTransaction(ledgerChannel, signedConstructedState)
 	err = chainServiceA.SendTransaction(transferTx)
 
-	testhelpers.Assert(t, err == nil, "Error liquidating assets")
+	testhelpers.Assert(t, err == nil, "Expected assets liquidated")
 
 	// Check assets are liquidated
 	latestBlock, _ := sim.BlockByNumber(context.Background(), nil)
 	balanceA, _ := sim.BalanceAt(context.Background(), ta.Alice.Address(), latestBlock.Number())
 	balanceB, _ := sim.BalanceAt(context.Background(), ta.Bob.Address(), latestBlock.Number())
 	t.Log("Balance of A", balanceA, "\nBalance of B", balanceB)
+		// Assert balance equals ledger channel deposit since no payment has been made
+		testhelpers.Assert(t, balanceA.Cmp(big.NewInt(ledgerChannelDeposit)) == 0, "Balance of Alice (%v) should be equal to ledgerChannelDeposit (%v)", balanceA, ledgerChannelDeposit)
+		testhelpers.Assert(t, balanceB.Cmp(big.NewInt(ledgerChannelDeposit)) == 0, "Balance of Bob (%v) should be equal to ledgerChannelDeposit (%v)", balanceB, ledgerChannelDeposit)
 }
 
 func sendChallengeTransaction(t *testing.T, signedState state.SignedState, privateKey []byte, ledgerChannel types.Destination, chainService chainservice.ChainService) {
@@ -444,9 +433,8 @@ func getLatestSignedState(store store.Store, id types.Destination) state.SignedS
 	return consensusChannel.SupportedSignedState()
 }
 
-func getVirtualSignedState(store store.Store, id types.Destination) (state.SignedState, state.SignedState) {
+func getVirtualSignedState(store store.Store, id types.Destination) (state.SignedState) {
 	virtualChannel, _ := store.GetChannelById(id)
 	virtualSignedState, _ := virtualChannel.LatestSignedState()
-	virtualPostfundState := virtualChannel.SignedPostFundState()
-	return virtualSignedState, virtualPostfundState
+	return virtualSignedState
 }
