@@ -276,7 +276,6 @@ func TestCounterChallenge(t *testing.T) {
 	if err != nil {
 		t.Error(err)
 	}
-	// TODO: Update off chain states
 
 	// Check assets are liquidated
 	latestBlock, _ = sim.BlockByNumber(context.Background(), nil)
@@ -321,13 +320,13 @@ func TestVirtualPaymentChannel(t *testing.T) {
 	waitForObjectives(t, nodeA, nodeB, []node.Node{}, []protocols.ObjectiveId{virtualResponse.Id})
 	checkPaymentChannel(t, virtualResponse.ChannelId, virtualOutcome, query.Open, nodeA, nodeB)
 
-	// Close node B
+	// Close Bob's node
 	closeNode(t, &nodeB)
 
 	signedLedgerState := getLatestSignedState(storeA, ledgerChannel)
 	signedVirtualState := getVirtualSignedState(storeA, virtualResponse.ChannelId)
 
-	// Node A calls challenge method on virtual channel
+	// Alice calls challenge method on virtual channel
 	virtualChallengerSig, _ := NitroAdjudicator.SignChallengeMessage(signedVirtualState.State(), ta.Alice.PrivateKey)
 	virtualChallengeTx := protocols.NewChallengeTransaction(virtualResponse.ChannelId, signedVirtualState, []state.SignedState{}, virtualChallengerSig)
 	err = chainServiceA.SendTransaction(virtualChallengeTx)
@@ -335,7 +334,7 @@ func TestVirtualPaymentChannel(t *testing.T) {
 		t.Error(err)
 	}
 
-	// Node A calls challenge method on ledger channel
+	// Alice calls challenge method on ledger channel
 	challengerSig, _ := NitroAdjudicator.SignChallengeMessage(signedLedgerState.State(), ta.Alice.PrivateKey)
 	challengeTx := protocols.NewChallengeTransaction(ledgerChannel, signedLedgerState, make([]state.SignedState, 0), challengerSig)
 	err = chainServiceA.SendTransaction(challengeTx)
@@ -368,22 +367,22 @@ func TestVirtualPaymentChannel(t *testing.T) {
 		t.Error(err)
 	}
 
-	// Construct state object with new state outcome allocations
-	alliceOutcomeAllocationAmount := signedLedgerState.State().Outcome[0].Allocations[0].Amount
+	// Compute new state outcome allocations
+	aliceOutcomeAllocationAmount := signedLedgerState.State().Outcome[0].Allocations[0].Amount
 	bobOutcomeAllocationAmount := signedLedgerState.State().Outcome[0].Allocations[1].Amount
 
-	alliceOutcomeAllocationAmount.Add(alliceOutcomeAllocationAmount, signedVirtualState.State().Outcome[0].Allocations[0].Amount)
+	aliceOutcomeAllocationAmount.Add(aliceOutcomeAllocationAmount, signedVirtualState.State().Outcome[0].Allocations[0].Amount)
 	bobOutcomeAllocationAmount.Add(bobOutcomeAllocationAmount, signedVirtualState.State().Outcome[0].Allocations[1].Amount)
 
 	// Get latest ledger channel state
 	latestLedgerState := getLatestSignedState(storeA, ledgerChannel)
-
 	latestState := latestLedgerState.State()
 
+	// Update state with new state outcome allocations
 	latestState.Outcome[0].Allocations = outcome.Allocations{
 		{
 			Destination:    latestLedgerState.State().Outcome[0].Allocations[0].Destination,
-			Amount:         alliceOutcomeAllocationAmount,
+			Amount:         aliceOutcomeAllocationAmount,
 			AllocationType: outcome.NormalAllocationType,
 			Metadata:       latestLedgerState.State().Outcome[0].Allocations[0].Metadata,
 		},
@@ -397,7 +396,7 @@ func TestVirtualPaymentChannel(t *testing.T) {
 
 	signedConstructedState := state.NewSignedState(latestState)
 
-	// Node A calls transferAllAssets method
+	// Alice calls transferAllAssets method
 	transferTx := protocols.NewTransferAllTransaction(ledgerChannel, signedConstructedState)
 	err = chainServiceA.SendTransaction(transferTx)
 
