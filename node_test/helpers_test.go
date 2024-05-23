@@ -97,13 +97,13 @@ func setupChainService(tc TestCase, tp TestParticipant, si sharedTestInfrastruct
 		return cs
 	case AnvilChain:
 		cs, err := chainservice.NewEthChainService(chainservice.ChainOpts{
-			ChainUrl:        si.anvilChainOpts.ChainUrl,
-			ChainStartBlock: si.anvilChainOpts.ChainStartBlock,
-			ChainAuthToken:  si.anvilChainOpts.ChainAuthToken,
-			NaAddress:       si.anvilChainOpts.NaAddress,
-			VpaAddress:      si.anvilChainOpts.VpaAddress,
-			CaAddress:       si.anvilChainOpts.CaAddress,
-			ChainPk:         si.anvilChainOpts.ChainPks[tpIndex],
+			ChainUrl:        si.anvilChain.ChainOpts.ChainUrl,
+			ChainStartBlock: si.anvilChain.ChainOpts.ChainStartBlock,
+			ChainAuthToken:  si.anvilChain.ChainOpts.ChainAuthToken,
+			NaAddress:       si.anvilChain.ChainOpts.NaAddress,
+			VpaAddress:      si.anvilChain.ChainOpts.VpaAddress,
+			CaAddress:       si.anvilChain.ChainOpts.CaAddress,
+			ChainPk:         si.anvilChain.ChainOpts.ChainPks[tpIndex],
 		})
 		if err != nil {
 			panic(err)
@@ -130,13 +130,13 @@ func setupStore(tc TestCase, tp TestParticipant, si sharedTestInfrastructure, da
 	}
 }
 
-func setupIntegrationNode(tc TestCase, tp TestParticipant, si sharedTestInfrastructure, bootPeers []string, dataFolder string, tpIndex uint64) (node.Node, messageservice.MessageService, string) {
+func setupIntegrationNode(tc TestCase, tp TestParticipant, si sharedTestInfrastructure, bootPeers []string, dataFolder string, tpIndex uint64) (node.Node, messageservice.MessageService, string, store.Store, chainservice.ChainService) {
 	logging.SetupDefaultFileLogger(tc.LogName+"_"+string(tp.Name)+".log", slog.LevelDebug)
 	messageService, multiAddr := setupMessageService(tc, tp, si, bootPeers)
 	cs := setupChainService(tc, tp, si, tpIndex)
 	store := setupStore(tc, tp, si, dataFolder)
 	n := node.New(messageService, cs, store, &engine.PermissivePolicy{})
-	return n, messageService, multiAddr
+	return n, messageService, multiAddr, store, cs
 }
 
 func initialLedgerOutcome(alpha, beta, asset types.Address) outcome.Exit {
@@ -233,7 +233,7 @@ func setupSharedInfra(tc TestCase) sharedTestInfrastructure {
 		infra.bindings = &bindings
 		infra.ethAccounts = ethAccounts
 	case AnvilChain:
-		infra.anvilChain, infra.anvilChainOpts = chainservice.NewAnvilChain()
+		infra.anvilChain = chainservice.NewAnvilChain()
 	default:
 		panic("Unknown chain service")
 	}

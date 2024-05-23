@@ -84,7 +84,6 @@ type sharedTestInfrastructure struct {
 	mockChain      *chainservice.MockChain
 	simulatedChain chainservice.SimulatedChain
 	anvilChain     *chainservice.AnvilChain
-	anvilChainOpts chainservice.AnvilChainOpts
 	bindings       *chainservice.Bindings
 	ethAccounts    []*bind.TransactOpts
 }

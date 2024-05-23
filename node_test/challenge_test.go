@@ -4,10 +4,12 @@ import (
 	"context"
 	"math/big"
 	"testing"
+	"time"
 
 	"github.com/ethereum/go-ethereum/accounts/abi/bind"
 	"github.com/ethereum/go-ethereum/common"
 	"github.com/statechannels/go-nitro/channel/state"
+	"github.com/statechannels/go-nitro/internal/testactors"
 	ta "github.com/statechannels/go-nitro/internal/testactors"
 	"github.com/statechannels/go-nitro/internal/testhelpers"
 	"github.com/statechannels/go-nitro/node"
@@ -22,33 +24,39 @@ import (
 func TestChallenge(t *testing.T) {
 	const challengeDuration = 5
 
-	// Start the chain & deploy contract
-	t.Log("Starting chain")
-	sim, bindings, ethAccounts, err := chainservice.SetupSimulatedBackend(2)
-	defer closeSimulatedChain(t, sim)
-	if err != nil {
-		t.Fatal(err)
+	tc := TestCase{
+		Description:    "Challenge test",
+		Chain:          AnvilChain,
+		MessageService: TestMessageService,
+		MessageDelay:   0,
+		LogName:        "Challenge_test",
+		Participants: []TestParticipant{
+			{StoreType: MemStore, Actor: testactors.Alice},
+			{StoreType: MemStore, Actor: testactors.Bob},
+		},
 	}
 
-	// Create go-nitro nodes
-	msgBroker := messageservice.NewBroker()
 	dataFolder, cleanup := testhelpers.GenerateTempStoreFolder()
 	defer cleanup()
-	nodeA, storeA, chainServiceA := setupNodeAndChainService(sim, bindings, ethAccounts[0], ta.Alice.PrivateKey, msgBroker, dataFolder)
-	nodeB, _, _ := setupNodeAndChainService(sim, bindings, ethAccounts[1], ta.Bob.PrivateKey, msgBroker, dataFolder)
-	defer closeNode(t, &nodeA)
+
+	infra := setupSharedInfra(tc)
+	defer infra.Close(t)
+
+	nodeA, _, _, storeA, chainServiceA := setupIntegrationNode(tc, tc.Participants[0], infra, []string{}, dataFolder, 0)
+	defer nodeA.Close()
+
+	nodeB, _, _, _, _ := setupIntegrationNode(tc, tc.Participants[1], infra, []string{}, dataFolder, 1)
 
 	// Separate chain service to listen for events
-	testChainServiceA, _ := chainservice.NewSimulatedBackendChainService(sim, bindings, ethAccounts[0])
+	testChainServiceA := setupChainService(tc, tc.Participants[0], infra, 0)
 	defer testChainServiceA.Close()
 
 	// Create ledger channel
 	ledgerChannel := openLedgerChannel(t, nodeA, nodeB, types.Address{}, challengeDuration)
 
 	// Check balance of node
-	latestBlock, _ := sim.BlockByNumber(context.Background(), nil)
-	balanceNodeA, _ := sim.BalanceAt(context.Background(), ta.Alice.Address(), latestBlock.Number())
-	balanceNodeB, _ := sim.BalanceAt(context.Background(), ta.Bob.Address(), latestBlock.Number())
+	balanceNodeA, _ := infra.anvilChain.GetAccountBalance(tc.Participants[0].Address())
+	balanceNodeB, _ := infra.anvilChain.GetAccountBalance(tc.Participants[1].Address())
 	t.Log("Balance of Alice", balanceNodeA, "\nBalance of Bob", balanceNodeB)
 	testhelpers.Assert(t, balanceNodeA.Int64() == 0, "Balance of Alice should be zero")
 	testhelpers.Assert(t, balanceNodeB.Int64() == 0, "Balance of Bob should be zero")
@@ -65,28 +73,31 @@ func TestChallenge(t *testing.T) {
 	challengeRegisteredEvent, ok := event.(chainservice.ChallengeRegisteredEvent)
 	testhelpers.Assert(t, ok, "Expected challenge registered event")
 
-	// The sendTransaction method from simulatedBackendService mints 2 additional blocks
-	// The timestamp of each succeeding block is 10 seconds more than previous block hence calling sendTransaction moves the time forward by 20 seconds
-	// So challenge duration is over as it is less than 20 seconds and channel is computed as finalized
-	latestBlock, _ = sim.BlockByNumber(context.Background(), nil)
+	time.Sleep(challengeDuration * time.Second)
+	latestBlock, _ := infra.anvilChain.GetLatestBlock()
 	testhelpers.Assert(t, challengeRegisteredEvent.FinalizesAt.Uint64() <= latestBlock.Header().Time, "Expected channel to be finalized")
 
 	// Alice calls transferAllAssets method
 	transferTx := protocols.NewTransferAllTransaction(ledgerChannel, signedState)
-	err = chainServiceA.SendTransaction(transferTx)
+	err := chainServiceA.SendTransaction(transferTx)
 	if err != nil {
 		t.Error(err)
 	}
+
+	// Listen for allocation updated event
+	event = waitForEvent(t, testChainServiceA.EventFeed(), chainservice.AllocationUpdatedEvent{})
+	_, ok = event.(chainservice.AllocationUpdatedEvent)
+	testhelpers.Assert(t, ok, "Expected challenge registered event")
+
 	// TODO: Update off chain states
 
 	// Check assets are liquidated
-	latestBlock, _ = sim.BlockByNumber(context.Background(), nil)
-	balanceA, _ := sim.BalanceAt(context.Background(), ta.Alice.Address(), latestBlock.Number())
-	balanceB, _ := sim.BalanceAt(context.Background(), ta.Bob.Address(), latestBlock.Number())
-	t.Log("Balance of Alice", balanceA, "\nBalance of Bob", balanceB)
+	balanceNodeA, _ = infra.anvilChain.GetAccountBalance(tc.Participants[0].Address())
+	balanceNodeB, _ = infra.anvilChain.GetAccountBalance(tc.Participants[1].Address())
+	t.Log("Balance of Alice", balanceNodeA, "\nBalance of Bob", balanceNodeB)
 	// Assert balance equals ledger channel deposit since no payment has been made
-	testhelpers.Assert(t, balanceA.Cmp(big.NewInt(ledgerChannelDeposit)) == 0, "Balance of Alice (%v) should be equal to ledgerChannelDeposit (%v)", balanceA, ledgerChannelDeposit)
-	testhelpers.Assert(t, balanceB.Cmp(big.NewInt(ledgerChannelDeposit)) == 0, "Balance of Bob (%v) should be equal to ledgerChannelDeposit (%v)", balanceB, ledgerChannelDeposit)
+	testhelpers.Assert(t, balanceNodeA.Cmp(big.NewInt(ledgerChannelDeposit)) == 0, "Balance of Alice (%v) should be equal to ledgerChannelDeposit (%v)", balanceNodeA, ledgerChannelDeposit)
+	testhelpers.Assert(t, balanceNodeB.Cmp(big.NewInt(ledgerChannelDeposit)) == 0, "Balance of Bob (%v) should be equal to ledgerChannelDeposit (%v)", balanceNodeB, ledgerChannelDeposit)
 }
 
 func TestCheckpoint(t *testing.T) {
