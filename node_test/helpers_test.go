@@ -83,7 +83,7 @@ func setupMessageService(tc TestCase, tp TestParticipant, si sharedTestInfrastru
 	}
 }
 
-func setupChainService(tc TestCase, tp TestParticipant, si sharedTestInfrastructure) chainservice.ChainService {
+func setupChainService(tc TestCase, tp TestParticipant, si sharedTestInfrastructure, tpIndex uint64) chainservice.ChainService {
 	switch tc.Chain {
 	case MockChain:
 		return chainservice.NewMockChainService(si.mockChain, tp.Address())
@@ -103,6 +103,7 @@ func setupChainService(tc TestCase, tp TestParticipant, si sharedTestInfrastruct
 			NaAddress:       si.anvilChainOpts.NaAddress,
 			VpaAddress:      si.anvilChainOpts.VpaAddress,
 			CaAddress:       si.anvilChainOpts.CaAddress,
+			ChainPk:         si.anvilChainOpts.ChainPks[tpIndex],
 		})
 		if err != nil {
 			panic(err)
@@ -129,10 +130,10 @@ func setupStore(tc TestCase, tp TestParticipant, si sharedTestInfrastructure, da
 	}
 }
 
-func setupIntegrationNode(tc TestCase, tp TestParticipant, si sharedTestInfrastructure, bootPeers []string, dataFolder string) (node.Node, messageservice.MessageService, string) {
+func setupIntegrationNode(tc TestCase, tp TestParticipant, si sharedTestInfrastructure, bootPeers []string, dataFolder string, tpIndex uint64) (node.Node, messageservice.MessageService, string) {
 	logging.SetupDefaultFileLogger(tc.LogName+"_"+string(tp.Name)+".log", slog.LevelDebug)
 	messageService, multiAddr := setupMessageService(tc, tp, si, bootPeers)
-	cs := setupChainService(tc, tp, si)
+	cs := setupChainService(tc, tp, si, tpIndex)
 	store := setupStore(tc, tp, si, dataFolder)
 	n := node.New(messageService, cs, store, &engine.PermissivePolicy{})
 	return n, messageService, multiAddr
