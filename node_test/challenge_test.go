@@ -22,14 +22,13 @@ import (
 )
 
 func TestChallenge(t *testing.T) {
-	const challengeDuration = 5
-
 	tc := TestCase{
-		Description:    "Challenge test",
-		Chain:          AnvilChain,
-		MessageService: TestMessageService,
-		MessageDelay:   0,
-		LogName:        "Challenge_test",
+		Description:       "Challenge test",
+		Chain:             AnvilChain,
+		MessageService:    TestMessageService,
+		MessageDelay:      0,
+		LogName:           "Challenge_test",
+		ChallengeDuration: 5,
 		Participants: []TestParticipant{
 			{StoreType: MemStore, Actor: testactors.Alice},
 			{StoreType: MemStore, Actor: testactors.Bob},
@@ -52,7 +51,7 @@ func TestChallenge(t *testing.T) {
 	defer testChainServiceA.Close()
 
 	// Create ledger channel
-	ledgerChannel := openLedgerChannel(t, nodeA, nodeB, types.Address{}, challengeDuration)
+	ledgerChannel := openLedgerChannel(t, nodeA, nodeB, types.Address{}, uint32(tc.ChallengeDuration))
 
 	// Check balance of node
 	balanceNodeA, _ := infra.anvilChain.GetAccountBalance(tc.Participants[0].Address())
@@ -73,7 +72,7 @@ func TestChallenge(t *testing.T) {
 	challengeRegisteredEvent, ok := event.(chainservice.ChallengeRegisteredEvent)
 	testhelpers.Assert(t, ok, "Expected challenge registered event")
 
-	time.Sleep(challengeDuration * time.Second)
+	time.Sleep(time.Duration(tc.ChallengeDuration) * time.Second)
 	latestBlock, _ := infra.anvilChain.GetLatestBlock()
 	testhelpers.Assert(t, challengeRegisteredEvent.FinalizesAt.Uint64() <= latestBlock.Header().Time, "Expected channel to be finalized")
 

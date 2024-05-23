@@ -49,15 +49,16 @@ const (
 
 // TestCase is a test case for the node integration test.
 type TestCase struct {
-	Description    string
-	Chain          ChainType
-	MessageService MessageService
-	NumOfChannels  uint
-	NumOfPayments  uint
-	MessageDelay   time.Duration
-	LogName        string
-	NumOfHops      uint
-	Participants   []TestParticipant
+	Description       string
+	Chain             ChainType
+	MessageService    MessageService
+	NumOfChannels     uint
+	NumOfPayments     uint
+	MessageDelay      time.Duration
+	LogName           string
+	NumOfHops         uint
+	ChallengeDuration uint
+	Participants      []TestParticipant
 }
 
 // Validate validates the test case and makes sure that the current test supports the test case.
