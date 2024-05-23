@@ -41,6 +41,7 @@ func TestChallenge(t *testing.T) {
 	infra := setupSharedInfra(tc)
 	defer infra.Close(t)
 
+	// Create go-nitro nodes
 	nodeA, _, _, storeA, chainServiceA := setupIntegrationNode(tc, tc.Participants[0], infra, []string{}, dataFolder, 0)
 	defer nodeA.Close()
 
@@ -86,7 +87,7 @@ func TestChallenge(t *testing.T) {
 	// Listen for allocation updated event
 	event = waitForEvent(t, testChainServiceA.EventFeed(), chainservice.AllocationUpdatedEvent{})
 	_, ok = event.(chainservice.AllocationUpdatedEvent)
-	testhelpers.Assert(t, ok, "Expected challenge registered event")
+	testhelpers.Assert(t, ok, "Expected allocation updated event")
 
 	// TODO: Update off chain states
 
@@ -100,42 +101,44 @@ func TestChallenge(t *testing.T) {
 }
 
 func TestCheckpoint(t *testing.T) {
-	// The sendTransaction method from simulatedBackendService mints 2 additional blocks
-	// The timestamp of each succeeding block is 10 seconds more than previous block, hence sendTransaction moves the time forward by 20 seconds
-	// Also any new transaction after that would be included in a new block, hence moving the time foward by 10 more seconds
-	// So challenge duration needs to be more than 30 seconds (as chain would have already moved ahead by 30 seconds after a transaction)
-	const challengeDuration = 31
-
-	// Start the chain & deploy contract
-	t.Log("Starting chain")
-	sim, bindings, ethAccounts, err := chainservice.SetupSimulatedBackend(2)
-	defer closeSimulatedChain(t, sim)
-	if err != nil {
-		t.Fatal(err)
+	tc := TestCase{
+		Description:       "Checkpoint test",
+		Chain:             AnvilChain,
+		MessageService:    TestMessageService,
+		MessageDelay:      0,
+		LogName:           "Checkpoint_test",
+		ChallengeDuration: 10,
+		Participants: []TestParticipant{
+			{StoreType: MemStore, Actor: testactors.Alice},
+			{StoreType: MemStore, Actor: testactors.Bob},
+		},
 	}
 
-	// Create go-nitro nodes
-	msgBroker := messageservice.NewBroker()
 	dataFolder, cleanup := testhelpers.GenerateTempStoreFolder()
 	defer cleanup()
-	nodeA, storeA, chainServiceA := setupNodeAndChainService(sim, bindings, ethAccounts[0], ta.Alice.PrivateKey, msgBroker, dataFolder)
-	nodeB, storeB, chainServiceB := setupNodeAndChainService(sim, bindings, ethAccounts[1], ta.Bob.PrivateKey, msgBroker, dataFolder)
-	defer closeNode(t, &nodeA)
-	defer closeNode(t, &nodeB)
+
+	infra := setupSharedInfra(tc)
+	defer infra.Close(t)
+
+	// Create go-nitro nodes
+	nodeA, _, _, storeA, chainServiceA := setupIntegrationNode(tc, tc.Participants[0], infra, []string{}, dataFolder, 0)
+	defer nodeA.Close()
+	nodeB, _, _, storeB, chainServiceB := setupIntegrationNode(tc, tc.Participants[1], infra, []string{}, dataFolder, 1)
+	defer nodeB.Close()
 
 	// Separate chain service to listen for events
-	testChainServiceB, _ := chainservice.NewSimulatedBackendChainService(sim, bindings, ethAccounts[1])
+	testChainServiceB := setupChainService(tc, tc.Participants[1], infra, 1)
 	defer testChainServiceB.Close()
 
-	// Create ledger channel and check balance of node
-	ledgerChannel := openLedgerChannel(t, nodeA, nodeB, types.Address{}, challengeDuration)
+	// Create ledger channel
+	ledgerChannel := openLedgerChannel(t, nodeA, nodeB, types.Address{}, uint32(tc.ChallengeDuration))
 
 	// Store current state
 	oldState := getLatestSignedState(storeA, ledgerChannel)
 
 	// Conduct virtual fund and virtual defund
 	virtualOutcome := initialPaymentOutcome(*nodeA.Address, *nodeB.Address, common.BigToAddress(common.Big0))
-	response, err := nodeA.CreatePaymentChannel([]common.Address{}, *nodeB.Address, challengeDuration, virtualOutcome)
+	response, err := nodeA.CreatePaymentChannel([]common.Address{}, *nodeB.Address, uint32(tc.ChallengeDuration), virtualOutcome)
 	if err != nil {
 		t.Error(err)
 	}
@@ -157,7 +160,7 @@ func TestCheckpoint(t *testing.T) {
 	t.Log("Challenge registed event received", event)
 	challengeRegisteredEvent, ok := event.(chainservice.ChallengeRegisteredEvent)
 	testhelpers.Assert(t, ok, "Expected challenge registered event")
-	latestBlock, _ := sim.BlockByNumber(context.Background(), nil)
+	latestBlock, _ := infra.anvilChain.GetLatestBlock()
 	testhelpers.Assert(t, latestBlock.Header().Time < challengeRegisteredEvent.FinalizesAt.Uint64(), "Expected channel to not be finalized")
 
 	// Bob calls checkpoint method using new state
@@ -174,13 +177,14 @@ func TestCheckpoint(t *testing.T) {
 	testhelpers.Assert(t, ok, "Expected challenge cleared event")
 	testhelpers.Assert(t, challengeClearedEvent.ChannelID() == ledgerChannel, "Channel ID mismatch")
 
-	latestBlock, _ = sim.BlockByNumber(context.Background(), nil)
+	time.Sleep(time.Duration(tc.ChallengeDuration) * time.Second)
+	latestBlock, _ = infra.anvilChain.GetLatestBlock()
 	testhelpers.Assert(t, challengeRegisteredEvent.FinalizesAt.Uint64() <= latestBlock.Header().Time, "Expected challenge duration to be completed")
 
 	// Alice attempts to liquidate the asset after the challenge duration, but the attempt fails because the outcome has not been finalized
 	transferTx := protocols.NewTransferAllTransaction(ledgerChannel, oldState)
 	err = chainServiceA.SendTransaction(transferTx)
-	testhelpers.Assert(t, err.Error() == "execution reverted: Channel not finalized.", "Expected execution reverted error")
+	testhelpers.Assert(t, err.Error() == "execution reverted: revert: Channel not finalized.", "Expected execution reverted error")
 }
 
 func TestCounterChallenge(t *testing.T) {
