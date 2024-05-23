@@ -233,7 +233,7 @@ func setupSharedInfra(tc TestCase) sharedTestInfrastructure {
 		infra.bindings = &bindings
 		infra.ethAccounts = ethAccounts
 	case AnvilChain:
-		infra.anvilChain = chainservice.NewAnvilChain()
+		infra.anvilChain, _ = chainservice.NewAnvilChain()
 	default:
 		panic("Unknown chain service")
 	}
