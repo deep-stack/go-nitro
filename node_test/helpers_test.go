@@ -95,6 +95,19 @@ func setupChainService(tc TestCase, tp TestParticipant, si sharedTestInfrastruct
 			panic(err)
 		}
 		return cs
+	case AnvilChain:
+		cs, err := chainservice.NewEthChainService(chainservice.ChainOpts{
+			ChainUrl:        si.anvilChainOpts.ChainUrl,
+			ChainStartBlock: si.anvilChainOpts.ChainStartBlock,
+			ChainAuthToken:  si.anvilChainOpts.ChainAuthToken,
+			NaAddress:       si.anvilChainOpts.NaAddress,
+			VpaAddress:      si.anvilChainOpts.VpaAddress,
+			CaAddress:       si.anvilChainOpts.CaAddress,
+		})
+		if err != nil {
+			panic(err)
+		}
+		return cs
 	default:
 		panic("Unknown chain service")
 	}
@@ -218,6 +231,8 @@ func setupSharedInfra(tc TestCase) sharedTestInfrastructure {
 		infra.simulatedChain = sim
 		infra.bindings = &bindings
 		infra.ethAccounts = ethAccounts
+	case AnvilChain:
+		infra.anvilChain, infra.anvilChainOpts = chainservice.NewAnvilChain()
 	default:
 		panic("Unknown chain service")
 	}

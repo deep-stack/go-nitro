@@ -6,6 +6,7 @@ import (
 	"time"
 
 	"github.com/ethereum/go-ethereum/accounts/abi/bind"
+	"github.com/statechannels/go-nitro/cmd/utils"
 	"github.com/statechannels/go-nitro/internal/testactors"
 	"github.com/statechannels/go-nitro/node/engine/chainservice"
 	"github.com/statechannels/go-nitro/node/engine/messageservice"
@@ -31,6 +32,7 @@ type ChainType string
 const (
 	MockChain      ChainType = "MockChain"
 	SimulatedChain ChainType = "SimulatedChain"
+	AnvilChain     ChainType = "AnvilChain"
 )
 
 type TestParticipant struct {
@@ -81,6 +83,8 @@ type sharedTestInfrastructure struct {
 	broker         *messageservice.Broker
 	mockChain      *chainservice.MockChain
 	simulatedChain chainservice.SimulatedChain
+	anvilChain     *chainservice.AnvilChain
+	anvilChainOpts chainservice.AnvilChainOpts
 	bindings       *chainservice.Bindings
 	ethAccounts    []*bind.TransactOpts
 }
@@ -88,5 +92,9 @@ type sharedTestInfrastructure struct {
 func (sti *sharedTestInfrastructure) Close(t *testing.T) {
 	if sti.simulatedChain != nil {
 		closeSimulatedChain(t, sti.simulatedChain)
+	}
+
+	if sti.anvilChain != nil {
+		utils.StopCommands(sti.anvilChain.AnvilCmd)
 	}
 }
