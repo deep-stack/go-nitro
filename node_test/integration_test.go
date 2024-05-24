@@ -78,8 +78,8 @@ func RunIntegrationTestCase(tc TestCase, t *testing.T) {
 		t.Log("Initalizing intermediary node(s)...")
 		intermediaries := make([]node.Node, 0)
 		bootPeers := make([]string, 0)
-		for index, intermediary := range tc.Participants[2:] {
-			clientI, msgI, multiAddr, _, _ := setupIntegrationNode(tc, intermediary, infra, []string{}, dataFolder, uint64(index))
+		for _, intermediary := range tc.Participants[2:] {
+			clientI, msgI, multiAddr, _, _ := setupIntegrationNode(tc, intermediary, infra, []string{}, dataFolder)
 
 			intermediaries = append(intermediaries, clientI)
 			msgServices = append(msgServices, msgI)
@@ -93,11 +93,11 @@ func RunIntegrationTestCase(tc TestCase, t *testing.T) {
 		}()
 		t.Log("Intermediary node(s) setup complete")
 
-		clientA, msgA, _, _, _ := setupIntegrationNode(tc, tc.Participants[0], infra, bootPeers, dataFolder, 0)
+		clientA, msgA, _, _, _ := setupIntegrationNode(tc, tc.Participants[0], infra, bootPeers, dataFolder)
 		defer clientA.Close()
 		msgServices = append(msgServices, msgA)
 
-		clientB, msgB, _, _, _ := setupIntegrationNode(tc, tc.Participants[1], infra, bootPeers, dataFolder, 1)
+		clientB, msgB, _, _, _ := setupIntegrationNode(tc, tc.Participants[1], infra, bootPeers, dataFolder)
 		defer clientB.Close()
 		msgServices = append(msgServices, msgB)
 

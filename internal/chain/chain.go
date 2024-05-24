@@ -7,21 +7,18 @@ import (
 	"github.com/ethereum/go-ethereum/common"
 	"github.com/statechannels/go-nitro/node/engine/chainservice"
 	chainutils "github.com/statechannels/go-nitro/node/engine/chainservice/utils"
-	"github.com/statechannels/go-nitro/types"
 )
 
 func StartAnvil() (*exec.Cmd, error) {
-	anvilChain := chainservice.AnvilChain{}
-	return anvilChain.StartAnvil()
+	anvilChain, err := chainservice.StartAnvil()
+	return anvilChain.AnvilCmd, err
 }
 
 // DeployContracts deploys the NitroAdjudicator, VirtualPaymentApp and ConsensusApp contracts.
-func DeployContracts(ctx context.Context, chainUrl, chainAuthToken, chainPk string) (na common.Address, vpa common.Address, ca common.Address, err error) {
+func DeployContracts(ctx context.Context, chainUrl, chainAuthToken, chainPk string) (chainservice.ContractAddresses, error) {
 	ethClient, txSubmitter, err := chainutils.ConnectToChain(context.Background(), chainUrl, chainAuthToken, common.Hex2Bytes(chainPk))
 	if err != nil {
-		return types.Address{}, types.Address{}, types.Address{}, err
+		return chainservice.ContractAddresses{}, err
 	}
-
-	anvilChain := chainservice.AnvilChain{}
-	return anvilChain.DeployContracts(ctx, ethClient, txSubmitter)
+	return chainservice.DeployContracts(ctx, ethClient, txSubmitter)
 }

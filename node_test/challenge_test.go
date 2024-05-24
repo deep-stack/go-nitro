@@ -39,13 +39,13 @@ func TestChallenge(t *testing.T) {
 	defer infra.Close(t)
 
 	// Create go-nitro nodes
-	nodeA, _, _, storeA, chainServiceA := setupIntegrationNode(tc, tc.Participants[0], infra, []string{}, dataFolder, 0)
+	nodeA, _, _, storeA, chainServiceA := setupIntegrationNode(tc, tc.Participants[0], infra, []string{}, dataFolder)
 	defer nodeA.Close()
 
-	nodeB, _, _, _, _ := setupIntegrationNode(tc, tc.Participants[1], infra, []string{}, dataFolder, 1)
+	nodeB, _, _, _, _ := setupIntegrationNode(tc, tc.Participants[1], infra, []string{}, dataFolder)
 
 	// Separate chain service to listen for events
-	testChainServiceA := setupChainService(tc, tc.Participants[0], infra, 0)
+	testChainServiceA := setupChainService(tc, tc.Participants[0], infra)
 	defer testChainServiceA.Close()
 
 	// Create ledger channel
@@ -104,7 +104,7 @@ func TestCheckpoint(t *testing.T) {
 		MessageService:    TestMessageService,
 		MessageDelay:      0,
 		LogName:           "Checkpoint_test",
-		ChallengeDuration: 10,
+		ChallengeDuration: 5,
 		Participants: []TestParticipant{
 			{StoreType: MemStore, Actor: testactors.Alice},
 			{StoreType: MemStore, Actor: testactors.Bob},
@@ -118,13 +118,13 @@ func TestCheckpoint(t *testing.T) {
 	defer infra.Close(t)
 
 	// Create go-nitro nodes
-	nodeA, _, _, storeA, chainServiceA := setupIntegrationNode(tc, tc.Participants[0], infra, []string{}, dataFolder, 0)
+	nodeA, _, _, storeA, chainServiceA := setupIntegrationNode(tc, tc.Participants[0], infra, []string{}, dataFolder)
 	defer nodeA.Close()
-	nodeB, _, _, storeB, chainServiceB := setupIntegrationNode(tc, tc.Participants[1], infra, []string{}, dataFolder, 1)
+	nodeB, _, _, storeB, chainServiceB := setupIntegrationNode(tc, tc.Participants[1], infra, []string{}, dataFolder)
 	defer nodeB.Close()
 
 	// Separate chain service to listen for events
-	testChainServiceB := setupChainService(tc, tc.Participants[1], infra, 1)
+	testChainServiceB := setupChainService(tc, tc.Participants[1], infra)
 	defer testChainServiceB.Close()
 
 	// Create ledger channel
@@ -193,7 +193,7 @@ func TestCounterChallenge(t *testing.T) {
 		MessageService:    TestMessageService,
 		MessageDelay:      0,
 		LogName:           "Counter_challenge_test",
-		ChallengeDuration: 10,
+		ChallengeDuration: 5,
 		Participants: []TestParticipant{
 			{StoreType: MemStore, Actor: testactors.Alice},
 			{StoreType: MemStore, Actor: testactors.Bob},
@@ -207,13 +207,13 @@ func TestCounterChallenge(t *testing.T) {
 	defer infra.Close(t)
 
 	// Create go-nitro nodes
-	nodeA, _, _, storeA, chainServiceA := setupIntegrationNode(tc, tc.Participants[0], infra, []string{}, dataFolder, 0)
+	nodeA, _, _, storeA, chainServiceA := setupIntegrationNode(tc, tc.Participants[0], infra, []string{}, dataFolder)
 	defer nodeA.Close()
-	nodeB, _, _, storeB, chainServiceB := setupIntegrationNode(tc, tc.Participants[1], infra, []string{}, dataFolder, 1)
+	nodeB, _, _, storeB, chainServiceB := setupIntegrationNode(tc, tc.Participants[1], infra, []string{}, dataFolder)
 	defer nodeB.Close()
 
 	// Seperate chain service to listen for events
-	testChainServiceB := setupChainService(tc, tc.Participants[1], infra, 1)
+	testChainServiceB := setupChainService(tc, tc.Participants[1], infra)
 	defer testChainServiceB.Close()
 
 	// Create ledger channel and check balance of node

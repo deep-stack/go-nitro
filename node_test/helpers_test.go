@@ -83,7 +83,7 @@ func setupMessageService(tc TestCase, tp TestParticipant, si sharedTestInfrastru
 	}
 }
 
-func setupChainService(tc TestCase, tp TestParticipant, si sharedTestInfrastructure, tpIndex uint64) chainservice.ChainService {
+func setupChainService(tc TestCase, tp TestParticipant, si sharedTestInfrastructure) chainservice.ChainService {
 	switch tc.Chain {
 	case MockChain:
 		return chainservice.NewMockChainService(si.mockChain, tp.Address())
@@ -96,14 +96,15 @@ func setupChainService(tc TestCase, tp TestParticipant, si sharedTestInfrastruct
 		}
 		return cs
 	case AnvilChain:
+		ethAccountIndex := tp.Port - testactors.START_PORT
 		cs, err := chainservice.NewEthChainService(chainservice.ChainOpts{
-			ChainUrl:        si.anvilChain.ChainOpts.ChainUrl,
-			ChainStartBlock: si.anvilChain.ChainOpts.ChainStartBlock,
-			ChainAuthToken:  si.anvilChain.ChainOpts.ChainAuthToken,
-			NaAddress:       si.anvilChain.ChainOpts.NaAddress,
-			VpaAddress:      si.anvilChain.ChainOpts.VpaAddress,
-			CaAddress:       si.anvilChain.ChainOpts.CaAddress,
-			ChainPk:         si.anvilChain.ChainOpts.ChainPks[tpIndex],
+			ChainUrl:        si.anvilChain.ChainUrl,
+			ChainStartBlock: 0,
+			ChainAuthToken:  si.anvilChain.ChainAuthToken,
+			NaAddress:       si.anvilChain.ContractAddresses.NaAddress,
+			VpaAddress:      si.anvilChain.ContractAddresses.VpaAddress,
+			CaAddress:       si.anvilChain.ContractAddresses.CaAddress,
+			ChainPk:         si.anvilChain.ChainPks[ethAccountIndex],
 		})
 		if err != nil {
 			panic(err)
@@ -130,10 +131,10 @@ func setupStore(tc TestCase, tp TestParticipant, si sharedTestInfrastructure, da
 	}
 }
 
-func setupIntegrationNode(tc TestCase, tp TestParticipant, si sharedTestInfrastructure, bootPeers []string, dataFolder string, tpIndex uint64) (node.Node, messageservice.MessageService, string, store.Store, chainservice.ChainService) {
+func setupIntegrationNode(tc TestCase, tp TestParticipant, si sharedTestInfrastructure, bootPeers []string, dataFolder string) (node.Node, messageservice.MessageService, string, store.Store, chainservice.ChainService) {
 	logging.SetupDefaultFileLogger(tc.LogName+"_"+string(tp.Name)+".log", slog.LevelDebug)
 	messageService, multiAddr := setupMessageService(tc, tp, si, bootPeers)
-	cs := setupChainService(tc, tp, si, tpIndex)
+	cs := setupChainService(tc, tp, si)
 	store := setupStore(tc, tp, si, dataFolder)
 	n := node.New(messageService, cs, store, &engine.PermissivePolicy{})
 	return n, messageService, multiAddr, store, cs

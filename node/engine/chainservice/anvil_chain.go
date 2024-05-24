@@ -20,62 +20,53 @@ import (
 )
 
 const (
-	ChainAuthToken = ""
-	ChainUrl       = "ws://127.0.0.1:8545"
+	CHAIN_AUTH_TOKEN = ""
+	CHAIN_URL        = "ws://127.0.0.1:8545"
 )
 
-var ChainPks = []string{"ac0974bec39a17e36ba4a6b4d238ff944bacb478cbed5efcae784d7bf4f2ff80", "59c6995e998f97a5a0044966f0945389dc9e86dae88c7a8412f4603b6b78690d", "5de4111afa1a4b94908f83103eb1f1706367c2e68ca870fc3fb9a804cdab365a"}
-
-type AnvilChain struct {
-	AnvilCmd  *exec.Cmd
-	ChainOpts AnvilChainOpts
-	ethClient *ethclient.Client
+// Funded accounts in anvil chain
+var ChainPks = []string{
+	"ac0974bec39a17e36ba4a6b4d238ff944bacb478cbed5efcae784d7bf4f2ff80", "59c6995e998f97a5a0044966f0945389dc9e86dae88c7a8412f4603b6b78690d", "5de4111afa1a4b94908f83103eb1f1706367c2e68ca870fc3fb9a804cdab365a",
 }
 
-type AnvilChainOpts struct {
-	ChainUrl        string
-	ChainStartBlock uint64
-	ChainAuthToken  string
-	ChainPks        []string
-	NaAddress       common.Address
-	VpaAddress      common.Address
-	CaAddress       common.Address
+type ContractAddresses struct {
+	NaAddress  common.Address
+	VpaAddress common.Address
+	CaAddress  common.Address
+}
+
+type AnvilChain struct {
+	ChainUrl          string
+	ChainAuthToken    string
+	ChainPks          []string
+	AnvilCmd          *exec.Cmd
+	ethClient         *ethclient.Client
+	ContractAddresses ContractAddresses
 }
 
 func NewAnvilChain() (*AnvilChain, error) {
-	anvilChain := AnvilChain{}
-	_, err := anvilChain.StartAnvil()
+	anvilChain, err := StartAnvil()
 	if err != nil {
 		return nil, err
 	}
 
 	ethClient, txSubmitter, err := chainutils.ConnectToChain(
 		context.Background(),
-		ChainUrl,
-		ChainAuthToken,
+		anvilChain.ChainUrl,
+		anvilChain.ChainAuthToken,
 		common.Hex2Bytes(ChainPks[0]),
 	)
 	if err != nil {
 		panic(err)
 	}
 	anvilChain.ethClient = ethClient
-
-	naAddress, vpaAddress, caAddress, _ := anvilChain.DeployContracts(context.Background(), ethClient, txSubmitter)
-
-	anvilChain.ChainOpts = AnvilChainOpts{
-		ChainUrl:        ChainUrl,
-		ChainStartBlock: 0,
-		ChainAuthToken:  ChainAuthToken,
-		ChainPks:        ChainPks,
-		NaAddress:       naAddress,
-		VpaAddress:      vpaAddress,
-		CaAddress:       caAddress,
-	}
+	contractAddresses, _ := DeployContracts(context.Background(), ethClient, txSubmitter)
+	anvilChain.ContractAddresses = contractAddresses
 	return &anvilChain, nil
 }
 
 func (chain AnvilChain) GetAccountBalance(accountAddress common.Address) (*big.Int, error) {
-	latestBlock, _ := chain.ethClient.BlockByNumber(context.Background(), nil)
+	latestBlock, _ := chain.GetLatestBlock()
 	return chain.ethClient.BalanceAt(context.Background(), accountAddress, latestBlock.Header().Number)
 }
 
@@ -83,37 +74,46 @@ func (chain AnvilChain) GetLatestBlock() (*ethTypes.Block, error) {
 	return chain.ethClient.BlockByNumber(context.Background(), nil)
 }
 
-func (chain *AnvilChain) StartAnvil() (*exec.Cmd, error) {
-	chain.AnvilCmd = exec.Command("anvil", "--chain-id", "1337", "--block-time", "1", "--silent")
-	chain.AnvilCmd.Stdout = os.Stdout
-	chain.AnvilCmd.Stderr = os.Stderr
-	err := chain.AnvilCmd.Start()
+func StartAnvil() (AnvilChain, error) {
+	anvilChain := AnvilChain{}
+	anvilChain.ChainAuthToken = CHAIN_AUTH_TOKEN
+	anvilChain.ChainUrl = CHAIN_URL
+	anvilChain.ChainPks = ChainPks
+
+	anvilChain.AnvilCmd = exec.Command("anvil", "--chain-id", "1337", "--block-time", "1", "--silent")
+	anvilChain.AnvilCmd.Stdout = os.Stdout
+	anvilChain.AnvilCmd.Stderr = os.Stderr
+	err := anvilChain.AnvilCmd.Start()
 	if err != nil {
-		return &exec.Cmd{}, err
+		return AnvilChain{}, err
 	}
 	// If Anvil start successfully, delay by 1 second for the chain to initialize
 	time.Sleep(1 * time.Second)
-	return chain.AnvilCmd, nil
+	return anvilChain, nil
 }
 
 // DeployContracts deploys the NitroAdjudicator, VirtualPaymentApp and ConsensusApp contracts.
-func (chain AnvilChain) DeployContracts(ctx context.Context, ethClient *ethclient.Client, txSubmitter *bind.TransactOpts) (na common.Address, vpa common.Address, ca common.Address, err error) {
-	na, err = deployContract(ctx, "NitroAdjudicator", ethClient, txSubmitter, NitroAdjudicator.DeployNitroAdjudicator)
+func DeployContracts(ctx context.Context, ethClient *ethclient.Client, txSubmitter *bind.TransactOpts) (ContractAddresses, error) {
+	na, err := deployContract(ctx, "NitroAdjudicator", ethClient, txSubmitter, NitroAdjudicator.DeployNitroAdjudicator)
 	if err != nil {
-		return types.Address{}, types.Address{}, types.Address{}, err
+		return ContractAddresses{}, err
 	}
 
-	vpa, err = deployContract(ctx, "VirtualPaymentApp", ethClient, txSubmitter, VirtualPaymentApp.DeployVirtualPaymentApp)
+	vpa, err := deployContract(ctx, "VirtualPaymentApp", ethClient, txSubmitter, VirtualPaymentApp.DeployVirtualPaymentApp)
 	if err != nil {
-		return types.Address{}, types.Address{}, types.Address{}, err
+		return ContractAddresses{}, err
 	}
 
-	ca, err = deployContract(ctx, "ConsensusApp", ethClient, txSubmitter, ConsensusApp.DeployConsensusApp)
+	ca, err := deployContract(ctx, "ConsensusApp", ethClient, txSubmitter, ConsensusApp.DeployConsensusApp)
 	if err != nil {
-		return types.Address{}, types.Address{}, types.Address{}, err
+		return ContractAddresses{}, err
 	}
 
-	return
+	return ContractAddresses{
+		NaAddress:  na,
+		VpaAddress: vpa,
+		CaAddress:  ca,
+	}, nil
 }
 
 type contractBackend interface {
