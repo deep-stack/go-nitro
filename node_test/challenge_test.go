@@ -8,7 +8,6 @@ import (
 	"github.com/ethereum/go-ethereum/common"
 	"github.com/statechannels/go-nitro/channel/state"
 	"github.com/statechannels/go-nitro/internal/testactors"
-	ta "github.com/statechannels/go-nitro/internal/testactors"
 	"github.com/statechannels/go-nitro/internal/testhelpers"
 	"github.com/statechannels/go-nitro/node"
 	"github.com/statechannels/go-nitro/node/engine/chainservice"
@@ -63,7 +62,7 @@ func TestChallenge(t *testing.T) {
 
 	// Alice calls challenge method
 	signedState := getLatestSignedState(storeA, ledgerChannel)
-	sendChallengeTransaction(t, signedState, ta.Alice.PrivateKey, ledgerChannel, testChainServiceA)
+	sendChallengeTransaction(t, signedState, tc.Participants[0].PrivateKey, ledgerChannel, testChainServiceA)
 
 	// Listen for challenge registered event
 	event := waitForEvent(t, testChainServiceA.EventFeed(), chainservice.ChallengeRegisteredEvent{})
@@ -150,7 +149,7 @@ func TestCheckpoint(t *testing.T) {
 	newState := getLatestSignedState(storeB, ledgerChannel)
 
 	// Alice calls challenge method using old state
-	sendChallengeTransaction(t, oldState, ta.Alice.PrivateKey, ledgerChannel, chainServiceA)
+	sendChallengeTransaction(t, oldState, tc.Participants[0].PrivateKey, ledgerChannel, chainServiceA)
 
 	// Bob listens for challenge registered event
 	event := waitForEvent(t, testChainServiceB.EventFeed(), chainservice.ChallengeRegisteredEvent{})
@@ -248,7 +247,7 @@ func TestCounterChallenge(t *testing.T) {
 	newState := getLatestSignedState(storeB, ledgerChannel)
 
 	// Alice calls challenge method using old state
-	sendChallengeTransaction(t, oldState, ta.Alice.PrivateKey, ledgerChannel, chainServiceA)
+	sendChallengeTransaction(t, oldState, tc.Participants[0].PrivateKey, ledgerChannel, chainServiceA)
 
 	// Bob listens for challenge registered event
 	event := waitForEvent(t, testChainServiceB.EventFeed(), chainservice.ChallengeRegisteredEvent{})
@@ -260,7 +259,7 @@ func TestCounterChallenge(t *testing.T) {
 	testhelpers.Assert(t, latestBlock.Header().Time < challengeRegisteredEvent.FinalizesAt.Uint64(), "Expected channel to not be finalized")
 
 	// Bob calls challenge method using new state
-	sendChallengeTransaction(t, newState, ta.Bob.PrivateKey, ledgerChannel, chainServiceB)
+	sendChallengeTransaction(t, newState, tc.Participants[1].PrivateKey, ledgerChannel, chainServiceB)
 
 	// Listen for challenge register event
 	event = waitForEvent(t, testChainServiceB.EventFeed(), chainservice.ChallengeRegisteredEvent{})
