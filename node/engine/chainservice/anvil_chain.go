@@ -59,7 +59,7 @@ func NewAnvilChain() (*AnvilChain, error) {
 		common.Hex2Bytes(ChainPks[0]),
 	)
 	if err != nil {
-		panic(err)
+		return nil, err
 	}
 	anvilChain.ethClient = ethClient
 	contractAddresses, _ := DeployContracts(context.Background(), ethClient, txSubmitter)
