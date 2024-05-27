@@ -27,6 +27,12 @@ jobs:
           install-go: false
           min-go-version: 1.21
 
+      # Install foundry so we can use it to run a chain instance
+      - name: Install Foundry
+        uses: foundry-rs/foundry-toolchain@v1
+        with:
+          version: "nightly-cafc2606a2187a42b236df4aa65f4e8cdfcea970"
+
       - uses: ./.github/actions/mkcert
 
       - name: Build
