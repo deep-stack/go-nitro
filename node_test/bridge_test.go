@@ -3,7 +3,9 @@ package node_test
 import (
 	"math/big"
 	"testing"
+	"time"
 
+	"github.com/statechannels/go-nitro/channel/state"
 	"github.com/statechannels/go-nitro/internal/testactors"
 	"github.com/statechannels/go-nitro/internal/testhelpers"
 	"github.com/statechannels/go-nitro/node"
@@ -55,7 +57,7 @@ func TestBridge(t *testing.T) {
 	nodeA, _, _, storeA, _ := setupIntegrationNode(tcL1, tcL1.Participants[0], infraL1, []string{}, dataFolder)
 	defer nodeA.Close()
 
-	nodeB, _, _, _, _ := setupIntegrationNode(tcL1, tcL1.Participants[1], infraL1, []string{}, dataFolder)
+	nodeB, _, _, _, chainServiceB := setupIntegrationNode(tcL1, tcL1.Participants[1], infraL1, []string{}, dataFolder)
 	defer nodeB.Close()
 
 	nodeBPrime, _, _, storeBPrime, _ := setupIntegrationNode(tcL2, tcL2.Participants[0], infraL2, []string{}, dataFolder)
@@ -128,4 +130,51 @@ func TestBridge(t *testing.T) {
 	// BPrime's balance is determined by subtracting amount paid from it's ledger deposit, while APrime's balance is calculated by adding it's ledger deposit to the amount received
 	testhelpers.Assert(t, balanceNodeBPrime.Cmp(big.NewInt(ledgerChannelDeposit-payAmount)) == 0, "Balance of node BPrime (%v) should be equal to (%v)", balanceNodeBPrime, ledgerChannelDeposit-payAmount)
 	testhelpers.Assert(t, balanceNodeAPrime.Cmp(big.NewInt(ledgerChannelDeposit+payAmount)) == 0, "Balance of node APrime (%v) should be equal to (%v)", balanceNodeAPrime, ledgerChannelDeposit+payAmount)
+
+	// Construct modified state with L1 participants
+	latestStateClone := latestSignedState.State().Clone()
+
+	newState := l1ledgerChannelState.State()
+
+	tempL1Allocation := latestStateClone.Outcome[0].Allocations[0]
+	latestStateClone.Outcome[0].Allocations[0] = latestStateClone.Outcome[0].Allocations[1]
+	latestStateClone.Outcome[0].Allocations[1] = tempL1Allocation
+
+	latestStateClone.Outcome[0].Allocations[0].Destination = types.AddressToDestination(*nodeA.Address)
+	latestStateClone.Outcome[0].Allocations[1].Destination = types.AddressToDestination(*nodeB.Address)
+
+	newState.Outcome = latestStateClone.Outcome
+	newState.IsFinal = true
+
+	// Both A and B sign the state
+	Asig, _ := newState.Sign(tcL1.Participants[0].PrivateKey)
+	Bsig, _ := newState.Sign(tcL1.Participants[1].PrivateKey)
+
+	l1SignedState := state.NewSignedState(newState)
+
+	err = l1SignedState.AddSignature(Asig)
+	if err != nil {
+		t.Error(err)
+	}
+	err = l1SignedState.AddSignature(Bsig)
+	if err != nil {
+		t.Error(err)
+	}
+
+	// Call withdrawTx to liquidate assets
+	withdrawTx := protocols.NewWithdrawAllTransaction(l1LedgerChannelId, l1SignedState)
+	err = chainServiceB.SendTransaction(withdrawTx)
+	if err != nil {
+		t.Error(err)
+	}
+
+	time.Sleep(2 * time.Second)
+
+	// Check assets are liquidated
+	balanceNodeA, _ := infraL1.anvilChain.GetAccountBalance(tcL1.Participants[0].Address())
+	balanceNodeB, _ := infraL1.anvilChain.GetAccountBalance(tcL1.Participants[1].Address())
+	t.Log("Balance of node A", balanceNodeA, "\nBalance of node B", balanceNodeB)
+	// node A's balance is determined by adding amount paid to it by bridge node B, while node B's balance is calculated by subtracting amount sent by it from it's ledger deposit
+	testhelpers.Assert(t, balanceNodeA.Cmp(big.NewInt(ledgerChannelDeposit+payAmount)) == 0, "Balance of Alice  (%v) should be equal to (%v)", balanceNodeA, ledgerChannelDeposit-payAmount)
+	testhelpers.Assert(t, balanceNodeB.Cmp(big.NewInt(ledgerChannelDeposit-payAmount)) == 0, "Balance of Bob (%v) should be equal to (%v)", balanceNodeB, ledgerChannelDeposit+payAmount)
 }
