@@ -6,6 +6,7 @@ import (
 	"time"
 
 	"github.com/ethereum/go-ethereum/accounts/abi/bind"
+	"github.com/statechannels/go-nitro/cmd/utils"
 	"github.com/statechannels/go-nitro/internal/testactors"
 	"github.com/statechannels/go-nitro/node/engine/chainservice"
 	"github.com/statechannels/go-nitro/node/engine/messageservice"
@@ -31,6 +32,7 @@ type ChainType string
 const (
 	MockChain      ChainType = "MockChain"
 	SimulatedChain ChainType = "SimulatedChain"
+	AnvilChain     ChainType = "AnvilChain"
 )
 
 type TestParticipant struct {
@@ -47,15 +49,16 @@ const (
 
 // TestCase is a test case for the node integration test.
 type TestCase struct {
-	Description    string
-	Chain          ChainType
-	MessageService MessageService
-	NumOfChannels  uint
-	NumOfPayments  uint
-	MessageDelay   time.Duration
-	LogName        string
-	NumOfHops      uint
-	Participants   []TestParticipant
+	Description       string
+	Chain             ChainType
+	MessageService    MessageService
+	NumOfChannels     uint
+	NumOfPayments     uint
+	MessageDelay      time.Duration
+	LogName           string
+	NumOfHops         uint
+	ChallengeDuration uint
+	Participants      []TestParticipant
 }
 
 // Validate validates the test case and makes sure that the current test supports the test case.
@@ -81,6 +84,7 @@ type sharedTestInfrastructure struct {
 	broker         *messageservice.Broker
 	mockChain      *chainservice.MockChain
 	simulatedChain chainservice.SimulatedChain
+	anvilChain     *chainservice.AnvilChain
 	bindings       *chainservice.Bindings
 	ethAccounts    []*bind.TransactOpts
 }
@@ -88,5 +92,9 @@ type sharedTestInfrastructure struct {
 func (sti *sharedTestInfrastructure) Close(t *testing.T) {
 	if sti.simulatedChain != nil {
 		closeSimulatedChain(t, sti.simulatedChain)
+	}
+
+	if sti.anvilChain != nil {
+		utils.StopCommands(sti.anvilChain.AnvilCmd)
 	}
 }

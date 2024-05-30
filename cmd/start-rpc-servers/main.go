@@ -122,7 +122,7 @@ func main() {
 			chainUrl := cCtx.String(CHAIN_URL)
 			chainPk := cCtx.String(DEPLOYER_PK)
 
-			naAddress, vpaAddress, caAddress, err := chain.DeployContracts(context.Background(), chainUrl, chainAuthToken, chainPk)
+			contractAddresses, err := chain.DeployContracts(context.Background(), chainUrl, chainAuthToken, chainPk)
 			if err != nil {
 				utils.StopCommands(running...)
 				panic(err)
@@ -131,7 +131,7 @@ func main() {
 			hostUI := cCtx.Bool(HOST_UI)
 
 			// Setup Ivan first, he is the DHT boot peer
-			client, err := setupRPCServer(ivan, participants[ivan].color, naAddress, vpaAddress, caAddress, chainUrl, chainAuthToken, dataFolder, hostUI)
+			client, err := setupRPCServer(ivan, participants[ivan].color, contractAddresses.NaAddress, contractAddresses.VpaAddress, contractAddresses.CaAddress, chainUrl, chainAuthToken, dataFolder, hostUI)
 			if err != nil {
 				utils.StopCommands(running...)
 				panic(err)
@@ -147,7 +147,7 @@ func main() {
 			for _, participantName := range []name{alice, bob, irene} {
 				p := participants[participantName]
 				fmt.Println("participantName: " + participantName)
-				client, err := setupRPCServer(participantName, p.color, naAddress, vpaAddress, caAddress, chainUrl, chainAuthToken, dataFolder, hostUI)
+				client, err := setupRPCServer(participantName, p.color, contractAddresses.NaAddress, contractAddresses.VpaAddress, contractAddresses.CaAddress, chainUrl, chainAuthToken, dataFolder, hostUI)
 				if err != nil {
 					utils.StopCommands(running...)
 					panic(err)

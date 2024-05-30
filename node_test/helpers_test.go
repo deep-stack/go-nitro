@@ -95,6 +95,21 @@ func setupChainService(tc TestCase, tp TestParticipant, si sharedTestInfrastruct
 			panic(err)
 		}
 		return cs
+	case AnvilChain:
+		ethAccountIndex := tp.Port - testactors.START_PORT
+		cs, err := chainservice.NewEthChainService(chainservice.ChainOpts{
+			ChainUrl:        si.anvilChain.ChainUrl,
+			ChainStartBlock: 0,
+			ChainAuthToken:  si.anvilChain.ChainAuthToken,
+			NaAddress:       si.anvilChain.ContractAddresses.NaAddress,
+			VpaAddress:      si.anvilChain.ContractAddresses.VpaAddress,
+			CaAddress:       si.anvilChain.ContractAddresses.CaAddress,
+			ChainPk:         si.anvilChain.ChainPks[ethAccountIndex],
+		})
+		if err != nil {
+			panic(err)
+		}
+		return cs
 	default:
 		panic("Unknown chain service")
 	}
@@ -116,13 +131,13 @@ func setupStore(tc TestCase, tp TestParticipant, si sharedTestInfrastructure, da
 	}
 }
 
-func setupIntegrationNode(tc TestCase, tp TestParticipant, si sharedTestInfrastructure, bootPeers []string, dataFolder string) (node.Node, messageservice.MessageService, string) {
+func setupIntegrationNode(tc TestCase, tp TestParticipant, si sharedTestInfrastructure, bootPeers []string, dataFolder string) (node.Node, messageservice.MessageService, string, store.Store, chainservice.ChainService) {
 	logging.SetupDefaultFileLogger(tc.LogName+"_"+string(tp.Name)+".log", slog.LevelDebug)
 	messageService, multiAddr := setupMessageService(tc, tp, si, bootPeers)
 	cs := setupChainService(tc, tp, si)
 	store := setupStore(tc, tp, si, dataFolder)
 	n := node.New(messageService, cs, store, &engine.PermissivePolicy{})
-	return n, messageService, multiAddr
+	return n, messageService, multiAddr, store, cs
 }
 
 func initialLedgerOutcome(alpha, beta, asset types.Address) outcome.Exit {
@@ -218,6 +233,12 @@ func setupSharedInfra(tc TestCase) sharedTestInfrastructure {
 		infra.simulatedChain = sim
 		infra.bindings = &bindings
 		infra.ethAccounts = ethAccounts
+	case AnvilChain:
+		chain, err := chainservice.NewAnvilChain()
+		if err != nil {
+			panic(err)
+		}
+		infra.anvilChain = chain
 	default:
 		panic("Unknown chain service")
 	}
