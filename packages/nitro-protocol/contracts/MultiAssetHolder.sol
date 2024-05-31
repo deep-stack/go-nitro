@@ -22,10 +22,21 @@ contract MultiAssetHolder is IMultiAssetHolder, StatusManager {
      * holdings[asset][channelId] is the amount of asset held against channel channelId. 0 address implies ETH
      */
     mapping(address => mapping(bytes32 => uint256)) public holdings;
+    mapping(bytes32 => bytes32) public mirrorOf;
 
     // **************
     // External methods
     // **************
+
+    // Function to map a to b
+    function generateMirror(bytes32 l1ChannelId, bytes32 l2ChannelId) public {
+        mirrorOf[l1ChannelId] = l2ChannelId;
+    }
+
+    // Function to retrieve the mapped value of a
+    function getMirror(bytes32 l1ChannelId) public view returns (bytes32) {
+        return mirrorOf[l1ChannelId];
+    }
 
     /**
      * @notice Deposit ETH or erc20 tokens against a given channelId.

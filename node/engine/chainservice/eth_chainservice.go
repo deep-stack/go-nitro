@@ -309,6 +309,9 @@ func (ecs *EthChainService) SendTransaction(tx protocols.ChainTransaction) error
 	case protocols.ReclaimTransaction:
 		_, err := ecs.na.Reclaim(ecs.defaultTxOpts(), tx.ReclaimArgs)
 		return err
+	case protocols.GenerateMirrorTransaction:
+		_, err := ecs.na.GenerateMirror(ecs.defaultTxOpts(), tx.ChannelId(), tx.MirrorChannelId)
+		return err
 	default:
 		return fmt.Errorf("unexpected transaction type %T", tx)
 	}

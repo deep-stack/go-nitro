@@ -58,7 +58,7 @@ func TestBridge(t *testing.T) {
 	nodeA, _, _, storeA, _ := setupIntegrationNode(tcL1, tcL1.Participants[0], infraL1, []string{}, dataFolder)
 	defer nodeA.Close()
 
-	nodeB, _, _, _, _ := setupIntegrationNode(tcL1, tcL1.Participants[1], infraL1, []string{}, dataFolder)
+	nodeB, _, _, _, chainServiceB := setupIntegrationNode(tcL1, tcL1.Participants[1], infraL1, []string{}, dataFolder)
 	defer nodeB.Close()
 
 	nodeBPrime, _, _, storeBPrime, _ := setupIntegrationNode(tcL2, tcL2.Participants[0], infraL2, []string{}, dataFolder)
@@ -68,10 +68,12 @@ func TestBridge(t *testing.T) {
 	defer nodeAPrime.Close()
 
 	mirroredLedgerChannelId := types.Destination{}
+	// l1ChannelId := types.Destination{}
 
 	t.Run("Create ledger channel on L1 and mirror it on L2", func(t *testing.T) {
 		// Create ledger channel
 		l1LedgerChannelId := openLedgerChannel(t, nodeA, nodeB, types.Address{}, uint32(tcL1.ChallengeDuration))
+		// l1ChannelId := l1LedgerChannelId
 
 		l1LedgerChannel, err := storeA.GetConsensusChannelById(l1LedgerChannelId)
 		if err != nil {
@@ -106,6 +108,13 @@ func TestBridge(t *testing.T) {
 		<-nodeAPrime.ObjectiveCompleteChan(response.Id)
 
 		t.Log("Completed bridge-fund objective")
+
+		// Node B calls contract method to store L1channelId => L2channelId map on contract
+		genernateMirrorTx := protocols.NewGenerateMirrorTransaction(l1LedgerChannelId, mirroredLedgerChannelId)
+		err = chainServiceB.SendTransaction(genernateMirrorTx)
+		if err != nil {
+			t.Error(err)
+		}
 	})
 
 	t.Run("Create virtual channel on mirrored ledger channel and make payments", func(t *testing.T) {
@@ -134,7 +143,6 @@ func TestBridge(t *testing.T) {
 		if err != nil {
 			t.Error(err)
 		}
-
 		balanceNodeAPrime := ledgerChannelInfo.Balance.TheirBalance.ToInt()
 		balanceNodeBPrime := ledgerChannelInfo.Balance.MyBalance.ToInt()
 		t.Log("Balance of node BPrime", balanceNodeBPrime, "\nBalance of node APrime", balanceNodeAPrime)
