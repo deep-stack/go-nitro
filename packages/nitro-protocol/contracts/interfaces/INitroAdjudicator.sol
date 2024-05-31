@@ -33,6 +33,18 @@ interface INitroAdjudicator is IMultiAssetHolder, IForceMove {
         bytes32 stateHash
     ) external;
 
+    function mirrorConcludeAndTransferAllAssets(
+        bytes32 l1ChannelId,
+        FixedPart memory mirrorFixedPart,
+        SignedVariablePart memory mirrorCandidate
+    ) external;
+
+    function mirrorTransferAllAssets(
+        bytes32 mirrorChannelId,
+        Outcome.SingleAssetExit[] memory outcome,
+        bytes32 stateHash
+    ) external;
+
     /**
      * @notice Checks whether an application-specific rules for a particular ForceMove-compliant state channel are enforced in supplied states.
      * @dev Checks whether an application-specific rules for a particular ForceMove-compliant state channel are enforced in supplied states.
