@@ -102,6 +102,20 @@ type ReclaimTransaction struct {
 func NewReclaimTransaction(channelId types.Destination, reclaimArgs NitroAdjudicator.IMultiAssetHolderReclaimArgs) ReclaimTransaction {
 	return ReclaimTransaction{ChainTransaction: ChainTransactionBase{channelId: channelId}, ReclaimArgs: reclaimArgs}
 }
+type GenerateMirrorTransaction struct {
+	ChainTransaction
+	MirrorChannelId types.Destination
+}
+
+func NewGenerateMirrorTransaction(
+	channelId types.Destination,
+	mirrorChannelId types.Destination,
+) GenerateMirrorTransaction {
+	return GenerateMirrorTransaction{
+		ChainTransaction: ChainTransactionBase{channelId: channelId},
+		MirrorChannelId:  mirrorChannelId,
+	}
+}
 
 // SideEffects are effects to be executed by an imperative shell
 type SideEffects struct {

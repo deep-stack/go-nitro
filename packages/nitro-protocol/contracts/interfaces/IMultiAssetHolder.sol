@@ -7,6 +7,12 @@ import {INitroTypes} from './INitroTypes.sol';
  * @dev The IMultiAssetHolder interface calls for functions that allow assets to be transferred from one channel to other channel and/or external destinations, as well as for guarantees to be claimed.
  */
 interface IMultiAssetHolder {
+    // Function to map a to b
+    function generateMirror(bytes32 l1ChannelId, bytes32 l2ChannelId) external;
+
+    // Function to retrieve the mapped value of a
+    function getMirror(bytes32 l1ChannelId) external view returns (bytes32);
+
     /**
      * @notice Deposit ETH or erc20 assets against a given destination.
      * @dev Deposit ETH or erc20 assets against a given destination.
