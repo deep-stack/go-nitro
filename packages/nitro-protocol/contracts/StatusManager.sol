@@ -8,6 +8,7 @@ import {IStatusManager} from './interfaces/IStatusManager.sol';
  */
 contract StatusManager is IStatusManager {
     mapping(bytes32 => bytes32) public statusOf;
+    mapping(bytes32 => bytes32) public mirrorStatusOf;
 
     /**
      * @notice Computes the ChannelMode for a given channelId.
@@ -19,6 +20,21 @@ contract StatusManager is IStatusManager {
         // correct when nobody has written to storage yet.
 
         (, uint48 finalizesAt, ) = _unpackStatus(channelId);
+        if (finalizesAt == 0) {
+            return ChannelMode.Open;
+            // solhint-disable-next-line not-rely-on-time
+        } else if (finalizesAt <= block.timestamp) {
+            return ChannelMode.Finalized;
+        } else {
+            return ChannelMode.Challenge;
+        }
+    }
+
+    function _mirrorMode(bytes32 channelId) internal view returns (ChannelMode) {
+        // Note that _unpackStatus(someRandomChannelId) returns (0,0,0), which is
+        // correct when nobody has written to storage yet.
+
+        (, uint48 finalizesAt, ) = _unpackMirrorStatus(channelId);
         if (finalizesAt == 0) {
             return ChannelMode.Open;
             // solhint-disable-next-line not-rely-on-time
@@ -73,6 +89,16 @@ contract StatusManager is IStatusManager {
         bytes32 channelId
     ) internal view returns (uint48 turnNumRecord, uint48 finalizesAt, uint160 fingerprint) {
         bytes32 status = statusOf[channelId];
+        uint16 cursor = 256;
+        turnNumRecord = uint48(uint256(status) >> (cursor -= 48));
+        finalizesAt = uint48(uint256(status) >> (cursor -= 48));
+        fingerprint = uint160(uint256(status));
+    }
+
+    function _unpackMirrorStatus(
+        bytes32 channelId
+    ) internal view returns (uint48 turnNumRecord, uint48 finalizesAt, uint160 fingerprint) {
+        bytes32 status = mirrorStatusOf[channelId];
         uint16 cursor = 256;
         turnNumRecord = uint48(uint256(status) >> (cursor -= 48));
         finalizesAt = uint48(uint256(status) >> (cursor -= 48));

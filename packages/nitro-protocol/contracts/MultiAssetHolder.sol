@@ -23,6 +23,7 @@ contract MultiAssetHolder is IMultiAssetHolder, StatusManager {
      */
     mapping(address => mapping(bytes32 => uint256)) public holdings;
     mapping(bytes32 => bytes32) public mirrorOf;
+    mapping(bytes32 => bytes32) public l1ChannelOf;
 
     // **************
     // External methods
@@ -31,11 +32,16 @@ contract MultiAssetHolder is IMultiAssetHolder, StatusManager {
     // Function to map a to b
     function generateMirror(bytes32 l1ChannelId, bytes32 l2ChannelId) public {
         mirrorOf[l1ChannelId] = l2ChannelId;
+        l1ChannelOf[l2ChannelId] = l1ChannelId;
     }
 
     // Function to retrieve the mapped value of a
     function getMirror(bytes32 l1ChannelId) public view returns (bytes32) {
         return mirrorOf[l1ChannelId];
+    }
+
+    function getL1Channel(bytes32 l2ChannelId) public view returns (bytes32) {
+        return l1ChannelOf[l2ChannelId];
     }
 
     /**
@@ -491,6 +497,17 @@ contract MultiAssetHolder is IMultiAssetHolder, StatusManager {
         );
     }
 
+    function _requireMirrorMatchingFingerprint(
+        bytes32 stateHash,
+        bytes32 outcomeHash,
+        bytes32 channelId
+    ) internal view {
+        (, , uint160 fingerprint) = _unpackMirrorStatus(channelId);
+        require(
+            fingerprint == _generateFingerprint(stateHash, outcomeHash),
+            'incorrect fingerprint'
+        );
+    }
     /**
      * @notice Checks that a given channel is in the Finalized mode.
      * @dev Checks that a given channel is in the Finalized mode.
@@ -498,6 +515,10 @@ contract MultiAssetHolder is IMultiAssetHolder, StatusManager {
      */
     function _requireChannelFinalized(bytes32 channelId) internal view {
         require(_mode(channelId) == ChannelMode.Finalized, 'Channel not finalized.');
+    }
+
+    function _requireMirrorChannelFinalized(bytes32 channelId) internal view {
+        require(_mirrorMode(channelId) == ChannelMode.Finalized, 'Channel not finalized.');
     }
 
     function _updateFingerprint(
@@ -511,6 +532,19 @@ contract MultiAssetHolder is IMultiAssetHolder, StatusManager {
             ChannelData(turnNumRecord, finalizesAt, stateHash, outcomeHash)
         );
         statusOf[channelId] = newStatus;
+    }
+
+    function _updateMirrorFingerprint(
+        bytes32 channelId,
+        bytes32 stateHash,
+        bytes32 outcomeHash
+    ) internal {
+        (uint48 turnNumRecord, uint48 finalizesAt, ) = _unpackStatus(channelId);
+
+        bytes32 newStatus = _generateStatus(
+            ChannelData(turnNumRecord, finalizesAt, stateHash, outcomeHash)
+        );
+        mirrorStatusOf[channelId] = newStatus;
     }
 
     /**

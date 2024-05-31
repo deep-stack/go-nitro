@@ -10,8 +10,10 @@ interface IMultiAssetHolder {
     // Function to map a to b
     function generateMirror(bytes32 l1ChannelId, bytes32 l2ChannelId) external;
 
-    // Function to retrieve the mapped value of a
+    // Function to retrieve the mapped value of l1ChannelId
     function getMirror(bytes32 l1ChannelId) external view returns (bytes32);
+
+    function getL1Channel(bytes32 l2ChannelId) external view returns (bytes32);
 
     /**
      * @notice Deposit ETH or erc20 assets against a given destination.
