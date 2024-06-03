@@ -46,6 +46,8 @@ contract NitroAdjudicator is INitroAdjudicator, ForceMove, MultiAssetHolder {
         _requireMirrorChannelFinalized(mirrorChannelId);
         _requireMirrorMatchingFingerprint(stateHash, NitroUtils.hashOutcome(outcome), mirrorChannelId);
 
+        bytes32 l1ChannelId = getL1Channel(mirrorChannelId);
+
         // computation
         bool allocatesOnlyZerosForAllAssets = true;
         Outcome.SingleAssetExit[] memory exit = new Outcome.SingleAssetExit[](outcome.length);
@@ -55,7 +57,7 @@ contract NitroAdjudicator is INitroAdjudicator, ForceMove, MultiAssetHolder {
             Outcome.SingleAssetExit memory assetOutcome = outcome[assetIndex];
             Outcome.Allocation[] memory allocations = assetOutcome.allocations;
             address asset = outcome[assetIndex].asset;
-            initialHoldings[assetIndex] = holdings[asset][mirrorChannelId];
+            initialHoldings[assetIndex] = holdings[asset][l1ChannelId];
             (
                 Outcome.Allocation[] memory newAllocations,
                 bool allocatesOnlyZeros,
@@ -79,17 +81,18 @@ contract NitroAdjudicator is INitroAdjudicator, ForceMove, MultiAssetHolder {
         // effects
         for (uint256 assetIndex = 0; assetIndex < outcome.length; assetIndex++) {
             address asset = outcome[assetIndex].asset;
-            holdings[asset][mirrorChannelId] -= totalPayouts[assetIndex];
+            holdings[asset][l1ChannelId] -= totalPayouts[assetIndex];
             emit AllocationUpdated(
-                mirrorChannelId,
+                l1ChannelId,
                 assetIndex,
                 initialHoldings[assetIndex],
-                holdings[asset][mirrorChannelId]
+                holdings[asset][l1ChannelId]
             );
         }
 
         if (allocatesOnlyZerosForAllAssets) {
-            delete statusOf[mirrorChannelId];
+            delete statusOf[l1ChannelId];
+            delete mirrorStatusOf[mirrorChannelId];
         } else {
             _updateMirrorFingerprint(mirrorChannelId, stateHash, NitroUtils.hashOutcome(outcome));
         }

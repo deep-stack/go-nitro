@@ -9,6 +9,28 @@ import {IStatusManager} from './interfaces/IStatusManager.sol';
 contract StatusManager is IStatusManager {
     mapping(bytes32 => bytes32) public statusOf;
     mapping(bytes32 => bytes32) public mirrorStatusOf;
+    mapping(bytes32 => bytes32) public mirrorOf;
+    mapping(bytes32 => bytes32) public l1ChannelOf;
+
+    // **************
+    // External methods
+    // **************
+
+    // Function to generate map from l1ChannelId to l2ChannelId and vice-versa
+    function generateMirror(bytes32 l1ChannelId, bytes32 l2ChannelId) public {
+        mirrorOf[l1ChannelId] = l2ChannelId;
+        l1ChannelOf[l2ChannelId] = l1ChannelId;
+    }
+
+    // Function to retrieve the mapped value of l1ChannelId
+    function getMirror(bytes32 l1ChannelId) public view returns (bytes32) {
+        return mirrorOf[l1ChannelId];
+    }
+
+    // Function to retrieve the mapped value of l2ChannelId
+    function getL1Channel(bytes32 l2ChannelId) public view returns (bytes32) {
+        return l1ChannelOf[l2ChannelId];
+    }
 
     /**
      * @notice Computes the ChannelMode for a given channelId.
