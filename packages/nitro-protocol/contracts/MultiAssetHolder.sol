@@ -22,27 +22,6 @@ contract MultiAssetHolder is IMultiAssetHolder, StatusManager {
      * holdings[asset][channelId] is the amount of asset held against channel channelId. 0 address implies ETH
      */
     mapping(address => mapping(bytes32 => uint256)) public holdings;
-    mapping(bytes32 => bytes32) public mirrorOf;
-    mapping(bytes32 => bytes32) public l1ChannelOf;
-
-    // **************
-    // External methods
-    // **************
-
-    // Function to map a to b
-    function generateMirror(bytes32 l1ChannelId, bytes32 l2ChannelId) public {
-        mirrorOf[l1ChannelId] = l2ChannelId;
-        l1ChannelOf[l2ChannelId] = l1ChannelId;
-    }
-
-    // Function to retrieve the mapped value of a
-    function getMirror(bytes32 l1ChannelId) public view returns (bytes32) {
-        return mirrorOf[l1ChannelId];
-    }
-
-    function getL1Channel(bytes32 l2ChannelId) public view returns (bytes32) {
-        return l1ChannelOf[l2ChannelId];
-    }
 
     /**
      * @notice Deposit ETH or erc20 tokens against a given channelId.
@@ -539,7 +518,7 @@ contract MultiAssetHolder is IMultiAssetHolder, StatusManager {
         bytes32 stateHash,
         bytes32 outcomeHash
     ) internal {
-        (uint48 turnNumRecord, uint48 finalizesAt, ) = _unpackStatus(channelId);
+        (uint48 turnNumRecord, uint48 finalizesAt, ) = _unpackMirrorStatus(channelId);
 
         bytes32 newStatus = _generateStatus(
             ChannelData(turnNumRecord, finalizesAt, stateHash, outcomeHash)

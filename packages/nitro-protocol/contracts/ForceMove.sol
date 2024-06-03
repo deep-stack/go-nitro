@@ -5,13 +5,11 @@ import {NitroUtils} from './libraries/NitroUtils.sol';
 import {IForceMove} from './interfaces/IForceMove.sol';
 import {IForceMoveApp} from './interfaces/IForceMoveApp.sol';
 import {StatusManager} from './StatusManager.sol';
-import {MultiAssetHolder} from './MultiAssetHolder.sol';
 
 /**
  * @dev An implementation of ForceMove protocol, which allows state channels to be adjudicated and finalized.
  */
 contract ForceMove is IForceMove, StatusManager {
-    MultiAssetHolder public multiAssetHolder;
     // *****************
     // External methods:
     // *****************
@@ -138,10 +136,11 @@ contract ForceMove is IForceMove, StatusManager {
         FixedPart memory mirrorFixedPart,
         SignedVariablePart memory mirrorCandidate
         ) internal returns (bytes32 mirrorChannelId)  {
+
         // get mirrorchannelid
         mirrorChannelId = NitroUtils.getChannelId(mirrorFixedPart);
         // check that its the same channel as in map
-        bytes32 l1ChannelId = multiAssetHolder.getL1Channel(mirrorChannelId);
+        bytes32 l1ChannelId = getL1Channel(mirrorChannelId);
         require(l1ChannelId == l1ChannelIdArg, 'Found mirror for wrong channel');
         // Validate that state is final
         require(mirrorCandidate.variablePart.isFinal, 'State must be final');
@@ -168,8 +167,6 @@ contract ForceMove is IForceMove, StatusManager {
 
         emit Concluded(mirrorChannelId, uint48(block.timestamp)); //solhint-disable-line not-rely-on-time
     }
-
-
 
     /**
      * @notice Finalizes a channel according to the given candidate. Internal method.

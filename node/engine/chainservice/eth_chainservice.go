@@ -323,6 +323,19 @@ func (ecs *EthChainService) SendTransaction(tx protocols.ChainTransaction) error
 	case protocols.GenerateMirrorTransaction:
 		_, err := ecs.na.GenerateMirror(ecs.defaultTxOpts(), tx.ChannelId(), tx.MirrorChannelId)
 		return err
+	case protocols.MirrorWithdrawAllTransaction:
+		signedState := tx.SignedState.State()
+		signatures := tx.SignedState.Signatures()
+		nitroFixedPart := NitroAdjudicator.INitroTypesFixedPart(NitroAdjudicator.ConvertFixedPart(signedState.FixedPart()))
+		nitroVariablePart := NitroAdjudicator.ConvertVariablePart(signedState.VariablePart())
+		nitroSignatures := []NitroAdjudicator.INitroTypesSignature{NitroAdjudicator.ConvertSignature(signatures[0]), NitroAdjudicator.ConvertSignature(signatures[1])}
+
+		candidate := NitroAdjudicator.INitroTypesSignedVariablePart{
+			VariablePart: nitroVariablePart,
+			Sigs:         nitroSignatures,
+		}
+		_, err := ecs.na.MirrorConcludeAndTransferAllAssets(ecs.defaultTxOpts(), tx.ChannelId(), nitroFixedPart, candidate)
+		return err
 	default:
 		return fmt.Errorf("unexpected transaction type %T", tx)
 	}

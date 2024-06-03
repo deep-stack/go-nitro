@@ -46,6 +46,15 @@ func NewWithdrawAllTransaction(channelId types.Destination, signedState state.Si
 	return WithdrawAllTransaction{SignedState: signedState, ChainTransaction: ChainTransactionBase{channelId: channelId}}
 }
 
+type MirrorWithdrawAllTransaction struct {
+	ChainTransaction
+	SignedState state.SignedState
+}
+
+func NewMirrorWithdrawAllTransaction(channelId types.Destination, signedState state.SignedState) MirrorWithdrawAllTransaction {
+	return MirrorWithdrawAllTransaction{SignedState: signedState, ChainTransaction: ChainTransactionBase{channelId: channelId}}
+}
+
 type ChallengeTransaction struct {
 	ChainTransaction
 	Candidate     state.SignedState
