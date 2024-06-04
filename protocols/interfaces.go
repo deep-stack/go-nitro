@@ -76,6 +76,27 @@ func NewChallengeTransaction(
 	}
 }
 
+type MirrorChallengeTransaction struct {
+	ChainTransaction
+	Candidate     state.SignedState
+	Proof         []state.SignedState
+	ChallengerSig crypto.Signature
+}
+
+func NewMirrorChallengeTransaction(
+	channelId types.Destination,
+	candidate state.SignedState,
+	proof []state.SignedState,
+	challengerSig crypto.Signature,
+) MirrorChallengeTransaction {
+	return MirrorChallengeTransaction{
+		ChainTransaction: ChainTransactionBase{channelId: channelId},
+		Candidate:        candidate,
+		Proof:            proof,
+		ChallengerSig:    challengerSig,
+	}
+}
+
 type TransferAllTransaction struct {
 	ChainTransaction
 	TransferState state.SignedState
@@ -83,6 +104,15 @@ type TransferAllTransaction struct {
 
 func NewTransferAllTransaction(channelId types.Destination, state state.SignedState) TransferAllTransaction {
 	return TransferAllTransaction{ChainTransaction: ChainTransactionBase{channelId: channelId}, TransferState: state}
+}
+
+type MirrorTransferAllTransaction struct {
+	ChainTransaction
+	TransferState state.SignedState
+}
+
+func NewMirrorTransferAllTransaction(channelId types.Destination, state state.SignedState) MirrorTransferAllTransaction {
+	return MirrorTransferAllTransaction{ChainTransaction: ChainTransactionBase{channelId: channelId}, TransferState: state}
 }
 
 type CheckpointTransaction struct {
