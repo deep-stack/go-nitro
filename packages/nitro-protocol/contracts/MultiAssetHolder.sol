@@ -384,8 +384,122 @@ contract MultiAssetHolder is IMultiAssetHolder, StatusManager {
         // store fingerprint of modified source outcome
         sourceOutcome[sourceAssetIndex].allocations = newSourceAllocations;
         reclaimArgs.variablePart.outcome = sourceOutcome;
-
         _updateFingerprint(
+            sourceChannelId,
+            NitroUtils.hashState(reclaimArgs.fixedPart, reclaimArgs.variablePart),
+            keccak256(abi.encode(sourceOutcome))
+        );
+
+        // emit the information needed to compute the new source outcome stored in the fingerprint
+        emit Reclaimed(reclaimArgs.sourceChannelId, reclaimArgs.sourceAssetIndex);
+
+        // Note: no changes are made to the target channel.
+    }
+
+
+    function mirrorReclaim(bytes32 l1ChannelIdArg, ReclaimArgs memory reclaimArgs) external override {
+        bytes32 l1ChannelId = getL1Channel(reclaimArgs.sourceChannelId);
+        require(l1ChannelId == l1ChannelIdArg, 'Found mirror for wrong channel');
+
+        (
+            Outcome.SingleAssetExit[] memory sourceOutcome,
+            Outcome.SingleAssetExit[] memory targetOutcome
+        ) = _apply_mirror_reclaim_checks(reclaimArgs); // view
+
+        Outcome.Allocation[] memory newSourceAllocations;
+        {
+            Outcome.Allocation[] memory sourceAllocations = sourceOutcome[
+                reclaimArgs.sourceAssetIndex
+            ].allocations;
+            Outcome.Allocation[] memory targetAllocations = targetOutcome[
+                reclaimArgs.targetAssetIndex
+            ].allocations;
+            newSourceAllocations = compute_reclaim_effects(
+                sourceAllocations,
+                targetAllocations,
+                reclaimArgs.indexOfTargetInSource
+            ); // pure
+        }
+
+        _apply_mirror_reclaim_effects(reclaimArgs, sourceOutcome, newSourceAllocations);
+    }
+
+    /**
+     * @dev Checks that the source and target channels are finalized; that the supplied outcomes match the stored fingerprints; that the asset is identical in source and target. Computes and returns the decoded outcomes.
+     */
+    function _apply_mirror_reclaim_checks(
+        ReclaimArgs memory reclaimArgs
+    )
+        internal
+        view
+        returns (
+            Outcome.SingleAssetExit[] memory sourceOutcome,
+            Outcome.SingleAssetExit[] memory targetOutcome
+        )
+    {
+        (
+            bytes32 sourceChannelId,
+            bytes memory sourceOutcomeBytes,
+            uint256 sourceAssetIndex,
+            bytes memory targetOutcomeBytes,
+            uint256 targetAssetIndex
+        ) = (
+                reclaimArgs.sourceChannelId,
+                reclaimArgs.sourceOutcomeBytes,
+                reclaimArgs.sourceAssetIndex,
+                reclaimArgs.targetOutcomeBytes,
+                reclaimArgs.targetAssetIndex
+            );
+
+        // source checks
+        _requireMirrorChannelFinalized(sourceChannelId);
+        _requireMirrorMatchingFingerprint(
+            NitroUtils.hashState(reclaimArgs.fixedPart, reclaimArgs.variablePart),
+            keccak256(sourceOutcomeBytes),
+            sourceChannelId
+        );
+
+        sourceOutcome = Outcome.decodeExit(sourceOutcomeBytes);
+        targetOutcome = Outcome.decodeExit(targetOutcomeBytes);
+        address asset = sourceOutcome[sourceAssetIndex].asset;
+        require(
+            sourceOutcome[sourceAssetIndex]
+                .allocations[reclaimArgs.indexOfTargetInSource]
+                .allocationType == uint8(Outcome.AllocationType.guarantee),
+            'not a guarantee allocation'
+        );
+
+        bytes32 targetChannelId = sourceOutcome[sourceAssetIndex]
+            .allocations[reclaimArgs.indexOfTargetInSource]
+            .destination;
+
+        // target checks
+        require(targetOutcome[targetAssetIndex].asset == asset, 'targetAsset != guaranteeAsset');
+        _requireMirrorChannelFinalized(targetChannelId);
+        _requireMirrorMatchingFingerprint(
+            reclaimArgs.targetStateHash,
+            keccak256(targetOutcomeBytes),
+            targetChannelId
+        );
+    }
+
+    /**
+     * @dev Updates the fingerprint of the outcome for the source channel and emit an event for it.
+     */
+    function _apply_mirror_reclaim_effects(
+        ReclaimArgs memory reclaimArgs,
+        Outcome.SingleAssetExit[] memory sourceOutcome,
+        Outcome.Allocation[] memory newSourceAllocations
+    ) internal {
+        (bytes32 sourceChannelId, uint256 sourceAssetIndex) = (
+            reclaimArgs.sourceChannelId,
+            reclaimArgs.sourceAssetIndex
+        );
+
+        // store fingerprint of modified source outcome
+        sourceOutcome[sourceAssetIndex].allocations = newSourceAllocations;
+        reclaimArgs.variablePart.outcome = sourceOutcome;
+        _updateMirrorFingerprint(
             sourceChannelId,
             NitroUtils.hashState(reclaimArgs.fixedPart, reclaimArgs.variablePart),
             keccak256(abi.encode(sourceOutcome))

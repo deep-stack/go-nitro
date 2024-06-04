@@ -23,7 +23,6 @@ interface IForceMove is INitroTypes {
     ) external;
 
     function mirrorChallenge(
-        bytes32 l1ChannelIdArg,
         FixedPart memory fixedPart,
         SignedVariablePart[] memory proof,
         SignedVariablePart memory candidate,

@@ -304,7 +304,7 @@ func (ecs *EthChainService) SendTransaction(tx protocols.ChainTransaction) error
 		fp, candidate := NitroAdjudicator.ConvertSignedStateToFixedPartAndSignedVariablePart(tx.Candidate)
 		proof := NitroAdjudicator.ConvertSignedStatesToProof(tx.Proof)
 		challengerSig := NitroAdjudicator.ConvertSignature(tx.ChallengerSig)
-		_, err := ecs.na.MirrorChallenge(ecs.defaultTxOpts(), tx.ChannelId(), fp, proof, candidate, challengerSig)
+		_, err := ecs.na.MirrorChallenge(ecs.defaultTxOpts(), fp, proof, candidate, challengerSig)
 		return err
 	case protocols.CheckpointTransaction:
 		fp, candidate := NitroAdjudicator.ConvertSignedStateToFixedPartAndSignedVariablePart(tx.Candidate)
@@ -353,6 +353,9 @@ func (ecs *EthChainService) SendTransaction(tx protocols.ChainTransaction) error
 			Sigs:         nitroSignatures,
 		}
 		_, err := ecs.na.MirrorConcludeAndTransferAllAssets(ecs.defaultTxOpts(), tx.ChannelId(), nitroFixedPart, candidate)
+		return err
+	case protocols.MirrorReclaimTransaction:
+		_, err := ecs.na.MirrorReclaim(ecs.defaultTxOpts(), tx.ChannelId(), tx.ReclaimArgs)
 		return err
 	default:
 		return fmt.Errorf("unexpected transaction type %T", tx)
