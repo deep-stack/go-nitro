@@ -9,6 +9,8 @@ import (
 	"github.com/statechannels/go-nitro/internal/testactors"
 	"github.com/statechannels/go-nitro/internal/testhelpers"
 	"github.com/statechannels/go-nitro/node"
+	"github.com/statechannels/go-nitro/node/engine/chainservice"
+	NitroAdjudicator "github.com/statechannels/go-nitro/node/engine/chainservice/adjudicator"
 	"github.com/statechannels/go-nitro/node/query"
 	"github.com/statechannels/go-nitro/protocols"
 	"github.com/statechannels/go-nitro/types"
@@ -206,13 +208,17 @@ func TestExitL2WithPayments(t *testing.T) {
 	nodeBPrime, _, _, storeBPrime, _ := setupIntegrationNode(tcL2, tcL2.Participants[0], infraL2, []string{}, dataFolder)
 	defer nodeBPrime.Close()
 
-	nodeAPrime, _, _, _, _ := setupIntegrationNode(tcL2, tcL2.Participants[1], infraL2, []string{}, dataFolder)
+	nodeAPrime, _, _, storeAPrime, _ := setupIntegrationNode(tcL2, tcL2.Participants[1], infraL2, []string{}, dataFolder)
 	defer nodeAPrime.Close()
 
 	mirroredLedgerChannelId := types.Destination{}
 	l1ChannelId := types.Destination{}
 
-	l2ChannelSignedState := state.SignedState{}
+	// Separate chain service to listen for events
+	testChainService := setupChainService(tcL1, tcL1.Participants[0], infraL1)
+	defer testChainService.Close()
+
+	// l2ChannelSignedState := state.SignedState{}
 
 	t.Run("Create ledger channel on L1 and mirror it on L2", func(t *testing.T) {
 		// Create ledger channel
@@ -292,20 +298,13 @@ func TestExitL2WithPayments(t *testing.T) {
 		t.Log("Balance of node BPrime", balanceNodeBPrime, "\nBalance of node APrime", balanceNodeAPrime)
 
 		l2SignedState := getLatestSignedState(storeBPrime, mirroredLedgerChannelId)
-		l2StateClone := l2SignedState.State().Clone()
 
-		// Both participants on L2 ledger channel sign state where `isFinal = true` which is required for a channel to conclude and finalize
-		l2StateClone.IsFinal = true
-
-		Asig, _ := l2StateClone.Sign(tcL2.Participants[1].PrivateKey)
-		Bsig, _ := l2StateClone.Sign(tcL2.Participants[0].PrivateKey)
-
-		l2SignedStateClone := state.NewSignedState(l2StateClone)
-
-		_ = l2SignedStateClone.AddSignature(Asig)
-		_ = l2SignedStateClone.AddSignature(Bsig)
-
-		l2ChannelSignedState = l2SignedStateClone
+		challengerSig, _ := NitroAdjudicator.SignChallengeMessage(l2SignedState.State(), tcL1.Participants[0].PrivateKey)
+		challengeTx := protocols.NewMirrorChallengeTransaction(l1ChannelId, l2SignedState, []state.SignedState{}, challengerSig)
+		err = chainServiceA.SendTransaction(challengeTx)
+		if err != nil {
+			t.Error(err)
+		}
 
 		// BPrime's balance is determined by subtracting amount paid from it's ledger deposit, while APrime's balance is calculated by adding it's ledger deposit to the amount received
 		testhelpers.Assert(t, balanceNodeBPrime.Cmp(big.NewInt(ledgerChannelDeposit-payAmount)) == 0, "Balance of node BPrime (%v) should be equal to (%v)", balanceNodeBPrime, ledgerChannelDeposit-payAmount)
@@ -313,9 +312,19 @@ func TestExitL2WithPayments(t *testing.T) {
 	})
 
 	t.Run("Exit to L1 using L2 ledger channel state", func(t *testing.T) {
-		// Node A calls modified `concludeAndTransferAllAssets` method to exit to L1 using L2 ledger channel state
-		MirrorWithdrawAllTx := protocols.NewMirrorWithdrawAllTransaction(l1ChannelId, l2ChannelSignedState)
-		err := chainServiceA.SendTransaction(MirrorWithdrawAllTx)
+		event := waitForEvent(t, testChainService.EventFeed(), chainservice.ChallengeRegisteredEvent{})
+		t.Log("Challenge registed event received", event)
+		challengeRegisteredEvent, ok := event.(chainservice.ChallengeRegisteredEvent)
+		testhelpers.Assert(t, ok, "Expected challenge registered event")
+
+		time.Sleep(time.Duration(tcL1.ChallengeDuration) * time.Second)
+		latestBlock, _ := infraL1.anvilChain.GetLatestBlock()
+		testhelpers.Assert(t, challengeRegisteredEvent.FinalizesAt.Uint64() <= latestBlock.Header().Time, "Expected channel to be finalized")
+
+		l2SignedState := getLatestSignedState(storeAPrime, mirroredLedgerChannelId)
+
+		mirrorTransferAllTx := protocols.NewMirrorTransferAllTransaction(l1ChannelId, l2SignedState)
+		err := chainServiceA.SendTransaction(mirrorTransferAllTx)
 		if err != nil {
 			t.Error(err)
 		}
