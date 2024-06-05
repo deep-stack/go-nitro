@@ -12,10 +12,6 @@ contract StatusManager is IStatusManager {
     mapping(bytes32 => bytes32) public mirrorOf;
     mapping(bytes32 => bytes32) public l1ChannelOf;
 
-    // **************
-    // External methods
-    // **************
-
     // Function to generate map from l1ChannelId to l2ChannelId and vice-versa
     function generateMirror(bytes32 l1ChannelId, bytes32 l2ChannelId) public {
         mirrorOf[l1ChannelId] = l2ChannelId;
