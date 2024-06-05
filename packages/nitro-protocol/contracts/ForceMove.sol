@@ -132,7 +132,7 @@ contract ForceMove is IForceMove, StatusManager {
     }
 
     function _concludeMirror(
-        bytes32 l1ChannelIdArg,
+        bytes32 l1ChannelId,
         FixedPart memory mirrorFixedPart,
         SignedVariablePart memory mirrorCandidate
         ) internal returns (bytes32 mirrorChannelId)  {
@@ -140,8 +140,8 @@ contract ForceMove is IForceMove, StatusManager {
         // get mirrorchannelid
         mirrorChannelId = NitroUtils.getChannelId(mirrorFixedPart);
         // check that its the same channel as in map
-        bytes32 l1ChannelId = getL1Channel(mirrorChannelId);
-        require(l1ChannelId == l1ChannelIdArg, 'Found mirror for wrong channel');
+        bytes32 derivedL1ChannelId = getL1Channel(mirrorChannelId);
+        require(derivedL1ChannelId == l1ChannelId, 'Found mirror for wrong channel');
         // Validate that state is final
         require(mirrorCandidate.variablePart.isFinal, 'State must be final');
         // Use it to liquidate assets

@@ -7,7 +7,6 @@ import {INitroTypes} from './INitroTypes.sol';
  * @dev The IMultiAssetHolder interface calls for functions that allow assets to be transferred from one channel to other channel and/or external destinations, as well as for guarantees to be claimed.
  */
 interface IMultiAssetHolder {
-
     /**
      * @notice Deposit ETH or erc20 assets against a given destination.
      * @dev Deposit ETH or erc20 assets against a given destination.

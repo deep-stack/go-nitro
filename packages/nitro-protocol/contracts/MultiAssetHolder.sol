@@ -23,6 +23,10 @@ contract MultiAssetHolder is IMultiAssetHolder, StatusManager {
      */
     mapping(address => mapping(bytes32 => uint256)) public holdings;
 
+    // **************
+    // External methods
+    // **************
+
     /**
      * @notice Deposit ETH or erc20 tokens against a given channelId.
      * @dev Deposit ETH or erc20 tokens against a given channelId.
