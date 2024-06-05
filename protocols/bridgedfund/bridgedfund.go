@@ -147,7 +147,7 @@ func ConstructFromPayload(
 	}
 
 	init.C = &channel.Channel{}
-	init.C, err = channel.New(initialState, myIndex)
+	init.C, err = channel.New(initialState, myIndex, channel.Ledger)
 	if err != nil {
 		return Objective{}, fmt.Errorf("failed to initialize channel for bridged-fund objective: %w", err)
 	}
