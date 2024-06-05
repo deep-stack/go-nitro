@@ -815,3 +815,194 @@ func TestExitL2WithVirtualChannelStateUnilaterally(t *testing.T) {
 		testhelpers.Assert(t, balanceNodeB.Cmp(big.NewInt(ledgerChannelDeposit-payAmount)) == 0, "Balance of node B (%v) should be equal to (%v)", balanceNodeB, ledgerChannelDeposit-payAmount)
 	})
 }
+
+func TestL2VirtualChannelWithIntermediary(t *testing.T) {
+	const payAmount = 2000
+
+	tcL1 := TestCase{
+		Chain:             AnvilChain,
+		MessageService:    TestMessageService,
+		MessageDelay:      0,
+		LogName:           "Bridge_test",
+		ChallengeDuration: 5,
+		Participants: []TestParticipant{
+			{StoreType: MemStore, Actor: testactors.Alice},
+			{StoreType: MemStore, Actor: testactors.Bob},
+			{StoreType: MemStore, Actor: testactors.Irene},
+		},
+	}
+
+	tcL2 := TestCase{
+		Chain:             AnvilChain,
+		MessageService:    TestMessageService,
+		MessageDelay:      0,
+		LogName:           "Bridge_test",
+		ChallengeDuration: 5,
+		Participants: []TestParticipant{
+			{StoreType: MemStore, Actor: testactors.Bob},
+			{StoreType: MemStore, Actor: testactors.Alice},
+			{StoreType: MemStore, Actor: testactors.Irene},
+		},
+		ChainPort: "8546",
+	}
+
+	dataFolder, cleanup := testhelpers.GenerateTempStoreFolder()
+	defer cleanup()
+
+	infraL1 := setupSharedInfra(tcL1)
+	defer infraL1.Close(t)
+
+	infraL2 := setupSharedInfra(tcL2)
+	defer infraL2.Close(t)
+
+	// Create go-nitro nodes
+	nodeA, _, _, storeA, _ := setupIntegrationNode(tcL1, tcL1.Participants[0], infraL1, []string{}, dataFolder)
+	defer nodeA.Close()
+
+	nodeB, _, _, _, _ := setupIntegrationNode(tcL1, tcL1.Participants[1], infraL1, []string{}, dataFolder)
+	defer nodeB.Close()
+
+	nodeC, _, _, storeC, _ := setupIntegrationNode(tcL1, tcL1.Participants[2], infraL1, []string{}, dataFolder)
+	defer nodeC.Close()
+
+	nodeBPrime, _, _, storeBPrime, _ := setupIntegrationNode(tcL2, tcL2.Participants[0], infraL2, []string{}, dataFolder)
+	defer nodeBPrime.Close()
+
+	nodeAPrime, _, _, _, _ := setupIntegrationNode(tcL2, tcL2.Participants[1], infraL2, []string{}, dataFolder)
+	defer nodeAPrime.Close()
+
+	nodeCPrime, _, _, _, _ := setupIntegrationNode(tcL2, tcL2.Participants[2], infraL2, []string{}, dataFolder)
+	defer nodeCPrime.Close()
+
+
+	mirroredLedgerChannel1Id := types.Destination{}
+	mirroredLedgerChannel2Id := types.Destination{}
+
+
+	t.Run("Create first ledger channel on L1 and mirror it on L2", func(t *testing.T) {
+		// Create ledger channel
+		l1LedgerChannel1Id := openLedgerChannel(t, nodeA, nodeB, types.Address{}, uint32(tcL1.ChallengeDuration))
+
+		l1LedgerChannel1, err := storeA.GetConsensusChannelById(l1LedgerChannel1Id)
+		if err != nil {
+			t.Error(err)
+		}
+
+		l1ledgerChannel1State := l1LedgerChannel1.SupportedSignedState()
+		l1ledgerChannel1StateClone := l1ledgerChannel1State.Clone()
+
+		l1ledgerChannel1StateClone.State().Outcome[0].Allocations[0].Destination = types.AddressToDestination(*nodeAPrime.Address)
+		l1ledgerChannel1StateClone.State().Outcome[0].Allocations[1].Destination = types.AddressToDestination(*nodeBPrime.Address)
+
+		// Put NodeBPrime's allocation at index 0 as it creates mirrored ledger channel
+		tempAllocation := l1ledgerChannel1StateClone.State().Outcome[0].Allocations[0].Destination
+		l1ledgerChannel1StateClone.State().Outcome[0].Allocations[0].Destination = l1ledgerChannel1StateClone.State().Outcome[0].Allocations[1].Destination
+		l1ledgerChannel1StateClone.State().Outcome[0].Allocations[1].Destination = tempAllocation
+
+		// Create extended state outcome based on l1ChannelState
+		l2Channel1Outcome := l1ledgerChannel1StateClone.State().Outcome
+
+		// Create mirrored ledger channel between node BPrime and APrime
+		response, err := nodeBPrime.CreateBridgeChannel(*nodeAPrime.Address, uint32(tcL2.ChallengeDuration), l2Channel1Outcome)
+		if err != nil {
+			t.Error(err)
+		}
+
+		mirroredLedgerChannel1Id = response.ChannelId
+
+		t.Log("Waiting for bridge-fund objective to complete...")
+
+		<-nodeBPrime.ObjectiveCompleteChan(response.Id)
+		<-nodeAPrime.ObjectiveCompleteChan(response.Id)
+
+		t.Log("Completed bridge-fund objective")
+	})
+
+	t.Run("Create second ledger channel on L1 and mirror it on L2", func(t *testing.T) {
+		// Create ledger channel
+		l1LedgerChannel2Id := openLedgerChannel(t, nodeC, nodeB, types.Address{}, uint32(tcL1.ChallengeDuration))
+
+		l1LedgerChannel2, err := storeC.GetConsensusChannelById(l1LedgerChannel2Id)
+		if err != nil {
+			t.Error(err)
+		}
+
+		l1ledgerChannel2State := l1LedgerChannel2.SupportedSignedState()
+		l1ledgerChannel2StateClone := l1ledgerChannel2State.Clone()
+
+		l1ledgerChannel2StateClone.State().Outcome[0].Allocations[0].Destination = types.AddressToDestination(*nodeAPrime.Address)
+		l1ledgerChannel2StateClone.State().Outcome[0].Allocations[1].Destination = types.AddressToDestination(*nodeBPrime.Address)
+
+		// Put NodeBPrime's allocation at index 0 as it creates mirrored ledger channel
+		tempAllocation := l1ledgerChannel2StateClone.State().Outcome[0].Allocations[0].Destination
+		l1ledgerChannel2StateClone.State().Outcome[0].Allocations[0].Destination = l1ledgerChannel2StateClone.State().Outcome[0].Allocations[1].Destination
+		l1ledgerChannel2StateClone.State().Outcome[0].Allocations[1].Destination = tempAllocation
+
+		// Create extended state outcome based on l1ChannelState
+		l2Channel2Outcome := l1ledgerChannel2StateClone.State().Outcome
+
+		// Create mirrored ledger channel between node BPrime and APrime
+		response, err := nodeBPrime.CreateBridgeChannel(*nodeCPrime.Address, uint32(tcL2.ChallengeDuration), l2Channel2Outcome)
+		if err != nil {
+			t.Error(err)
+		}
+
+		mirroredLedgerChannel2Id = response.ChannelId
+
+		t.Log("Waiting for bridge-fund objective to complete...")
+
+		<-nodeBPrime.ObjectiveCompleteChan(response.Id)
+		<-nodeCPrime.ObjectiveCompleteChan(response.Id)
+
+		t.Log("Completed bridge-fund objective")
+	})
+
+	t.Run("Create virtual channel between A' and C' and B' as intermediary and make payments", func(t *testing.T) {
+		// Create virtual channel on mirrored ledger channel on L2 and make payments
+		virtualOutcome := initialPaymentOutcome(*nodeAPrime.Address, *nodeCPrime.Address, types.Address{})
+
+		virtualResponse, _ := nodeAPrime.CreatePaymentChannel([]types.Address{*nodeBPrime.Address}, *nodeCPrime.Address, uint32(tcL2.ChallengeDuration), virtualOutcome)
+		waitForObjectives(t, nodeBPrime, nodeAPrime, []node.Node{}, []protocols.ObjectiveId{virtualResponse.Id})
+
+		checkPaymentChannel(t, virtualResponse.ChannelId, virtualOutcome, query.Open, nodeAPrime, nodeBPrime, nodeCPrime)
+
+		virtualChannel, _ := storeBPrime.GetChannelById(virtualResponse.ChannelId)
+
+		// Bridge pays APrime
+		nodeAPrime.Pay(virtualResponse.ChannelId, big.NewInt(payAmount))
+
+		// Wait for APrime to recieve voucher
+		nodeCPrimeVoucher := <-nodeCPrime.ReceivedVouchers()
+		t.Logf("Voucher recieved %+v", nodeCPrimeVoucher)
+
+		// Virtual defund
+		virtualDefundResponse, _ := nodeAPrime.ClosePaymentChannel(virtualChannel.Id)
+		waitForObjectives(t, nodeAPrime, nodeCPrime, []node.Node{nodeBPrime}, []protocols.ObjectiveId{virtualDefundResponse})
+
+		ledgerChannel1Info, err := nodeBPrime.GetLedgerChannel(mirroredLedgerChannel1Id)
+		if err != nil {
+			t.Error(err)
+		}
+
+		ledgerChannel2Info, err := nodeBPrime.GetLedgerChannel(mirroredLedgerChannel2Id)
+		if err != nil {
+			t.Error(err)
+		}
+
+		balanceNodeAPrime := ledgerChannel1Info.Balance.TheirBalance.ToInt()
+		balanceNodeBPrimeOnChannel1 := ledgerChannel1Info.Balance.MyBalance.ToInt()
+		t.Log("Balance of node BPrime", balanceNodeBPrimeOnChannel1, "\nBalance of node APrime", balanceNodeAPrime)
+
+		balanceNodeCPrime := ledgerChannel2Info.Balance.TheirBalance.ToInt()
+		balanceNodeBPrimeOnChannel2 := ledgerChannel2Info.Balance.MyBalance.ToInt()
+		t.Log("Balance of node BPrime", balanceNodeBPrimeOnChannel2, "\nBalance of node CPrime", balanceNodeCPrime)
+
+		// On channel 1, APrime's balance is determined by subtracting payAmount from ledgerChannelDeposit and BPrime's balance is determined by adding payAmount to it's balance
+		testhelpers.Assert(t, balanceNodeAPrime.Cmp(big.NewInt(ledgerChannelDeposit-payAmount)) == 0, "Balance of node APrime (%v) should be equal to (%v)", balanceNodeBPrimeOnChannel1, ledgerChannelDeposit-payAmount)
+		testhelpers.Assert(t, balanceNodeBPrimeOnChannel1.Cmp(big.NewInt(ledgerChannelDeposit+payAmount)) == 0, "Balance of node BPrime on channel 1 (%v) should be equal to (%v)", balanceNodeAPrime, ledgerChannelDeposit+payAmount)
+
+		// On channel 2, BPrime's balance is determined by subtracting payAmount from ledgerChannelDeposit and CPrime's balance is determined by adding payAmount to it's balance
+		testhelpers.Assert(t, balanceNodeBPrimeOnChannel2.Cmp(big.NewInt(ledgerChannelDeposit-payAmount)) == 0, "Balance of node BPrime on channel 2 (%v) should be equal to (%v)", balanceNodeBPrimeOnChannel1, ledgerChannelDeposit-payAmount)
+		testhelpers.Assert(t, balanceNodeCPrime.Cmp(big.NewInt(ledgerChannelDeposit+payAmount)) == 0, "Balance of node CPrime (%v) should be equal to (%v)", balanceNodeAPrime, ledgerChannelDeposit+payAmount)
+	})
+}
