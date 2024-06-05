@@ -81,7 +81,7 @@ contract ForceMove is IForceMove, StatusManager {
     }
 
     function mirrorChallenge(
-        bytes32 l1ChannelIdArg,
+        bytes32 l1ChannelId,
         FixedPart memory fixedPart,
         SignedVariablePart[] memory proof,
         SignedVariablePart memory candidate,
@@ -90,9 +90,9 @@ contract ForceMove is IForceMove, StatusManager {
         bytes32 mirrorChannelId = NitroUtils.getChannelId(fixedPart);
         uint48 candidateTurnNum = candidate.variablePart.turnNum;
 
-                // check that its the same channel as in map
-        bytes32 l1ChannelId = getL1Channel(mirrorChannelId);
-        require(l1ChannelId == l1ChannelIdArg, 'Found mirror for wrong channel');
+        // check that its the same channel as in map
+        bytes32 derivedL1ChannelId = getL1Channel(mirrorChannelId);
+        require(derivedL1ChannelId == l1ChannelId, 'Found mirror for wrong channel');
 
         if (_mirrorMode(mirrorChannelId) == ChannelMode.Open) {
             _mirrorRequireNonDecreasedTurnNumber(mirrorChannelId, candidateTurnNum);
