@@ -874,10 +874,8 @@ func TestL2VirtualChannelWithIntermediary(t *testing.T) {
 	nodeCPrime, _, _, _, _ := setupIntegrationNode(tcL2, tcL2.Participants[2], infraL2, []string{}, dataFolder)
 	defer nodeCPrime.Close()
 
-
 	mirroredLedgerChannel1Id := types.Destination{}
 	mirroredLedgerChannel2Id := types.Destination{}
-
 
 	t.Run("Create first ledger channel on L1 and mirror it on L2", func(t *testing.T) {
 		// Create ledger channel
