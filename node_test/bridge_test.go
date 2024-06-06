@@ -1004,3 +1004,359 @@ func TestL2VirtualChannelWithIntermediary(t *testing.T) {
 		testhelpers.Assert(t, balanceNodeCPrime.Cmp(big.NewInt(ledgerChannelDeposit+payAmount)) == 0, "Balance of node CPrime (%v) should be equal to (%v)", balanceNodeAPrime, ledgerChannelDeposit+payAmount)
 	})
 }
+
+func TestL2ExitWithNodeC(t *testing.T) {
+	const payAmount = 2000
+
+	tcL1 := TestCase{
+		Chain:             AnvilChain,
+		MessageService:    TestMessageService,
+		MessageDelay:      0,
+		LogName:           "Bridge_test",
+		ChallengeDuration: 5,
+		Participants: []TestParticipant{
+			{StoreType: MemStore, Actor: testactors.Alice},
+			{StoreType: MemStore, Actor: testactors.Bob},
+			{StoreType: MemStore, Actor: testactors.Irene},
+		},
+	}
+
+	tcL2 := TestCase{
+		Chain:             AnvilChain,
+		MessageService:    TestMessageService,
+		MessageDelay:      0,
+		LogName:           "Bridge_test",
+		ChallengeDuration: 5,
+		Participants: []TestParticipant{
+			{StoreType: MemStore, Actor: testactors.Bob},
+			{StoreType: MemStore, Actor: testactors.Alice},
+			{StoreType: MemStore, Actor: testactors.Irene},
+		},
+		ChainPort: "8546",
+	}
+
+	dataFolder, cleanup := testhelpers.GenerateTempStoreFolder()
+	defer cleanup()
+
+	infraL1 := setupSharedInfra(tcL1)
+	defer infraL1.Close(t)
+
+	infraL2 := setupSharedInfra(tcL2)
+	defer infraL2.Close(t)
+
+	// Create go-nitro nodes
+	nodeA, _, _, storeA, _ := setupIntegrationNode(tcL1, tcL1.Participants[0], infraL1, []string{}, dataFolder)
+
+	nodeB, _, _, _, chainServiceB := setupIntegrationNode(tcL1, tcL1.Participants[1], infraL1, []string{}, dataFolder)
+	defer nodeB.Close()
+
+	nodeC, _, _, storeC, chainServiceC := setupIntegrationNode(tcL1, tcL1.Participants[2], infraL1, []string{}, dataFolder)
+	defer nodeC.Close()
+
+	nodeBPrime, _, _, _, _ := setupIntegrationNode(tcL2, tcL2.Participants[0], infraL2, []string{}, dataFolder)
+	defer nodeBPrime.Close()
+
+	nodeAPrime, _, _, _, _ := setupIntegrationNode(tcL2, tcL2.Participants[1], infraL2, []string{}, dataFolder)
+
+	nodeCPrime, _, _, storeCPrime, _ := setupIntegrationNode(tcL2, tcL2.Participants[2], infraL2, []string{}, dataFolder)
+	defer nodeCPrime.Close()
+
+	// Separate chain service to listen for events
+	testChainService := setupChainService(tcL1, tcL1.Participants[0], infraL1)
+	defer testChainService.Close()
+
+	mirroredLedgerChannel2Id := types.Destination{}
+	mirroredLedgerChannel1Id := types.Destination{}
+	l1LedgerChannel1Id := types.Destination{}
+	l1LedgerChannel2Id := types.Destination{}
+
+	virtualChannelId := types.Destination{}
+
+	nodeCPrimeRecievedVoucher := payments.Voucher{}
+
+	t.Run("Create first ledger channel on L1 and mirror it on L2", func(t *testing.T) {
+		// Create ledger channel
+		l1LedgerChannel1Id = openLedgerChannel(t, nodeA, nodeB, types.Address{}, uint32(tcL1.ChallengeDuration))
+
+		l1LedgerChannel1, err := storeA.GetConsensusChannelById(l1LedgerChannel1Id)
+		if err != nil {
+			t.Error(err)
+		}
+
+		l1ledgerChannel1State := l1LedgerChannel1.SupportedSignedState()
+		l1ledgerChannel1StateClone := l1ledgerChannel1State.Clone()
+
+		l1ledgerChannel1StateClone.State().Outcome[0].Allocations[0].Destination = types.AddressToDestination(*nodeAPrime.Address)
+		l1ledgerChannel1StateClone.State().Outcome[0].Allocations[1].Destination = types.AddressToDestination(*nodeBPrime.Address)
+
+		// Put NodeBPrime's allocation at index 0 as it creates mirrored ledger channel
+		tempAllocation := l1ledgerChannel1StateClone.State().Outcome[0].Allocations[0].Destination
+		l1ledgerChannel1StateClone.State().Outcome[0].Allocations[0].Destination = l1ledgerChannel1StateClone.State().Outcome[0].Allocations[1].Destination
+		l1ledgerChannel1StateClone.State().Outcome[0].Allocations[1].Destination = tempAllocation
+
+		// Create extended state outcome based on l1ChannelState
+		l2Channel1Outcome := l1ledgerChannel1StateClone.State().Outcome
+
+		// Create mirrored ledger channel between node BPrime and APrime
+		response, err := nodeBPrime.CreateBridgeChannel(*nodeAPrime.Address, uint32(tcL2.ChallengeDuration), l2Channel1Outcome)
+		if err != nil {
+			t.Error(err)
+		}
+
+		mirroredLedgerChannel1Id = response.ChannelId
+
+		t.Log("Waiting for bridge-fund objective to complete...")
+
+		<-nodeBPrime.ObjectiveCompleteChan(response.Id)
+		<-nodeAPrime.ObjectiveCompleteChan(response.Id)
+
+		t.Log("Completed bridge-fund objective")
+
+		// Node B calls contract method to store L1ChannelId => L2ChannelId and L1ChannelId => L2ChannelId maps on contract
+		genernateMirrorTx := protocols.NewGenerateMirrorTransaction(l1LedgerChannel1Id, mirroredLedgerChannel1Id)
+		err = chainServiceB.SendTransaction(genernateMirrorTx)
+		if err != nil {
+			t.Error(err)
+		}
+	})
+
+	t.Run("Create second ledger channel on L1 and mirror it on L2", func(t *testing.T) {
+		// Create ledger channel
+		l1LedgerChannel2Id = openLedgerChannel(t, nodeC, nodeB, types.Address{}, uint32(tcL1.ChallengeDuration))
+
+		l1LedgerChannel2, err := storeC.GetConsensusChannelById(l1LedgerChannel2Id)
+		if err != nil {
+			t.Error(err)
+		}
+
+		l1ledgerChannel2State := l1LedgerChannel2.SupportedSignedState()
+		l1ledgerChannel2StateClone := l1ledgerChannel2State.Clone()
+
+		l1ledgerChannel2StateClone.State().Outcome[0].Allocations[0].Destination = types.AddressToDestination(*nodeCPrime.Address)
+		l1ledgerChannel2StateClone.State().Outcome[0].Allocations[1].Destination = types.AddressToDestination(*nodeBPrime.Address)
+
+		// Put NodeBPrime's allocation at index 0 as it creates mirrored ledger channel
+		tempAllocation := l1ledgerChannel2StateClone.State().Outcome[0].Allocations[0].Destination
+		l1ledgerChannel2StateClone.State().Outcome[0].Allocations[0].Destination = l1ledgerChannel2StateClone.State().Outcome[0].Allocations[1].Destination
+		l1ledgerChannel2StateClone.State().Outcome[0].Allocations[1].Destination = tempAllocation
+
+		// Create extended state outcome based on l1ChannelState
+		l2Channel2Outcome := l1ledgerChannel2StateClone.State().Outcome
+
+		// Create mirrored ledger channel between node BPrime and APrime
+		response, err := nodeBPrime.CreateBridgeChannel(*nodeCPrime.Address, uint32(tcL2.ChallengeDuration), l2Channel2Outcome)
+		if err != nil {
+			t.Error(err)
+		}
+
+		mirroredLedgerChannel2Id = response.ChannelId
+
+		t.Log("Waiting for bridge-fund objective to complete...")
+
+		<-nodeBPrime.ObjectiveCompleteChan(response.Id)
+		<-nodeCPrime.ObjectiveCompleteChan(response.Id)
+
+		t.Log("Completed bridge-fund objective")
+
+		// Node B calls contract method to store L1ChannelId => L2ChannelId and L1ChannelId => L2ChannelId maps on contract
+		genernateMirrorTx := protocols.NewGenerateMirrorTransaction(l1LedgerChannel2Id, mirroredLedgerChannel2Id)
+		err = chainServiceB.SendTransaction(genernateMirrorTx)
+		if err != nil {
+			t.Error(err)
+		}
+	})
+
+	t.Run("Create virtual channel between A' and C' and B' as intermediary and make payments", func(t *testing.T) {
+		// Create virtual channel on mirrored ledger channel on L2 and make payments
+		virtualOutcome := initialPaymentOutcome(*nodeAPrime.Address, *nodeCPrime.Address, types.Address{})
+
+		virtualResponse, _ := nodeAPrime.CreatePaymentChannel([]types.Address{*nodeBPrime.Address}, *nodeCPrime.Address, uint32(tcL2.ChallengeDuration), virtualOutcome)
+		waitForObjectives(t, nodeBPrime, nodeAPrime, []node.Node{}, []protocols.ObjectiveId{virtualResponse.Id})
+
+		checkPaymentChannel(t, virtualResponse.ChannelId, virtualOutcome, query.Open, nodeAPrime, nodeBPrime, nodeCPrime)
+
+		// virtualChannel, _ := storeBPrime.GetChannelById(virtualResponse.ChannelId)
+
+		virtualChannelId = virtualResponse.ChannelId
+
+		// Bridge pays APrime
+		nodeAPrime.Pay(virtualResponse.ChannelId, big.NewInt(payAmount))
+
+		// Close A and APrime nodes
+		nodeA.Close()
+		nodeAPrime.Close()
+
+		// Wait for APrime to recieve voucher
+		nodeCPrimeVoucher := <-nodeCPrime.ReceivedVouchers()
+		t.Logf("Voucher recieved %+v", nodeCPrimeVoucher)
+
+		nodeCPrimeRecievedVoucher = nodeCPrimeVoucher
+	})
+
+	t.Run("Exit to L1 with C", func(t *testing.T) {
+		virtualChannel, _ := storeCPrime.GetChannelById(virtualChannelId)
+		voucherState, _ := virtualChannel.LatestSignedState()
+
+		// Create type to encode voucher amount and signature
+		voucherAmountSigTy, _ := abi.NewType("tuple", "", []abi.ArgumentMarshaling{
+			{Name: "amount", Type: "uint256"},
+			{Name: "signature", Type: "tuple", Components: []abi.ArgumentMarshaling{
+				{Name: "v", Type: "uint8"},
+				{Name: "r", Type: "bytes32"},
+				{Name: "s", Type: "bytes32"},
+			}},
+		})
+
+		arguments := abi.Arguments{
+			{Type: voucherAmountSigTy},
+		}
+
+		voucherAmountSignatureData := protocols.VoucherAmountSignature{
+			Amount:    nodeCPrimeRecievedVoucher.Amount,
+			Signature: NitroAdjudicator.ConvertSignature(nodeCPrimeRecievedVoucher.Signature),
+		}
+
+		// Use above created type and encode voucher amount and signature
+		dataEncoded, err := arguments.Pack(voucherAmountSignatureData)
+		if err != nil {
+			t.Fatalf("Failed to encode data: %v", err)
+		}
+
+		// Create expected payment outcome
+		finalVirtualOutcome := finalPaymentOutcome(*nodeA.Address, *nodeC.Address, common.Address{}, 1, uint(nodeCPrimeRecievedVoucher.Amount.Int64()))
+
+		// Construct variable part with updated outcome and app data
+		vp := state.VariablePart{Outcome: finalVirtualOutcome, TurnNum: voucherState.State().TurnNum + 1, AppData: dataEncoded, IsFinal: voucherState.State().IsFinal}
+
+		// Update state with constructed variable part
+		newState := state.StateFromFixedAndVariablePart(voucherState.State().FixedPart(), vp)
+
+		// CPrime signs constructed state and adds it to the virtual channel
+		_, _ = virtualChannel.SignAndAddState(newState, &tcL2.Participants[2].PrivateKey)
+
+		// Update store with updated virtual channel
+		_ = storeCPrime.SetChannel(virtualChannel)
+
+		// Get updated virtual channel
+		updatedVirtualChannel, _ := storeCPrime.GetChannelById(virtualChannelId)
+		signedVirtualState, _ := updatedVirtualChannel.LatestSignedState()
+		signedPostFundState := updatedVirtualChannel.SignedPostFundState()
+
+		// Node C calls modified `challenge` with L2 virtual channel state
+		virtualChallengerSig, _ := NitroAdjudicator.SignChallengeMessage(signedVirtualState.State(), tcL1.Participants[2].PrivateKey)
+		mirrroVirtualChallengeTx := protocols.NewMirrorChallengeTransaction(virtualChannelId, signedVirtualState, []state.SignedState{signedPostFundState}, virtualChallengerSig)
+		err = chainServiceC.SendTransaction(mirrroVirtualChallengeTx)
+		if err != nil {
+			t.Error(err)
+		}
+
+		// Listen for challenge registered event
+		event := waitForEvent(t, testChainService.EventFeed(), chainservice.ChallengeRegisteredEvent{})
+		t.Log("Challenge registed event received", event)
+		challengeRegisteredEvent, ok := event.(chainservice.ChallengeRegisteredEvent)
+		testhelpers.Assert(t, ok, "Expected challenge registered event")
+
+		time.Sleep(time.Duration(tcL2.ChallengeDuration) * time.Second)
+		latestBlock, _ := infraL1.anvilChain.GetLatestBlock()
+		testhelpers.Assert(t, challengeRegisteredEvent.FinalizesAt.Uint64() <= latestBlock.Header().Time, "Expected channel to be finalized")
+
+		l2SignedState2 := getLatestSignedState(storeCPrime, mirroredLedgerChannel2Id)
+
+		// Node C calls modified `challenge` with L2 BC ledger channel state
+		challengerSig, _ := NitroAdjudicator.SignChallengeMessage(l2SignedState2.State(), tcL1.Participants[2].PrivateKey)
+		challengeTx := protocols.NewMirrorChallengeTransaction(l1LedgerChannel2Id, l2SignedState2, []state.SignedState{}, challengerSig)
+		err = chainServiceC.SendTransaction(challengeTx)
+		if err != nil {
+			t.Error(err)
+		}
+
+		event = waitForEvent(t, testChainService.EventFeed(), chainservice.ChallengeRegisteredEvent{})
+		t.Log("Challenge registed event received", event)
+		challengeRegisteredEvent, ok = event.(chainservice.ChallengeRegisteredEvent)
+		testhelpers.Assert(t, ok, "Expected challenge registered event")
+
+		time.Sleep(time.Duration(tcL1.ChallengeDuration) * time.Second)
+		latestBlock, _ = infraL1.anvilChain.GetLatestBlock()
+		testhelpers.Assert(t, challengeRegisteredEvent.FinalizesAt.Uint64() <= latestBlock.Header().Time, "Expected channel to be finalized")
+
+		l2SignedState2 = getLatestSignedState(storeCPrime, mirroredLedgerChannel2Id)
+		updatedVirtualChannel, _ = storeCPrime.GetChannelById(virtualChannelId)
+		signedVirtualState, _ = updatedVirtualChannel.LatestSignedState()
+
+		// Now that ledger and virtual channels are finalized, call modified `reclaim` method
+		convertedLedgerFixedPart := NitroAdjudicator.ConvertFixedPart(l2SignedState2.State().FixedPart())
+		convertedLedgerVariablePart := NitroAdjudicator.ConvertVariablePart(l2SignedState2.State().VariablePart())
+		virtualStateHash, _ := signedVirtualState.State().Hash()
+		sourceOutcome := l2SignedState2.State().Outcome
+		sourceOb, _ := sourceOutcome.Encode()
+		targetOutcome := signedVirtualState.State().Outcome
+		targetOb, _ := targetOutcome.Encode()
+
+		reclaimArgs := NitroAdjudicator.IMultiAssetHolderReclaimArgs{
+			SourceChannelId:       mirroredLedgerChannel2Id,
+			FixedPart:             convertedLedgerFixedPart,
+			VariablePart:          convertedLedgerVariablePart,
+			SourceOutcomeBytes:    sourceOb,
+			SourceAssetIndex:      common.Big0,
+			IndexOfTargetInSource: common.Big2,
+			TargetStateHash:       virtualStateHash,
+			TargetOutcomeBytes:    targetOb,
+			TargetAssetIndex:      common.Big0,
+		}
+
+		reclaimTx := protocols.NewMirrorReclaimTransaction(l1LedgerChannel2Id, reclaimArgs)
+		err = chainServiceC.SendTransaction(reclaimTx)
+		if err != nil {
+			t.Error(err)
+		}
+
+		time.Sleep(2 * time.Second)
+		l2SignedState2 = getLatestSignedState(storeCPrime, mirroredLedgerChannel2Id)
+
+		// Compute new state outcome allocations
+		ireneOutcomeAllocationAmount := l2SignedState2.State().Outcome[0].Allocations[1].Amount
+		bobOutcomeAllocationAmount2 := l2SignedState2.State().Outcome[0].Allocations[0].Amount
+
+		ireneOutcomeAllocationAmount.Add(ireneOutcomeAllocationAmount, signedVirtualState.State().Outcome[0].Allocations[1].Amount)
+		bobOutcomeAllocationAmount2.Add(bobOutcomeAllocationAmount2, signedVirtualState.State().Outcome[0].Allocations[0].Amount)
+
+		// Get latest ledger channel state
+		latestState := l2SignedState2.State()
+
+		// Construct exit state with updated outcome allocations
+		latestState.Outcome[0].Allocations = outcome.Allocations{
+			{
+				Destination:    l2SignedState2.State().Outcome[0].Allocations[0].Destination,
+				Amount:         bobOutcomeAllocationAmount2,
+				AllocationType: outcome.SimpleAllocationType,
+				Metadata:       l2SignedState2.State().Outcome[0].Allocations[0].Metadata,
+			},
+			{
+				Destination:    l2SignedState2.State().Outcome[0].Allocations[1].Destination,
+				Amount:         ireneOutcomeAllocationAmount,
+				AllocationType: outcome.SimpleAllocationType,
+				Metadata:       l2SignedState2.State().Outcome[0].Allocations[1].Metadata,
+			},
+		}
+
+		signedConstructedState := state.NewSignedState(latestState)
+
+		mirrorTransferAllTx := protocols.NewMirrorTransferAllTransaction(l1LedgerChannel2Id, signedConstructedState)
+		err = chainServiceC.SendTransaction(mirrorTransferAllTx)
+		if err != nil {
+			t.Error(err)
+		}
+
+		event = waitForEvent(t, testChainService.EventFeed(), chainservice.AllocationUpdatedEvent{})
+		_, ok = event.(chainservice.AllocationUpdatedEvent)
+
+		testhelpers.Assert(t, ok, "Expected allocation updated event")
+
+		balanceNodeC, _ := infraL1.anvilChain.GetAccountBalance(tcL1.Participants[2].Address())
+		balanceNodeB, _ := infraL1.anvilChain.GetAccountBalance(tcL1.Participants[1].Address())
+		t.Log("Balance of node C", balanceNodeC, "\nBalance of node B", balanceNodeB)
+
+		testhelpers.Assert(t, balanceNodeC.Cmp(big.NewInt(ledgerChannelDeposit+payAmount)) == 0, "Balance of node C (%v) should be equal to (%v)", balanceNodeC, ledgerChannelDeposit+payAmount)
+		testhelpers.Assert(t, balanceNodeB.Cmp(big.NewInt(ledgerChannelDeposit-payAmount)) == 0, "Balance of node B (%v) should be equal to (%v)", balanceNodeB, ledgerChannelDeposit-payAmount)
+	})
+}
