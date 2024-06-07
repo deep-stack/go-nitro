@@ -15,7 +15,7 @@ import (
 
 const (
 	CHAIN_AUTH_TOKEN       = ""
-	CHAIN_URL_WITHOUT_PORT = "ws://127.0.0.1:"
+	CHAIN_URL_WITHOUT_PORT = "ws://127.0.0.1"
 	DEFAULT_CHAIN_PORT     = "8545"
 )
 
@@ -72,7 +72,7 @@ func (chain AnvilChain) GetLatestBlock() (*ethTypes.Block, error) {
 
 func StartAnvil(chainPort string) (AnvilChain, error) {
 	anvilChain := AnvilChain{}
-	anvilChain.ChainUrl = CHAIN_URL_WITHOUT_PORT + chainPort
+	anvilChain.ChainUrl = CHAIN_URL_WITHOUT_PORT + ":" + chainPort
 	anvilChain.AnvilCmd = exec.Command("anvil", "--chain-id", "1337", "--block-time", "1", "--silent", "--port", chainPort)
 
 	anvilChain.ChainAuthToken = CHAIN_AUTH_TOKEN

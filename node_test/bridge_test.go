@@ -12,6 +12,11 @@ import (
 	"github.com/statechannels/go-nitro/types"
 )
 
+// Flow:
+// 1. Create ledger channel on L1
+// 2. Create mirrored channel on L2
+// 3. Create virtual payment channel on top of mirrored ledger channel and make payments
+// 4. Virtual defund and check balance on L2
 func TestBridge(t *testing.T) {
 	const payAmount = 2000
 
