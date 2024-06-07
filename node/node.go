@@ -252,6 +252,8 @@ func (n *Node) CreateLedgerChannel(Counterparty types.Address, ChallengeDuration
 	return objectiveRequest.Response(*n.Address, n.chainId), nil
 }
 
+// Uses bridgedfund protocol to create a bridge channel (to be called by L2 nodes)
+// No chain interactions are involved while creating this channel
 func (n *Node) CreateBridgeChannel(Counterparty types.Address, ChallengeDuration uint32, outcome outcome.Exit) (bridgedfund.ObjectiveResponse, error) {
 	objectiveRequest := bridgedfund.NewObjectiveRequest(
 		Counterparty,
