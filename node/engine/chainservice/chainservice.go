@@ -83,6 +83,7 @@ type ChallengeRegisteredEvent struct {
 	candidate           state.VariablePart
 	candidateSignatures []state.Signature
 	FinalizesAt         *big.Int
+	IsInitiatedByMe     bool
 }
 
 // NewChallengeRegisteredEvent constructs a ChallengeRegisteredEvent
@@ -93,6 +94,7 @@ func NewChallengeRegisteredEvent(
 	variablePart state.VariablePart,
 	sigs []state.Signature,
 	finalizesAt *big.Int,
+	isInitiatedByMe bool,
 ) ChallengeRegisteredEvent {
 	return ChallengeRegisteredEvent{
 		commonEvent: commonEvent{channelID: channelId, blockNum: blockNum, txIndex: txIndex},
@@ -102,7 +104,8 @@ func NewChallengeRegisteredEvent(
 			TurnNum: variablePart.TurnNum,
 			IsFinal: variablePart.IsFinal,
 		}, candidateSignatures: sigs,
-		FinalizesAt: finalizesAt,
+		FinalizesAt:     finalizesAt,
+		IsInitiatedByMe: isInitiatedByMe,
 	}
 }
 

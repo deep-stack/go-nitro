@@ -610,7 +610,7 @@ func (e *Engine) handleCounterChallengeRequest(request types.CounterChallengeReq
 	case types.Checkpoint:
 		obj.IsCheckpoint = true
 	case types.Challenge:
-		obj.IsChallengeInitiatedByMe = true
+		obj.IsChallenge = true
 	default:
 		return fmt.Errorf("unknown counter challenge action")
 	}
@@ -966,7 +966,7 @@ func (e *Engine) processStoreChannels() error {
 			obj, ok := e.store.GetObjectiveByChannelId(ch.Id)
 			dDfo, isDdfo := obj.(*directdefund.Objective)
 
-			if ok && isDdfo && dDfo.IsChallengeInitiatedByMe {
+			if ok && isDdfo && dDfo.C.OnChain.IsChallengeInitiatedByMe {
 				_, err = e.attemptProgress(obj)
 				if err != nil {
 					return err

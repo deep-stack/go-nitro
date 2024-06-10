@@ -59,6 +59,7 @@ type ethChain interface {
 	ethereum.TransactionReader
 	ethereum.ChainReader
 	ChainID(ctx context.Context) (*big.Int, error)
+	TransactionSender(ctx context.Context, tx *ethTypes.Transaction, block common.Hash, index uint) (common.Address, error)
 }
 
 // eventTracker holds on to events in memory and dispatches an event after required number of confirmations
@@ -363,16 +364,39 @@ func (ecs *EthChainService) dispatchChainEvents(logs []ethTypes.Log) error {
 
 		case challengeRegisteredTopic:
 			ecs.logger.Debug("Processing Challenge Registered event")
+
+			tx, pending, err := ecs.chain.TransactionByHash(context.Background(), l.TxHash)
+			if pending {
+				return fmt.Errorf("expected transaction to be part of the chain, but the transaction is pending")
+			}
+			if err != nil {
+				return fmt.Errorf("error in TransactionByHash: %w", err)
+			}
+
+			txSenderAddress, err := ecs.chain.TransactionSender(context.Background(), tx, l.BlockHash, l.TxIndex)
+			if err != nil {
+				return fmt.Errorf("error in TransactionSender: %w", err)
+			}
+
 			cr, err := ecs.na.ParseChallengeRegistered(l)
 			if err != nil {
 				return fmt.Errorf("error in ParseChallengeRegistered: %w", err)
 			}
-			event := NewChallengeRegisteredEvent(cr.ChannelId, l.BlockNumber, l.TxIndex, state.VariablePart{
-				AppData: cr.Candidate.VariablePart.AppData,
-				Outcome: NitroAdjudicator.ConvertBindingsExitToExit(cr.Candidate.VariablePart.Outcome),
-				TurnNum: cr.Candidate.VariablePart.TurnNum.Uint64(),
-				IsFinal: cr.Candidate.VariablePart.IsFinal,
-			}, NitroAdjudicator.ConvertBindingsSignaturesToSignatures(cr.Candidate.Sigs), cr.FinalizesAt)
+			isInitiatedByMe := txSenderAddress == ecs.txSigner.From
+
+			event := NewChallengeRegisteredEvent(
+				cr.ChannelId,
+				l.BlockNumber,
+				l.TxIndex,
+				state.VariablePart{
+					AppData: cr.Candidate.VariablePart.AppData,
+					Outcome: NitroAdjudicator.ConvertBindingsExitToExit(cr.Candidate.VariablePart.Outcome),
+					TurnNum: cr.Candidate.VariablePart.TurnNum.Uint64(),
+					IsFinal: cr.Candidate.VariablePart.IsFinal,
+				},
+				NitroAdjudicator.ConvertBindingsSignaturesToSignatures(cr.Candidate.Sigs),
+				cr.FinalizesAt,
+				isInitiatedByMe)
 			ecs.out <- event
 		case challengeClearedTopic:
 			ecs.logger.Debug("Processing Challenge Cleared event")

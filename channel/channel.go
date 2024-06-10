@@ -15,10 +15,11 @@ import (
 )
 
 type OnChainData struct {
-	Holdings    types.Funds
-	Outcome     outcome.Exit
-	StateHash   common.Hash
-	FinalizesAt *big.Int
+	Holdings                 types.Funds
+	Outcome                  outcome.Exit
+	StateHash                common.Hash
+	FinalizesAt              *big.Int
+	IsChallengeInitiatedByMe bool
 }
 
 type OffChainData struct {
@@ -66,6 +67,7 @@ func New(s state.State, myIndex uint) (*Channel, error) {
 	c.MyIndex = myIndex
 	c.OnChain.Holdings = make(types.Funds)
 	c.OnChain.FinalizesAt = big.NewInt(0)
+	c.OnChain.IsChallengeInitiatedByMe = false
 	c.FixedPart = s.FixedPart().Clone()
 	c.OffChain.LatestSupportedStateTurnNum = MaxTurnNum // largest uint64 value reserved for "no supported state"
 
@@ -145,6 +147,7 @@ func (c *Channel) Clone() *Channel {
 	d.FixedPart = c.FixedPart.Clone()
 	d.OnChain.Holdings = c.OnChain.Holdings
 	d.OnChain.FinalizesAt = c.OnChain.FinalizesAt
+	d.OnChain.IsChallengeInitiatedByMe = c.OnChain.IsChallengeInitiatedByMe
 	return d
 }
 
@@ -368,6 +371,7 @@ func (c *Channel) UpdateWithChainEvent(event chainservice.Event) (*Channel, erro
 		c.OnChain.StateHash = h
 		c.OnChain.Outcome = e.Outcome()
 		c.OnChain.FinalizesAt = e.FinalizesAt
+		c.OnChain.IsChallengeInitiatedByMe = e.IsInitiatedByMe
 		ss, err := e.SignedState(c.FixedPart)
 		if err != nil {
 			return nil, err
