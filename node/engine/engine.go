@@ -184,6 +184,7 @@ func (e *Engine) run(ctx context.Context) {
 		var err error
 
 		blockTicker := time.NewTicker(15 * time.Second)
+		channelTicker := time.NewTicker(5 * time.Second)
 
 		select {
 
@@ -202,6 +203,8 @@ func (e *Engine) run(ctx context.Context) {
 		case <-blockTicker.C:
 			blockNum := e.chain.GetLastConfirmedBlockNum()
 			err = e.store.SetLastBlockNumSeen(blockNum)
+		case <-channelTicker.C:
+			err = e.processStoreChannels()
 		case <-ctx.Done():
 			e.wg.Done()
 			return
@@ -431,10 +434,35 @@ func (e *Engine) handleChainEvent(chainEvent chainservice.Event) (EngineEvent, e
 
 	c, ok := e.store.GetChannelById(chainEvent.ChannelID())
 	if !ok {
-		// TODO: Right now the chain service returns chain events for ALL channels even those we aren't involved in
-		// for now we can ignore channels we aren't involved in
-		// in the future the chain service should allow us to register for specific channels
-		return EngineEvent{}, nil
+		// If channel doesn't exist and chain event is ChallengeRegistered then create a new direct defund objective
+		// This doesn't occur for actor who registered the challenge
+		_, isChallengeRegistered := chainEvent.(chainservice.ChallengeRegisteredEvent)
+		if isChallengeRegistered {
+			ddfo, err := directdefund.NewObjective(directdefund.NewObjectiveRequest(chainEvent.ChannelID(), false), true, e.store.GetConsensusChannelById)
+			if err != nil {
+				// Node should not panic if it is unable to find the required consensus channel before creating objective
+				if errors.Is(err, directdefund.ErrChannelNotExist) {
+					return EngineEvent{}, nil
+				}
+
+				return EngineEvent{}, err
+			}
+			// If ddfo creation was successful, destroy the consensus channel to prevent it being used (a Channel will now take over governance)
+			err = e.store.DestroyConsensusChannel(chainEvent.ChannelID())
+			if err != nil {
+				return EngineEvent{}, err
+			}
+			c = ddfo.C
+			err = e.store.SetObjective(&ddfo)
+			if err != nil {
+				return EngineEvent{}, err
+			}
+		} else {
+			// TODO: Right now the chain service returns chain events for ALL channels even those we aren't involved in
+			// for now we can ignore channels we aren't involved in
+			// in the future the chain service should allow us to register for specific channels
+			return EngineEvent{}, nil
+		}
 	}
 
 	updatedChannel, err := c.UpdateWithChainEvent(chainEvent)
@@ -593,6 +621,7 @@ func (e *Engine) executeSideEffects(sideEffects protocols.SideEffects) error {
 	for _, proposal := range sideEffects.ProposalsToProcess {
 		e.fromLedger <- proposal
 	}
+
 	return nil
 }
 
@@ -852,6 +881,30 @@ func (e *Engine) logMessage(msg protocols.Message, direction messageDirection) {
 	} else {
 		e.logger.Debug("Sent message", "msg", msg.Summarize())
 	}
+}
+
+// processStoreChannels perform necessary actions for all channels in store
+func (e *Engine) processStoreChannels() error {
+	channels, err := e.store.GetAllChannels()
+	if err != nil {
+		return err
+	}
+
+	for _, ch := range channels {
+		// Liquidate assets for finalized channels
+		if ch.GetChannelMode() == channel.Finalized {
+			obj, ok := e.store.GetObjectiveByChannelId(ch.Id)
+			dDfo, isDdfo := obj.(*directdefund.Objective)
+
+			if ok && isDdfo && dDfo.IsChallengeInitiatedByMe {
+				_, err = e.attemptProgress(obj)
+				if err != nil {
+					return err
+				}
+			}
+		}
+	}
+	return nil
 }
 
 func (e *Engine) checkError(err error) {

@@ -8,10 +8,12 @@ import (
 	"math/big"
 	"strings"
 
+	"github.com/ethereum/go-ethereum/common"
 	"github.com/google/go-cmp/cmp"
 	"github.com/statechannels/go-nitro/channel"
 	"github.com/statechannels/go-nitro/channel/consensus_channel"
 	"github.com/statechannels/go-nitro/channel/state"
+	NitroAdjudicator "github.com/statechannels/go-nitro/node/engine/chainservice/adjudicator"
 	"github.com/statechannels/go-nitro/protocols"
 	"github.com/statechannels/go-nitro/types"
 )
@@ -19,12 +21,15 @@ import (
 const (
 	WaitingForFinalization protocols.WaitingFor = "WaitingForFinalization"
 	WaitingForWithdraw     protocols.WaitingFor = "WaitingForWithdraw"
+	WaitingForChallenge    protocols.WaitingFor = "WaitingForChallenge"
 	WaitingForNothing      protocols.WaitingFor = "WaitingForNothing" // Finished
 )
 
 const (
 	SignedStatePayload protocols.PayloadType = "SignedStatePayload"
 )
+
+var ErrChannelNotExist error = errors.New("could not find channel")
 
 const ObjectivePrefix = "DirectDefunding-"
 
@@ -42,6 +47,9 @@ type Objective struct {
 
 	// Whether a withdraw transaction has been declared as a side effect in a previous crank
 	withdrawTransactionSubmitted bool
+
+	IsChallengeInitiatedByMe      bool
+	challengeTransactionSubmitted bool
 }
 
 // isInConsensusOrFinalState returns true if the channel has a final state or latest state that is supported
@@ -77,7 +85,7 @@ func NewObjective(
 ) (Objective, error) {
 	cc, err := getConsensusChannel(request.ChannelId)
 	if err != nil {
-		return Objective{}, fmt.Errorf("could not find channel %s; %w", request.ChannelId, err)
+		return Objective{}, fmt.Errorf("%w %s: %w", ErrChannelNotExist, request.ChannelId, err)
 	}
 
 	if len(cc.FundingTargets()) != 0 {
@@ -120,6 +128,7 @@ func NewObjective(
 		init.finalTurnNum = latestSS.TurnNum
 	}
 
+	init.IsChallengeInitiatedByMe = request.IsChallenge
 	return init, nil
 }
 
@@ -148,7 +157,7 @@ func ConstructObjectiveFromPayload(
 	}
 
 	cId := s.ChannelId()
-	request := NewObjectiveRequest(cId)
+	request := NewObjectiveRequest(cId, false)
 	return NewObjective(request, preapprove, getConsensusChannel)
 }
 
@@ -228,6 +237,55 @@ func (o *Objective) Crank(secretKey *[]byte) (protocols.Objective, protocols.Sid
 		return &updated, sideEffects, WaitingForNothing, protocols.ErrNotApproved
 	}
 
+	// Direct defund with challenge
+	if updated.IsChallengeInitiatedByMe || updated.C.GetChannelMode() != channel.Open {
+		return o.crankWithChallenge(updated, sideEffects, secretKey)
+	}
+
+	// Direct defund without challenge
+	return o.crank(updated, sideEffects, secretKey)
+}
+
+func (o *Objective) crankWithChallenge(updated Objective, sideEffects protocols.SideEffects, secretKey *[]byte) (protocols.Objective, protocols.SideEffects, protocols.WaitingFor, error) {
+	// Initiate challenge transaction
+	if updated.IsChallengeInitiatedByMe && !updated.challengeTransactionSubmitted {
+		latestSupportedSignedState, err := updated.C.LatestSupportedSignedState()
+		if err != nil {
+			return &updated, sideEffects, WaitingForNothing, err
+		}
+
+		challengerSig, _ := NitroAdjudicator.SignChallengeMessage(latestSupportedSignedState.State(), *secretKey)
+		challengeTx := protocols.NewChallengeTransaction(updated.C.Id, latestSupportedSignedState, make([]state.SignedState, 0), challengerSig)
+		sideEffects.TransactionsToSubmit = append(sideEffects.TransactionsToSubmit, challengeTx)
+		updated.challengeTransactionSubmitted = true
+		return &updated, sideEffects, WaitingForChallenge, nil
+	}
+
+	// Wait for channel to finalize
+	if updated.C.GetChannelMode() == channel.Challenge {
+		return &updated, sideEffects, WaitingForFinalization, nil
+	}
+
+	// Liquidate the assets
+	if updated.C.GetChannelMode() == channel.Finalized && !updated.withdrawTransactionSubmitted && !updated.fullyWithdrawn() {
+		latestSupportedSignedState, _ := updated.C.LatestSupportedSignedState()
+		transferTx := protocols.NewTransferAllTransaction(updated.C.Id, latestSupportedSignedState)
+		sideEffects.TransactionsToSubmit = append(sideEffects.TransactionsToSubmit, transferTx)
+		updated.withdrawTransactionSubmitted = true
+		return &updated, sideEffects, WaitingForWithdraw, nil
+	}
+
+	// Direct defund with challenge is complete
+	if updated.C.GetChannelMode() == channel.Finalized && updated.fullyWithdrawn() {
+		updated.C.OnChain.FinalizesAt = common.Big0
+		updated.Status = protocols.Completed
+		return &updated, sideEffects, WaitingForNothing, nil
+	}
+
+	return &updated, sideEffects, WaitingForNothing, fmt.Errorf("objective %s in invalid state", string(updated.Id()))
+}
+
+func (o *Objective) crank(updated Objective, sideEffects protocols.SideEffects, secretKey *[]byte) (protocols.Objective, protocols.SideEffects, protocols.WaitingFor, error) {
 	latestSignedState, err := updated.C.LatestSignedState()
 	if err != nil {
 		return &updated, sideEffects, WaitingForNothing, errors.New("the channel must contain at least one signed state to crank the defund objective")
@@ -308,7 +366,8 @@ func (o *Objective) clone() Objective {
 	clone.C = cClone
 	clone.finalTurnNum = o.finalTurnNum
 	clone.withdrawTransactionSubmitted = o.withdrawTransactionSubmitted
-
+	clone.IsChallengeInitiatedByMe = o.IsChallengeInitiatedByMe
+	clone.challengeTransactionSubmitted = o.challengeTransactionSubmitted
 	return clone
 }
 
@@ -316,13 +375,15 @@ func (o *Objective) clone() Objective {
 type ObjectiveRequest struct {
 	ChannelId        types.Destination
 	objectiveStarted chan struct{}
+	IsChallenge      bool
 }
 
 // NewObjectiveRequest creates a new ObjectiveRequest.
-func NewObjectiveRequest(channelId types.Destination) ObjectiveRequest {
+func NewObjectiveRequest(channelId types.Destination, isChallenge bool) ObjectiveRequest {
 	return ObjectiveRequest{
 		ChannelId:        channelId,
 		objectiveStarted: make(chan struct{}),
+		IsChallenge:      isChallenge,
 	}
 }
 

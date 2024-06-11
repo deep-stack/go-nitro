@@ -5,6 +5,7 @@ import (
 	"errors"
 	"fmt"
 	"math/big"
+	"time"
 
 	"github.com/ethereum/go-ethereum/common"
 	"github.com/statechannels/go-nitro/channel/state"
@@ -14,9 +15,10 @@ import (
 )
 
 type OnChainData struct {
-	Holdings  types.Funds
-	Outcome   outcome.Exit
-	StateHash common.Hash
+	Holdings    types.Funds
+	Outcome     outcome.Exit
+	StateHash   common.Hash
+	FinalizesAt *big.Int
 }
 
 type OffChainData struct {
@@ -63,6 +65,7 @@ func New(s state.State, myIndex uint) (*Channel, error) {
 	}
 	c.MyIndex = myIndex
 	c.OnChain.Holdings = make(types.Funds)
+	c.OnChain.FinalizesAt = big.NewInt(0)
 	c.FixedPart = s.FixedPart().Clone()
 	c.OffChain.LatestSupportedStateTurnNum = MaxTurnNum // largest uint64 value reserved for "no supported state"
 
@@ -141,6 +144,7 @@ func (c *Channel) Clone() *Channel {
 	}
 	d.FixedPart = c.FixedPart.Clone()
 	d.OnChain.Holdings = c.OnChain.Holdings
+	d.OnChain.FinalizesAt = c.OnChain.FinalizesAt
 	return d
 }
 
@@ -221,10 +225,20 @@ func (c Channel) HasSupportedState() bool {
 // LatestSupportedState returns the latest supported state. A state is supported if it is signed
 // by all participants.
 func (c Channel) LatestSupportedState() (state.State, error) {
-	if c.OffChain.LatestSupportedStateTurnNum == MaxTurnNum {
-		return state.State{}, errors.New(`no state is yet supported`)
+	signedState, err := c.LatestSupportedSignedState()
+	if err != nil {
+		return state.State{}, err
 	}
-	return c.OffChain.SignedStateForTurnNum[c.OffChain.LatestSupportedStateTurnNum].State(), nil
+	return signedState.State(), err
+}
+
+// LatestSupportedSignedState returns latest supported signed state. A state is supported if it is signed
+// by all participants.
+func (c Channel) LatestSupportedSignedState() (state.SignedState, error) {
+	if c.OffChain.LatestSupportedStateTurnNum == MaxTurnNum {
+		return state.SignedState{}, errors.New(`no state is yet supported`)
+	}
+	return c.OffChain.SignedStateForTurnNum[c.OffChain.LatestSupportedStateTurnNum], nil
 }
 
 // LatestSignedState fetches the state with the largest turn number signed by at least one participant.
@@ -353,11 +367,14 @@ func (c *Channel) UpdateWithChainEvent(event chainservice.Event) (*Channel, erro
 		}
 		c.OnChain.StateHash = h
 		c.OnChain.Outcome = e.Outcome()
+		c.OnChain.FinalizesAt = e.FinalizesAt
 		ss, err := e.SignedState(c.FixedPart)
 		if err != nil {
 			return nil, err
 		}
 		c.AddSignedState(ss)
+
+	// TODO: Handle challenge cleared event
 	default:
 		return &Channel{}, fmt.Errorf("channel %+v cannot handle event %+v", c, event)
 	}
@@ -366,4 +383,19 @@ func (c *Channel) UpdateWithChainEvent(event chainservice.Event) (*Channel, erro
 	c.LastChainUpdate.BlockNum = event.BlockNum()
 	c.LastChainUpdate.TxIndex = event.TxIndex()
 	return c, nil
+}
+
+// GetChannelMode returns the mode of the channel
+// It determines the mode based on the channel 'FinalizesAt' timestamp
+func (c Channel) GetChannelMode() ChannelMode {
+	// TODO: Get timestamp from latest block as done in _mode method of StatusManager contract
+	currentTimestamp := big.NewInt(time.Now().Unix())
+
+	if c.OnChain.FinalizesAt.Cmp(big.NewInt(0)) == 0 {
+		return Open
+	} else if c.OnChain.FinalizesAt.Cmp(currentTimestamp) <= 0 {
+		return Finalized
+	} else {
+		return Challenge
+	}
 }
