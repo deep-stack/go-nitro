@@ -15,14 +15,14 @@ import (
 // Event dictates which methods all chain events must implement
 type Event interface {
 	ChannelID() types.Destination
-	BlockNum() uint64
+	Block() LatestBlock
 	TxIndex() uint
 }
 
 // commonEvent declares fields shared by all chain events
 type commonEvent struct {
 	channelID types.Destination
-	blockNum  uint64
+	block     LatestBlock
 	txIndex   uint
 }
 
@@ -30,8 +30,8 @@ func (ce commonEvent) ChannelID() types.Destination {
 	return ce.channelID
 }
 
-func (ce commonEvent) BlockNum() uint64 {
-	return ce.blockNum
+func (ce commonEvent) Block() LatestBlock {
+	return ce.block
 }
 
 func (ce commonEvent) TxIndex() uint {
@@ -55,7 +55,7 @@ type DepositedEvent struct {
 }
 
 func (de DepositedEvent) String() string {
-	return "Deposited " + de.Asset.String() + " leaving " + de.NowHeld.String() + " now held against channel " + de.channelID.String() + " at Block " + fmt.Sprint(de.blockNum)
+	return "Deposited " + de.Asset.String() + " leaving " + de.NowHeld.String() + " now held against channel " + de.channelID.String() + " at Block " + fmt.Sprint(de.block.BlockNum)
 }
 
 // AllocationUpdated is an internal representation of the AllocationUpdated blockchain event
@@ -66,7 +66,7 @@ type AllocationUpdatedEvent struct {
 }
 
 func (aue AllocationUpdatedEvent) String() string {
-	return "Channel " + aue.channelID.String() + " has had allocation updated to " + aue.assetAndAmount.String() + " at Block " + fmt.Sprint(aue.blockNum)
+	return "Channel " + aue.channelID.String() + " has had allocation updated to " + aue.assetAndAmount.String() + " at Block " + fmt.Sprint(aue.block.BlockNum)
 }
 
 // ConcludedEvent is an internal representation of the Concluded blockchain event
@@ -75,7 +75,7 @@ type ConcludedEvent struct {
 }
 
 func (ce ConcludedEvent) String() string {
-	return "Channel " + ce.channelID.String() + " concluded at Block " + fmt.Sprint(ce.blockNum)
+	return "Channel " + ce.channelID.String() + " concluded at Block " + fmt.Sprint(ce.block.BlockNum)
 }
 
 type ChallengeRegisteredEvent struct {
@@ -89,7 +89,7 @@ type ChallengeRegisteredEvent struct {
 // NewChallengeRegisteredEvent constructs a ChallengeRegisteredEvent
 func NewChallengeRegisteredEvent(
 	channelId types.Destination,
-	blockNum uint64,
+	block LatestBlock,
 	txIndex uint,
 	variablePart state.VariablePart,
 	sigs []state.Signature,
@@ -97,7 +97,7 @@ func NewChallengeRegisteredEvent(
 	isInitiatedByMe bool,
 ) ChallengeRegisteredEvent {
 	return ChallengeRegisteredEvent{
-		commonEvent: commonEvent{channelID: channelId, blockNum: blockNum, txIndex: txIndex},
+		commonEvent: commonEvent{channelID: channelId, block: block, txIndex: txIndex},
 		candidate: state.VariablePart{
 			AppData: variablePart.AppData,
 			Outcome: variablePart.Outcome,
@@ -133,15 +133,15 @@ func (cr ChallengeRegisteredEvent) SignedState(fp state.FixedPart) (state.Signed
 }
 
 func (cr ChallengeRegisteredEvent) String() string {
-	return "Challenge registered for Channel " + cr.channelID.String() + " at Block " + fmt.Sprint(cr.blockNum)
+	return "Challenge registered for Channel " + cr.channelID.String() + " at Block " + fmt.Sprint(cr.block.BlockNum)
 }
 
-func NewDepositedEvent(channelId types.Destination, blockNum uint64, txIndex uint, assetAddress common.Address, nowHeld *big.Int) DepositedEvent {
-	return DepositedEvent{commonEvent{channelId, blockNum, txIndex}, assetAddress, nowHeld}
+func NewDepositedEvent(channelId types.Destination, block LatestBlock, txIndex uint, assetAddress common.Address, nowHeld *big.Int) DepositedEvent {
+	return DepositedEvent{commonEvent{channelId, block, txIndex}, assetAddress, nowHeld}
 }
 
-func NewAllocationUpdatedEvent(channelId types.Destination, blockNum uint64, txIndex uint, assetAddress common.Address, assetAmount *big.Int) AllocationUpdatedEvent {
-	return AllocationUpdatedEvent{commonEvent{channelId, blockNum, txIndex}, assetAndAmount{AssetAddress: assetAddress, AssetAmount: assetAmount}}
+func NewAllocationUpdatedEvent(channelId types.Destination, block LatestBlock, txIndex uint, assetAddress common.Address, assetAmount *big.Int) AllocationUpdatedEvent {
+	return AllocationUpdatedEvent{commonEvent{channelId, block, txIndex}, assetAndAmount{AssetAddress: assetAddress, AssetAmount: assetAmount}}
 }
 
 type ChallengeClearedEvent struct {
@@ -150,11 +150,11 @@ type ChallengeClearedEvent struct {
 }
 
 func (cc ChallengeClearedEvent) String() string {
-	return "Challenge cleared for Channel " + cc.channelID.String() + " at Block " + fmt.Sprint(cc.blockNum)
+	return "Challenge cleared for Channel " + cc.channelID.String() + " at Block " + fmt.Sprint(cc.block.BlockNum)
 }
 
-func NewChallengeClearedEvent(channelId types.Destination, blockNum uint64, txIndex uint, newTurnNumRecord *big.Int) ChallengeClearedEvent {
-	return ChallengeClearedEvent{commonEvent: commonEvent{channelID: channelId, blockNum: blockNum, txIndex: txIndex}, newTurnNumRecord: newTurnNumRecord}
+func NewChallengeClearedEvent(channelId types.Destination, block LatestBlock, txIndex uint, newTurnNumRecord *big.Int) ChallengeClearedEvent {
+	return ChallengeClearedEvent{commonEvent: commonEvent{channelID: channelId, block: block, txIndex: txIndex}, newTurnNumRecord: newTurnNumRecord}
 }
 
 // ChainEventHandler describes an objective that can handle chain events
@@ -175,6 +175,8 @@ type ChainService interface {
 	GetChainId() (*big.Int, error)
 	// GetLastConfirmedBlockNum returns the highest blockNum that satisfies the chainservice's REQUIRED_BLOCK_CONFIRMATIONS
 	GetLastConfirmedBlockNum() uint64
+	// GetLatestBlock returns the latest block
+	GetLatestBlock() LatestBlock
 	// Close closes the ChainService
 	Close() error
 }

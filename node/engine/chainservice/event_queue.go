@@ -8,15 +8,20 @@ import (
 )
 
 type eventTracker struct {
-	latestBlockNum uint64
-	events         eventQueue
-	mu             sync.Mutex
+	latestBlock LatestBlock
+	events      eventQueue
+	mu          sync.Mutex
 }
 
-func NewEventTracker(startBlock uint64) *eventTracker {
+type LatestBlock struct {
+	BlockNum  uint64
+	Timestamp uint64
+}
+
+func NewEventTracker(startBlock LatestBlock) *eventTracker {
 	eventQueue := eventQueue{}
 	heap.Init(&eventQueue)
-	return &eventTracker{latestBlockNum: startBlock, events: eventQueue}
+	return &eventTracker{latestBlock: startBlock, events: eventQueue}
 }
 
 func (eT *eventTracker) Push(l types.Log) {

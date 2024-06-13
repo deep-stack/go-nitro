@@ -10,6 +10,7 @@ import (
 	"github.com/statechannels/go-nitro/channel/consensus_channel"
 	"github.com/statechannels/go-nitro/crypto"
 	"github.com/statechannels/go-nitro/internal/safesync"
+	"github.com/statechannels/go-nitro/node/engine/chainservice"
 	"github.com/statechannels/go-nitro/payments"
 	"github.com/statechannels/go-nitro/protocols"
 	"github.com/statechannels/go-nitro/protocols/directdefund"
@@ -24,6 +25,11 @@ type blockData struct {
 	mu       sync.Mutex
 }
 
+type latestBlockData struct {
+	block chainservice.LatestBlock
+	mu    sync.Mutex
+}
+
 type MemStore struct {
 	objectives         safesync.Map[[]byte]
 	channels           safesync.Map[[]byte]
@@ -31,6 +37,7 @@ type MemStore struct {
 	channelToObjective safesync.Map[protocols.ObjectiveId]
 	vouchers           safesync.Map[[]byte]
 	lastBlockSeen      blockData
+	latestBlockSeen    latestBlockData
 
 	key     string // the signing key of the store's engine
 	address string // the (Ethereum) address associated to the signing key
@@ -147,6 +154,20 @@ func (ms *MemStore) GetLastBlockNumSeen() (uint64, error) {
 	lastBlockNumSeen := ms.lastBlockSeen.blockNum
 	ms.lastBlockSeen.mu.Unlock()
 	return lastBlockNumSeen, nil
+}
+
+func (ms *MemStore) SetLatestBlock(block chainservice.LatestBlock) error {
+	ms.latestBlockSeen.mu.Lock()
+	ms.latestBlockSeen.block = block
+	ms.latestBlockSeen.mu.Unlock()
+	return nil
+}
+
+func (ms *MemStore) GetLatestBlock() (chainservice.LatestBlock, error) {
+	ms.latestBlockSeen.mu.Lock()
+	latestBlockSeen := ms.latestBlockSeen.block
+	ms.latestBlockSeen.mu.Unlock()
+	return latestBlockSeen, nil
 }
 
 // SetChannel sets the channel in the store.

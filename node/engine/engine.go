@@ -207,6 +207,9 @@ func (e *Engine) run(ctx context.Context) {
 		case <-blockTicker.C:
 			blockNum := e.chain.GetLastConfirmedBlockNum()
 			err = e.store.SetLastBlockNumSeen(blockNum)
+			e.checkError(err)
+			block := e.chain.GetLatestBlock()
+			err = e.store.SetLatestBlock(block)
 		case <-channelTicker.C:
 			err = e.processStoreChannels()
 		case <-ctx.Done():
@@ -430,8 +433,12 @@ func (e *Engine) handleMessage(message protocols.Message) (EngineEvent, error) {
 //   - generates an updated objective, and
 //   - attempts progress.
 func (e *Engine) handleChainEvent(chainEvent chainservice.Event) (EngineEvent, error) {
-	e.logger.Info("Handling chain event", "blockNum", chainEvent.BlockNum(), "event", chainEvent)
-	err := e.store.SetLastBlockNumSeen(chainEvent.BlockNum())
+	e.logger.Info("Handling chain event", "blockNum", chainEvent.Block().BlockNum, "event", chainEvent)
+	err := e.store.SetLastBlockNumSeen(chainEvent.Block().BlockNum)
+	if err != nil {
+		return EngineEvent{}, err
+	}
+	err = e.store.SetLatestBlock(chainEvent.Block())
 	if err != nil {
 		return EngineEvent{}, err
 	}

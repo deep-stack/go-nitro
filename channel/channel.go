@@ -46,8 +46,8 @@ type ChainUpdateData struct {
 
 // isNewChainEvent returns true if the event has a greater block number (or equal blocknumber but with greater tx index) than prior chain events process by the receiver.
 func (c *Channel) isNewChainEvent(event chainservice.Event) bool {
-	return event.BlockNum() > c.LastChainUpdate.BlockNum ||
-		(event.BlockNum() == c.LastChainUpdate.BlockNum && event.TxIndex() > c.LastChainUpdate.TxIndex)
+	return event.Block().BlockNum > c.LastChainUpdate.BlockNum ||
+		(event.Block().BlockNum == c.LastChainUpdate.BlockNum && event.TxIndex() > c.LastChainUpdate.TxIndex)
 }
 
 // New constructs a new Channel from the supplied state.
@@ -392,7 +392,7 @@ func (c *Channel) UpdateWithChainEvent(event chainservice.Event) (*Channel, erro
 	}
 
 	// Update Channel.LastChainUpdate
-	c.LastChainUpdate.BlockNum = event.BlockNum()
+	c.LastChainUpdate.BlockNum = event.Block().BlockNum
 	c.LastChainUpdate.TxIndex = event.TxIndex()
 	return c, nil
 }

@@ -52,6 +52,16 @@ func (mc *MockChainService) GetLastConfirmedBlockNum() uint64 {
 	return blockNum
 }
 
+func (mc *MockChainService) GetLatestBlock() LatestBlock {
+	mc.chain.blockNumMu.Lock()
+	blockNum := mc.chain.BlockNum
+	mc.chain.blockNumMu.Unlock()
+
+	return LatestBlock{
+		BlockNum: blockNum,
+	}
+}
+
 func (mc *MockChainService) Close() error {
 	return nil
 }
