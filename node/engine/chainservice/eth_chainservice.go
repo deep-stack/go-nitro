@@ -542,7 +542,7 @@ func (ecs *EthChainService) updateEventTracker(errorChan chan<- error, block *La
 	ecs.eventTracker.mu.Lock()
 
 	if block != nil && block.BlockNum > ecs.eventTracker.latestBlock.BlockNum {
-		ecs.eventTracker.latestBlock.BlockNum = block.BlockNum
+		ecs.eventTracker.latestBlock = *block
 	}
 
 	if chainEvent != nil {

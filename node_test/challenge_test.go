@@ -26,7 +26,7 @@ func TestChallenge(t *testing.T) {
 		Description:       "Direct defund with Challenge",
 		Chain:             AnvilChain,
 		MessageService:    TestMessageService,
-		ChallengeDuration: 10,
+		ChallengeDuration: 5,
 		MessageDelay:      0,
 		LogName:           "challenge_test",
 		Participants: []TestParticipant{
@@ -70,8 +70,10 @@ func TestChallenge(t *testing.T) {
 	objA, _ := objectiveA.(*directdefund.Objective)
 	objB, _ := objectiveB.(*directdefund.Objective)
 
-	testhelpers.Assert(t, objA.C.GetChannelMode() == channel.Challenge, "Expected channel status to be challenge")
-	testhelpers.Assert(t, objB.C.GetChannelMode() == channel.Challenge, "Expected channel status to be challenge")
+	blockA, _ := storeA.GetLatestBlock()
+	blockB, _ := storeB.GetLatestBlock()
+	testhelpers.Assert(t, objA.C.GetChannelMode(blockA.Timestamp) == channel.Challenge, "Expected channel status to be challenge")
+	testhelpers.Assert(t, objB.C.GetChannelMode(blockB.Timestamp) == channel.Challenge, "Expected channel status to be challenge")
 
 	// Wait for objectives to complete
 	chA := nodeA.ObjectiveCompleteChan(response)

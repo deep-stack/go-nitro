@@ -19,6 +19,7 @@ type jsonObjective struct {
 	ChallengeTransactionSubmitted  bool
 	IsCheckpoint                   bool
 	CheckpointTransactionSubmitted bool
+	LatestBlockTime                uint64
 }
 
 // MarshalJSON returns a JSON representation of the DirectDefundObjective
@@ -34,6 +35,7 @@ func (o Objective) MarshalJSON() ([]byte, error) {
 		o.challengeTransactionSubmitted,
 		o.checkpointTransactionSubmitted,
 		o.IsCheckpoint,
+		o.LatestBlockTime,
 	}
 
 	return json.Marshal(jsonDDFO)
@@ -64,6 +66,7 @@ func (o *Objective) UnmarshalJSON(data []byte) error {
 	o.challengeTransactionSubmitted = jsonDDFO.ChallengeTransactionSubmitted
 	o.checkpointTransactionSubmitted = jsonDDFO.CheckpointTransactionSubmitted
 	o.IsCheckpoint = jsonDDFO.IsCheckpoint
+	o.LatestBlockTime = jsonDDFO.LatestBlockTime
 
 	return nil
 }

@@ -5,7 +5,6 @@ import (
 	"errors"
 	"fmt"
 	"math/big"
-	"time"
 
 	"github.com/ethereum/go-ethereum/common"
 	"github.com/statechannels/go-nitro/channel/state"
@@ -399,13 +398,10 @@ func (c *Channel) UpdateWithChainEvent(event chainservice.Event) (*Channel, erro
 
 // GetChannelMode returns the mode of the channel
 // It determines the mode based on the channel 'FinalizesAt' timestamp
-func (c Channel) GetChannelMode() ChannelMode {
-	// TODO: Get timestamp from latest block as done in _mode method of StatusManager contract
-	currentTimestamp := big.NewInt(time.Now().Unix())
-
+func (c Channel) GetChannelMode(latestBlockTime uint64) ChannelMode {
 	if c.OnChain.FinalizesAt.Cmp(big.NewInt(0)) == 0 {
 		return Open
-	} else if c.OnChain.FinalizesAt.Cmp(currentTimestamp) <= 0 {
+	} else if c.OnChain.FinalizesAt.Cmp(new(big.Int).SetUint64(latestBlockTime)) <= 0 {
 		return Finalized
 	} else {
 		return Challenge
