@@ -53,8 +53,6 @@ type Objective struct {
 
 	IsCheckpoint                   bool
 	checkpointTransactionSubmitted bool
-
-	LatestBlockTime uint64
 }
 
 // isInConsensusOrFinalState returns true if the channel has a final state or latest state that is supported
@@ -243,7 +241,7 @@ func (o *Objective) Crank(secretKey *[]byte) (protocols.Objective, protocols.Sid
 	}
 
 	// Direct defund with challenge
-	if updated.IsChallenge || updated.IsCheckpoint || updated.C.GetChannelMode(updated.LatestBlockTime) != channel.Open {
+	if updated.IsChallenge || updated.IsCheckpoint || updated.C.OnChain.ChannelMode != channel.Open {
 		return o.crankWithChallenge(updated, sideEffects, secretKey)
 	}
 
@@ -279,12 +277,12 @@ func (o *Objective) crankWithChallenge(updated Objective, sideEffects protocols.
 	}
 
 	// Wait for channel to finalize
-	if updated.C.GetChannelMode(updated.LatestBlockTime) == channel.Challenge {
+	if updated.C.OnChain.ChannelMode == channel.Challenge {
 		return &updated, sideEffects, WaitingForFinalization, nil
 	}
 
 	// Liquidate the assets
-	if updated.C.GetChannelMode(updated.LatestBlockTime) == channel.Finalized && !updated.withdrawTransactionSubmitted && !updated.FullyWithdrawn() {
+	if updated.C.OnChain.ChannelMode == channel.Finalized && !updated.withdrawTransactionSubmitted && !updated.FullyWithdrawn() {
 		latestSupportedSignedState, _ := updated.C.LatestSupportedSignedState()
 		transferTx := protocols.NewTransferAllTransaction(updated.C.Id, latestSupportedSignedState)
 		sideEffects.TransactionsToSubmit = append(sideEffects.TransactionsToSubmit, transferTx)
@@ -293,13 +291,13 @@ func (o *Objective) crankWithChallenge(updated Objective, sideEffects protocols.
 	}
 
 	// Direct defund with challenge objective is complete after asset liquidation
-	if updated.C.GetChannelMode(updated.LatestBlockTime) == channel.Finalized && updated.FullyWithdrawn() {
+	if updated.C.OnChain.ChannelMode == channel.Finalized && updated.FullyWithdrawn() {
 		updated.Status = protocols.Completed
 		return &updated, sideEffects, WaitingForNothing, nil
 	}
 
 	// Direct defund with challenge objective is complete after challenge is cleared
-	if updated.C.GetChannelMode(updated.LatestBlockTime) == channel.Open {
+	if updated.C.OnChain.ChannelMode == channel.Open {
 		updated.Status = protocols.Completed
 		return &updated, sideEffects, WaitingForNothing, nil
 	}
@@ -394,8 +392,6 @@ func (o *Objective) clone() Objective {
 
 	clone.IsCheckpoint = o.IsCheckpoint
 	clone.checkpointTransactionSubmitted = o.checkpointTransactionSubmitted
-
-	clone.LatestBlockTime = o.LatestBlockTime
 
 	return clone
 }

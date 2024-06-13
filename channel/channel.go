@@ -19,6 +19,7 @@ type OnChainData struct {
 	StateHash                common.Hash
 	FinalizesAt              *big.Int
 	IsChallengeInitiatedByMe bool
+	ChannelMode              ChannelMode
 }
 
 type OffChainData struct {
@@ -67,6 +68,7 @@ func New(s state.State, myIndex uint) (*Channel, error) {
 	c.OnChain.Holdings = make(types.Funds)
 	c.OnChain.FinalizesAt = big.NewInt(0)
 	c.OnChain.IsChallengeInitiatedByMe = false
+	c.OnChain.ChannelMode = Open
 	c.FixedPart = s.FixedPart().Clone()
 	c.OffChain.LatestSupportedStateTurnNum = MaxTurnNum // largest uint64 value reserved for "no supported state"
 
@@ -146,6 +148,7 @@ func (c *Channel) Clone() *Channel {
 	d.FixedPart = c.FixedPart.Clone()
 	d.OnChain.Holdings = c.OnChain.Holdings
 	d.OnChain.FinalizesAt = c.OnChain.FinalizesAt
+	d.OnChain.ChannelMode = c.OnChain.ChannelMode
 	d.OnChain.IsChallengeInitiatedByMe = c.OnChain.IsChallengeInitiatedByMe
 	return d
 }
@@ -396,14 +399,17 @@ func (c *Channel) UpdateWithChainEvent(event chainservice.Event) (*Channel, erro
 	return c, nil
 }
 
-// GetChannelMode returns the mode of the channel
+// UpdateChannelMode returns the mode of the channel
 // It determines the mode based on the channel 'FinalizesAt' timestamp
-func (c Channel) GetChannelMode(latestBlockTime uint64) ChannelMode {
+func (c *Channel) UpdateChannelMode(latestBlockTime uint64) ChannelMode {
 	if c.OnChain.FinalizesAt.Cmp(big.NewInt(0)) == 0 {
+		c.OnChain.ChannelMode = Open
 		return Open
 	} else if c.OnChain.FinalizesAt.Cmp(new(big.Int).SetUint64(latestBlockTime)) <= 0 {
+		c.OnChain.ChannelMode = Finalized
 		return Finalized
 	} else {
+		c.OnChain.ChannelMode = Challenge
 		return Challenge
 	}
 }

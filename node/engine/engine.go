@@ -209,9 +209,7 @@ func (e *Engine) run(ctx context.Context) {
 			err = e.store.SetLastBlockNumSeen(blockNum)
 		case <-channelTicker.C:
 			block := e.chain.GetLatestBlock()
-			err = e.store.SetLatestBlock(block)
-			e.checkError(err)
-			err = e.processStoreChannels()
+			err = e.processStoreChannels(block)
 		case <-ctx.Done():
 			e.wg.Done()
 			return
@@ -438,10 +436,6 @@ func (e *Engine) handleChainEvent(chainEvent chainservice.Event) (EngineEvent, e
 	if err != nil {
 		return EngineEvent{}, err
 	}
-	err = e.store.SetLatestBlock(chainEvent.Block())
-	if err != nil {
-		return EngineEvent{}, err
-	}
 
 	c, ok := e.store.GetChannelById(chainEvent.ChannelID())
 	if !ok {
@@ -480,6 +474,7 @@ func (e *Engine) handleChainEvent(chainEvent chainservice.Event) (EngineEvent, e
 	if err != nil {
 		return EngineEvent{}, err
 	}
+	updatedChannel.UpdateChannelMode(chainEvent.Block().Timestamp)
 
 	err = e.store.SetChannel(updatedChannel)
 	if err != nil {
@@ -489,11 +484,6 @@ func (e *Engine) handleChainEvent(chainEvent chainservice.Event) (EngineEvent, e
 	objective, ok := e.store.GetObjectiveByChannelId(chainEvent.ChannelID())
 
 	if ok {
-		dDfo, isDdfo := objective.(*directdefund.Objective)
-		if isDdfo {
-			dDfo.LatestBlockTime = chainEvent.Block().Timestamp
-			return e.attemptProgress(objective)
-		}
 		return e.attemptProgress(objective)
 	}
 	return EngineEvent{}, nil
@@ -566,11 +556,6 @@ func (e *Engine) handleObjectiveRequest(or protocols.ObjectiveRequest) (EngineEv
 		if err != nil {
 			return failedEngineEvent, fmt.Errorf("handleAPIEvent: Could not destroy consensus channel for %+v: %w", request, err)
 		}
-		block, err := e.store.GetLatestBlock()
-		if err != nil {
-			return failedEngineEvent, fmt.Errorf("handleAPIEvent: Failed to get latest block %+v: %w", request, err)
-		}
-		ddfo.LatestBlockTime = block.Timestamp
 		return e.attemptProgress(&ddfo)
 
 	default:
@@ -631,12 +616,6 @@ func (e *Engine) handleCounterChallengeRequest(request types.CounterChallengeReq
 	default:
 		return fmt.Errorf("unknown counter challenge action")
 	}
-
-	block, err := e.store.GetLatestBlock()
-	if err != nil {
-		return err
-	}
-	obj.LatestBlockTime = block.Timestamp
 	_, err = e.attemptProgress(objective)
 	if err != nil {
 		return err
@@ -976,26 +955,30 @@ func (e *Engine) logMessage(msg protocols.Message, direction messageDirection) {
 }
 
 // processStoreChannels perform necessary actions for all channels in store
-func (e *Engine) processStoreChannels() error {
+func (e *Engine) processStoreChannels(latestblock chainservice.LatestBlock) error {
 	channels, err := e.store.GetAllChannels()
 	if err != nil {
 		return err
 	}
 
 	for _, ch := range channels {
-		// Liquidate assets for finalized channels
-		block, err := e.store.GetLatestBlock()
-		if err != nil {
-			return err
+		// Store current on chain channel mode
+		prevChannelMode := ch.OnChain.ChannelMode
+		currentChannelMode := ch.UpdateChannelMode(latestblock.Timestamp)
+		if currentChannelMode != prevChannelMode {
+			err := e.store.SetChannel(ch)
+			if err != nil {
+				return err
+			}
 		}
 
-		if ch.GetChannelMode(block.Timestamp) == channel.Finalized {
+		// Liquidate assets for finalized channels
+		if currentChannelMode == channel.Finalized {
 			obj, ok := e.store.GetObjectiveByChannelId(ch.Id)
 			dDfo, isDdfo := obj.(*directdefund.Objective)
 
 			if ok && isDdfo && dDfo.C.OnChain.IsChallengeInitiatedByMe {
-				dDfo.LatestBlockTime = block.Timestamp
-				_, err = e.attemptProgress(obj)
+				_, err = e.attemptProgress(dDfo)
 				if err != nil {
 					return err
 				}
