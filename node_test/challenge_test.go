@@ -89,14 +89,15 @@ func TestChallenge(t *testing.T) {
 }
 
 func TestCheckpoint(t *testing.T) {
-	t.Skip()
-	tc := TestCase{
-		Description:       "Checkpoint test",
+	const payAmount = 2000
+
+	testCase := TestCase{
+		Description:       "Check point test",
 		Chain:             AnvilChain,
 		MessageService:    TestMessageService,
+		ChallengeDuration: 10,
 		MessageDelay:      0,
 		LogName:           "Checkpoint_test",
-		ChallengeDuration: 5,
 		Participants: []TestParticipant{
 			{StoreType: MemStore, Actor: testactors.Alice},
 			{StoreType: MemStore, Actor: testactors.Bob},
@@ -106,74 +107,99 @@ func TestCheckpoint(t *testing.T) {
 	dataFolder, cleanup := testhelpers.GenerateTempStoreFolder()
 	defer cleanup()
 
-	infra := setupSharedInfra(tc)
+	infra := setupSharedInfra(testCase)
 	defer infra.Close(t)
 
 	// Create go-nitro nodes
-	nodeA, _, _, storeA, chainServiceA := setupIntegrationNode(tc, tc.Participants[0], infra, []string{}, dataFolder)
+	nodeA, _, _, storeA, _ := setupIntegrationNode(testCase, testCase.Participants[0], infra, []string{}, dataFolder)
 	defer nodeA.Close()
-	nodeB, _, _, storeB, chainServiceB := setupIntegrationNode(tc, tc.Participants[1], infra, []string{}, dataFolder)
+	nodeB, _, _, _, _ := setupIntegrationNode(testCase, testCase.Participants[1], infra, []string{}, dataFolder)
 	defer nodeB.Close()
 
-	// Separate chain service to listen for events
-	testChainServiceB := setupChainService(tc, tc.Participants[1], infra)
-	defer testChainServiceB.Close()
+	// Create ledger channel and check balance of node
+	ledgerChannel := openLedgerChannel(t, nodeA, nodeB, types.Address{}, uint32(testCase.ChallengeDuration))
+	balanceNodeA, _ := infra.anvilChain.GetAccountBalance(testCase.Participants[0].Address())
+	balanceNodeB, _ := infra.anvilChain.GetAccountBalance(testCase.Participants[1].Address())
+	t.Log("Balance of Alice", balanceNodeA, "\nBalance of Bob", balanceNodeB)
+	testhelpers.Assert(t, balanceNodeA.Int64() == 0, "Balance of Alice should be zero")
+	testhelpers.Assert(t, balanceNodeB.Int64() == 0, "Balance of Bob should be zero")
 
-	// Create ledger channel
-	ledgerChannel := openLedgerChannel(t, nodeA, nodeB, types.Address{}, uint32(tc.ChallengeDuration))
+	oldConsensusChannelAlice, err := storeA.GetConsensusChannelById(ledgerChannel)
+	if err != nil {
+		t.Error(err)
+	}
 
-	// Store current state
-	oldState := getLatestSignedState(storeA, ledgerChannel)
+	ledgerUpdatesChannelNodeB := nodeB.LedgerUpdatedChan(ledgerChannel)
 
-	// Conduct virtual fund and virtual defund
+	// Conduct virtual fund, make payment and virtual defund
 	virtualOutcome := initialPaymentOutcome(*nodeA.Address, *nodeB.Address, common.BigToAddress(common.Big0))
-	response, err := nodeA.CreatePaymentChannel([]common.Address{}, *nodeB.Address, uint32(tc.ChallengeDuration), virtualOutcome)
+	response, err := nodeA.CreatePaymentChannel([]common.Address{}, *nodeB.Address, uint32(testCase.ChallengeDuration), virtualOutcome)
 	if err != nil {
 		t.Error(err)
 	}
 	waitForObjectives(t, nodeA, nodeB, []node.Node{}, []protocols.ObjectiveId{response.Id})
+	// Alice pays Bob
+	nodeA.Pay(response.ChannelId, big.NewInt(payAmount))
+	nodeBVoucher := <-nodeB.ReceivedVouchers()
+	t.Logf("Voucher recieved %+v", nodeBVoucher)
 	virtualDefundResponse, err := nodeA.ClosePaymentChannel(response.ChannelId)
 	if err != nil {
 		t.Error(err)
 	}
 	waitForObjectives(t, nodeA, nodeB, []node.Node{}, []protocols.ObjectiveId{virtualDefundResponse})
 
-	// Store current state after virtual fund and defund
-	newState := getLatestSignedState(storeB, ledgerChannel)
-
-	// Alice calls challenge method using old state
-	sendChallengeTransaction(t, oldState, tc.Participants[0].PrivateKey, ledgerChannel, chainServiceA)
-
-	// Bob listens for challenge registered event
-	event := waitForEvent(t, testChainServiceB.EventFeed(), chainservice.ChallengeRegisteredEvent{})
-	t.Log("Challenge registed event received", event)
-	challengeRegisteredEvent, ok := event.(chainservice.ChallengeRegisteredEvent)
-	testhelpers.Assert(t, ok, "Expected challenge registered event")
-	latestBlock, _ := infra.anvilChain.GetLatestBlock()
-	testhelpers.Assert(t, latestBlock.Header().Time < challengeRegisteredEvent.FinalizesAt.Uint64(), "Expected channel to not be finalized")
-
-	// Bob calls checkpoint method using new state
-	checkpointTx := protocols.NewCheckpointTransaction(ledgerChannel, newState, make([]state.SignedState, 0))
-	err = chainServiceB.SendTransaction(checkpointTx)
+	// Alice performs a direct fund with a challenge using the old state
+	newConsensusChannelAlice, err := storeA.GetConsensusChannelById(ledgerChannel)
 	if err != nil {
 		t.Error(err)
 	}
+	err = storeA.DestroyConsensusChannel(ledgerChannel)
+	if err != nil {
+		t.Log(err)
+	}
+	err = storeA.SetConsensusChannel(oldConsensusChannelAlice)
+	if err != nil {
+		t.Log(err)
+	}
+	res, err := nodeA.CloseLedgerChannel(ledgerChannel, true)
+	if err != nil {
+		t.Log(err)
+	}
 
-	// Listen for challenge cleared event
-	event = waitForEvent(t, testChainServiceB.EventFeed(), chainservice.ChallengeClearedEvent{})
-	t.Log("Challenge cleared event received", event)
-	challengeClearedEvent, ok := event.(chainservice.ChallengeClearedEvent)
-	testhelpers.Assert(t, ok, "Expected challenge cleared event")
-	testhelpers.Assert(t, challengeClearedEvent.ChannelID() == ledgerChannel, "Channel ID mismatch")
+	// Bob waits for the channel to enter challenge mode and then counters the registered challenge by checkpoint
+	listenForLedgerUpdates(ledgerUpdatesChannelNodeB, channel.Challenge)
+	// Let Bob process Alice's challenge
+	time.Sleep(1 * time.Second)
+	nodeB.CounterChallenge(ledgerChannel, types.Checkpoint)
 
-	time.Sleep(time.Duration(tc.ChallengeDuration) * time.Second)
-	latestBlock, _ = infra.anvilChain.GetLatestBlock()
-	testhelpers.Assert(t, challengeRegisteredEvent.FinalizesAt.Uint64() <= latestBlock.Header().Time, "Expected challenge duration to be completed")
+	// Wait for direct defund objectives to complete
+	chA := nodeA.ObjectiveCompleteChan(res)
+	chB := nodeB.ObjectiveCompleteChan(res)
+	<-chA
+	<-chB
 
-	// Alice attempts to liquidate the asset after the challenge duration, but the attempt fails because the outcome has not been finalized
-	transferTx := protocols.NewTransferAllTransaction(ledgerChannel, oldState)
-	err = chainServiceA.SendTransaction(transferTx)
-	testhelpers.Assert(t, err.Error() == "execution reverted: revert: Channel not finalized.", "Expected execution reverted error")
+	// Bob performs normal direct defund
+	err = storeA.SetConsensusChannel(newConsensusChannelAlice)
+	if err != nil {
+		t.Log(err)
+	}
+	res, err = nodeB.CloseLedgerChannel(ledgerChannel, false)
+	if err != nil {
+		t.Log(err)
+	}
+	// Wait for direct defund objectives to complete
+	chA = nodeA.ObjectiveCompleteChan(res)
+	chB = nodeB.ObjectiveCompleteChan(res)
+	<-chA
+	<-chB
+
+	// Check assets are liquidated
+	balanceNodeA, _ = infra.anvilChain.GetAccountBalance(testCase.Participants[0].Address())
+	balanceNodeB, _ = infra.anvilChain.GetAccountBalance(testCase.Participants[1].Address())
+	t.Log("Balance of Alice", balanceNodeA, "\nBalance of Bob", balanceNodeB)
+	// Alice's balance is determined by subtracting amount paid from her ledger deposit, while Bob's balance is calculated by adding his ledger deposit to the amount received
+	testhelpers.Assert(t, balanceNodeA.Cmp(big.NewInt(ledgerChannelDeposit-payAmount)) == 0, "Balance of Alice (%v) should be equal to (%v)", balanceNodeA, ledgerChannelDeposit-payAmount)
+	testhelpers.Assert(t, balanceNodeB.Cmp(big.NewInt(ledgerChannelDeposit+payAmount)) == 0, "Balance of Bob (%v) should be equal to (%v)", balanceNodeB, ledgerChannelDeposit+payAmount)
 }
 
 func TestCounterChallenge(t *testing.T) {
