@@ -2,6 +2,7 @@ package query
 
 import (
 	"github.com/ethereum/go-ethereum/common/hexutil"
+	"github.com/statechannels/go-nitro/channel"
 	"github.com/statechannels/go-nitro/types"
 )
 
@@ -33,9 +34,10 @@ type PaymentChannelInfo struct {
 
 // LedgerChannelInfo contains balance and status info about a ledger channel
 type LedgerChannelInfo struct {
-	ID      types.Destination
-	Status  ChannelStatus
-	Balance LedgerChannelBalance
+	ID          types.Destination
+	Status      ChannelStatus
+	Balance     LedgerChannelBalance
+	ChannelMode channel.ChannelMode
 }
 
 // LedgerChannelBalance contains the balance of a ledger channel

@@ -248,9 +248,10 @@ func ConstructLedgerInfoFromConsensus(con *consensus_channel.ConsensusChannel, m
 	}
 
 	return LedgerChannelInfo{
-		ID:      con.Id,
-		Status:  Open,
-		Balance: balance,
+		ID:          con.Id,
+		Status:      Open,
+		Balance:     balance,
+		ChannelMode: channel.Open,
 	}, nil
 }
 
@@ -265,9 +266,10 @@ func ConstructLedgerInfoFromChannel(c *channel.Channel, myAddress types.Address)
 	}
 
 	return LedgerChannelInfo{
-		ID:      c.Id,
-		Status:  getStatusFromChannel(c),
-		Balance: balance,
+		ID:          c.Id,
+		Status:      getStatusFromChannel(c),
+		Balance:     balance,
+		ChannelMode: c.OnChain.ChannelMode,
 	}, nil
 }
 
