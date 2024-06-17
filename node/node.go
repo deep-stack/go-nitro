@@ -72,6 +72,7 @@ func (n *Node) handleEngineEvent(update engine.EngineEvent) {
 	for _, completed := range update.CompletedObjectives {
 		d, _ := n.completedObjectives.LoadOrStore(string(completed.Id()), make(chan struct{}))
 		close(d)
+		n.completedObjectives.Delete(string(completed.Id()))
 
 		// use a nonblocking send to the RPC Client in case no one is listening
 		select {
@@ -322,4 +323,8 @@ func (n *Node) handleError(err error) {
 		panic(err)
 
 	}
+}
+
+func (n *Node) CounterChallenge(id types.Destination, action types.CounterChallengeAction) {
+	n.engine.CounterChallengeRequestsFromAPI <- types.CounterChallengeRequest{ChannelId: id, Action: action}
 }

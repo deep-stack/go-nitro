@@ -52,6 +52,21 @@ export type PaymentPayload = {
   Channel: string;
 };
 
+export enum CounterChallengeAction {
+  checkpoint,
+  challenge,
+}
+
+export type CounterChallengePayload = {
+  ChannelId: string;
+  Action: CounterChallengeAction;
+};
+
+export type CounterChallengeResult = {
+  ChannelId: string;
+  Action: keyof typeof CounterChallengeAction;
+};
+
 export type Voucher = {
   ChannelId: string;
   // todo: this should be a bigint
@@ -97,6 +112,11 @@ export type DirectFundRequest = JsonRpcRequest<
   DirectFundPayload
 >;
 export type PaymentRequest = JsonRpcRequest<"pay", PaymentPayload>;
+export type CounterChallengeRequest = JsonRpcRequest<
+  "counter_challenge",
+  CounterChallengePayload
+>;
+
 export type VirtualFundRequest = JsonRpcRequest<
   "create_payment_channel",
   VirtualFundPayload
@@ -141,6 +161,7 @@ export type ReceiveVoucherRequest = JsonRpcRequest<"receive_voucher", Voucher>;
 export type GetAuthTokenResponse = JsonRpcResponse<string>;
 export type GetPaymentChannelResponse = JsonRpcResponse<PaymentChannelInfo>;
 export type PaymentResponse = JsonRpcResponse<PaymentPayload>;
+export type CounterChallengeResponse = JsonRpcResponse<CounterChallengeResult>;
 export type GetLedgerChannelResponse = JsonRpcResponse<LedgerChannelInfo>;
 export type VirtualFundResponse = JsonRpcResponse<ObjectiveResponse>;
 export type VersionResponse = JsonRpcResponse<string>;
@@ -168,6 +189,7 @@ export type RPCRequestAndResponses = {
   get_ledger_channel: [GetLedgerChannelRequest, GetLedgerChannelResponse];
   get_payment_channel: [GetPaymentChannelRequest, GetPaymentChannelResponse];
   pay: [PaymentRequest, PaymentResponse];
+  counter_challenge: [CounterChallengeRequest, CounterChallengeResponse];
   close_payment_channel: [VirtualDefundRequest, VirtualDefundResponse];
   get_all_ledger_channels: [
     GetAllLedgerChannelsRequest,

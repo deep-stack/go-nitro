@@ -374,7 +374,15 @@ func (c *Channel) UpdateWithChainEvent(event chainservice.Event) (*Channel, erro
 		}
 		c.AddSignedState(ss)
 
-	// TODO: Handle challenge cleared event
+	case chainservice.ChallengeClearedEvent:
+		// On chain, statusOf map is updated with the same values below following a checkpoint transaction in ForceMove contract
+		c.OnChain.StateHash = common.Hash{}
+		c.OnChain.Outcome = outcome.Exit{}
+		c.OnChain.FinalizesAt = common.Big0
+
+	// TODO: Handle Checkpointed event
+	// Checkpointed event is emitted after a checkpoint transaction occurs on an open channel
+	// checkpoint method of ForceMove.sol contract
 	default:
 		return &Channel{}, fmt.Errorf("channel %+v cannot handle event %+v", c, event)
 	}

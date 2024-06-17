@@ -7,6 +7,7 @@ import { hideBin } from "yargs/helpers";
 
 import { NitroRpcClient } from "./rpc-client";
 import { compactJson, getLocalRPCUrl, logOutChannelUpdates } from "./utils";
+import { CounterChallengeAction } from "./types";
 
 yargs(hideBin(process.argv))
   .scriptName("nitro-rpc-client")
@@ -135,7 +136,7 @@ yargs(hideBin(process.argv))
     }
   )
   .command(
-    "direct-defund <channelId> <isChallenge>",
+    "direct-defund <channelId>",
     "Defunds a directly funded ledger channel",
     (yargsBuilder) => {
       return yargsBuilder
@@ -163,8 +164,11 @@ yargs(hideBin(process.argv))
         yargs.isChallenge
       );
       console.log(`Objective started ${id}`);
-      await rpcClient.WaitForPaymentChannelStatus(yargs.channelId, "Complete");
-      console.log(`Channel Complete ${yargs.channelId}`);
+      // Not using WaitForLedgerChannelStatus method with complete status, as the ledger channel status will be open if a challenge is cleared using checkpoint
+      await rpcClient.WaitForObjectiveToComplete(
+        `DirectDefunding-${yargs.channelId}`
+      );
+      console.log(`Objective Complete ${yargs.channelId}`);
       await rpcClient.Close();
       process.exit(0);
     }
@@ -321,6 +325,48 @@ yargs(hideBin(process.argv))
         yargs.amount
       );
       console.log(paymentChannelInfo);
+      await rpcClient.Close();
+      process.exit(0);
+    }
+  )
+  .command(
+    "counter-challenge <channelId> <action>",
+    "Counter challenge the registered challenge",
+    (yargsBuilder) => {
+      return yargsBuilder
+        .positional("channelId", {
+          describe: "The channel ID of the payment channel",
+          type: "string",
+          demandOption: true,
+        })
+        .positional("action", {
+          describe: "The action to take",
+          type: "string",
+          choices: ["checkpoint", "challenge"],
+          demandOption: true,
+        });
+    },
+    async (yargs) => {
+      const rpcPort = yargs.p;
+
+      const rpcClient = await NitroRpcClient.CreateHttpNitroClient(
+        getLocalRPCUrl(rpcPort)
+      );
+      if (yargs.n) logOutChannelUpdates(rpcClient);
+
+      const response = await rpcClient.CounterChallenge(
+        yargs.channelId,
+        CounterChallengeAction[
+          yargs.action as keyof typeof CounterChallengeAction
+        ]
+      );
+      console.log(
+        `Sending ${response.Action} transaction for channel ${response.ChannelId}`
+      );
+      await rpcClient.WaitForObjectiveToComplete(
+        `DirectDefunding-${yargs.channelId}`
+      );
+      console.log(`Objective Complete ${response.ChannelId}`);
       await rpcClient.Close();
       process.exit(0);
     }

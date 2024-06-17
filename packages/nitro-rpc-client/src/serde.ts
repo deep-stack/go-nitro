@@ -2,6 +2,8 @@ import Ajv, { JTDDataType } from "ajv/dist/jtd";
 
 import {
   ChannelStatus,
+  CounterChallengeAction,
+  CounterChallengeResult,
   LedgerChannelInfo,
   PaymentChannelInfo,
   RPCNotification,
@@ -42,6 +44,14 @@ type ObjectiveSchemaType = JTDDataType<typeof objectiveSchema>;
 
 const stringSchema = { type: "string" } as const;
 type StringSchemaType = JTDDataType<typeof stringSchema>;
+
+const counterChallengeSchema = {
+  properties: {
+    ChannelId: { type: "string" },
+    Action: { type: "int32" },
+  },
+} as const;
+type CounterChallengeSchemaType = JTDDataType<typeof counterChallengeSchema>;
 
 const ledgerChannelSchema = {
   properties: {
@@ -128,7 +138,8 @@ type ResponseSchema =
   | typeof paymentChannelsSchema
   | typeof paymentSchema
   | typeof voucherSchema
-  | typeof receiveVoucherSchema;
+  | typeof receiveVoucherSchema
+  | typeof counterChallengeSchema;
 
 type ResponseSchemaType =
   | ObjectiveSchemaType
@@ -139,7 +150,8 @@ type ResponseSchemaType =
   | PaymentChannelsSchemaType
   | PaymentSchemaType
   | VoucherSchemaType
-  | ReceiveVoucherSchemaType;
+  | ReceiveVoucherSchemaType
+  | CounterChallengeSchemaType;
 
 /**
  * Validates that the response is a valid JSON RPC response with a valid result
@@ -179,7 +191,12 @@ export function getAndValidateResult<T extends RequestMethod>(
         result,
         convertToInternalLedgerChannelType
       );
-
+    case "counter_challenge":
+      return validateAndConvertResult(
+        counterChallengeSchema,
+        result,
+        convertToCounterChallengeResultType
+      );
     case "get_all_ledger_channels":
       return validateAndConvertResult(
         ledgerChannelsSchema,
@@ -305,6 +322,17 @@ function convertToInternalLedgerChannelType(
       TheirBalance: BigInt(result.Balance.TheirBalance),
       MyBalance: BigInt(result.Balance.MyBalance),
     },
+  };
+}
+
+function convertToCounterChallengeResultType(
+  result: CounterChallengeSchemaType
+): CounterChallengeResult {
+  return {
+    ChannelId: result.ChannelId,
+    Action: CounterChallengeAction[
+      result.Action
+    ] as keyof typeof CounterChallengeAction,
   };
 }
 

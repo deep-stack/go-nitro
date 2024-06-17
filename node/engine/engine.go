@@ -62,8 +62,9 @@ type Engine struct {
 	// inbound go channels
 
 	// From API
-	ObjectiveRequestsFromAPI chan protocols.ObjectiveRequest
-	PaymentRequestsFromAPI   chan PaymentRequest
+	ObjectiveRequestsFromAPI        chan protocols.ObjectiveRequest
+	PaymentRequestsFromAPI          chan PaymentRequest
+	CounterChallengeRequestsFromAPI chan types.CounterChallengeRequest
 
 	fromChain    <-chan chainservice.Event
 	fromMsg      <-chan protocols.Message
@@ -139,6 +140,7 @@ func New(vm *payments.VoucherManager, msg messageservice.MessageService, chain c
 	// bind to inbound chans
 	e.ObjectiveRequestsFromAPI = make(chan protocols.ObjectiveRequest)
 	e.PaymentRequestsFromAPI = make(chan PaymentRequest)
+	e.CounterChallengeRequestsFromAPI = make(chan types.CounterChallengeRequest)
 
 	e.fromChain = chain.EventFeed()
 	e.fromMsg = msg.P2PMessages()
@@ -200,6 +202,8 @@ func (e *Engine) run(ctx context.Context) {
 			res, err = e.handleProposal(proposal)
 		case signReq := <-e.signRequests:
 			err = e.handleSignRequest(signReq)
+		case counterChallengeReq := <-e.CounterChallengeRequestsFromAPI:
+			err = e.handleCounterChallengeRequest(counterChallengeReq)
 		case <-blockTicker.C:
 			blockNum := e.chain.GetLastConfirmedBlockNum()
 			err = e.store.SetLastBlockNumSeen(blockNum)
@@ -590,6 +594,35 @@ func (e *Engine) handlePaymentRequest(request PaymentRequest) (EngineEvent, erro
 	return ee, e.executeSideEffects(se)
 }
 
+// handleCounterChallengeRequest handles a counter challenge request for the given channel.
+func (e *Engine) handleCounterChallengeRequest(request types.CounterChallengeRequest) error {
+	objective, err := e.store.GetObjectiveById(protocols.ObjectiveId(directdefund.ObjectivePrefix + request.ChannelId.String()))
+	if err != nil {
+		return err
+	}
+	obj, ok := objective.(*directdefund.Objective)
+
+	if !ok {
+		return fmt.Errorf("direct defund objective required")
+	}
+
+	switch request.Action {
+	case types.Checkpoint:
+		obj.IsCheckpoint = true
+	case types.Challenge:
+		obj.IsChallengeInitiatedByMe = true
+	default:
+		return fmt.Errorf("unknown counter challenge action")
+	}
+
+	_, err = e.attemptProgress(objective)
+	if err != nil {
+		return err
+	}
+
+	return nil
+}
+
 // sendMessages sends out the messages and records the metrics.
 func (e *Engine) sendMessages(msgs []protocols.Message) {
 	for _, message := range msgs {
@@ -666,6 +699,11 @@ func (e *Engine) attemptProgress(objective protocols.Objective) (outgoing Engine
 			return
 		}
 		err = e.spawnConsensusChannelIfDirectFundObjective(crankedObjective) // Here we assume that every directfund.Objective is for a ledger channel.
+		if err != nil {
+			return
+		}
+
+		err = e.destroyObjectiveAndChannelIfChallengeCleared(crankedObjective)
 		if err != nil {
 			return
 		}
@@ -747,6 +785,38 @@ func (e Engine) spawnConsensusChannelIfDirectFundObjective(crankedObjective prot
 			return fmt.Errorf("could not destroy consensus channel for objective %s: %w", crankedObjective.Id(), err)
 		}
 	}
+	return nil
+}
+
+// destroyObjectiveAndChannelIfChallengeCleared attempts to create and store a ConsensusChannel
+// derived from the supplied Objective if it is a directdefund.Objective and its challenge has been cleared.
+// If successful, the associated objective and channel will be destroyed.
+func (e Engine) destroyObjectiveAndChannelIfChallengeCleared(crankedObjective protocols.Objective) error {
+	dDfo, isDdfo := crankedObjective.(*directdefund.Objective)
+
+	if isDdfo && !dDfo.FullyWithdrawn() {
+		c, err := dDfo.CreateConsensusChannelFromChannel()
+		if err != nil {
+			return fmt.Errorf("could not create consensus channel for objective %s: %w", crankedObjective.Id(), err)
+		}
+
+		err = e.store.SetConsensusChannel(c)
+		if err != nil {
+			return fmt.Errorf("could not store consensus channel for objective %s: %w", crankedObjective.Id(), err)
+		}
+
+		err = e.store.DestroyObjective(dDfo.Id())
+		if err != nil {
+			return fmt.Errorf("could not destroy objective %s: %w", crankedObjective.Id(), err)
+		}
+
+		// Destroy the channel since the consensus channel takes over governance:
+		err = e.store.DestroyChannel(c.Id)
+		if err != nil {
+			return fmt.Errorf("could not destroy consensus channel for objective %s: %w", crankedObjective.Id(), err)
+		}
+	}
+
 	return nil
 }
 

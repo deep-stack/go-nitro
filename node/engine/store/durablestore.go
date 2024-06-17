@@ -670,3 +670,10 @@ func (ds *DurableStore) RemoveVoucherInfo(channelId types.Destination) error {
 		return err
 	})
 }
+
+func (ds *DurableStore) DestroyObjective(id protocols.ObjectiveId) error {
+	return ds.objectives.Update(func(tx *buntdb.Tx) error {
+		_, err := tx.Delete(string(id))
+		return err
+	})
+}

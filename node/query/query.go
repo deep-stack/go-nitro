@@ -19,6 +19,11 @@ import (
 
 // getStatusFromChannel returns the status of the channel
 func getStatusFromChannel(c *channel.Channel) ChannelStatus {
+	// If the assets are liquidated for a challenged channel, it indicates completion
+	if c.OnChain.FinalizesAt.Cmp(big.NewInt(0)) != 0 && !c.OnChain.Holdings.IsNonZero() {
+		return Complete
+	}
+
 	if c.FinalSignedByMe() {
 		if c.FinalCompleted() {
 			return Complete
