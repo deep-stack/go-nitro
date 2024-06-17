@@ -12,7 +12,8 @@ import (
 type AllocationType uint8
 
 const (
-	NormalAllocationType AllocationType = iota
+	SimpleAllocationType AllocationType = iota
+	WithdrawHelperAllocationType
 	GuaranteeAllocationType
 )
 
