@@ -738,9 +738,12 @@ func (e *Engine) attemptProgress(objective protocols.Objective) (outgoing Engine
 		err = e.spawnConsensusChannelIfBridgedFundObjective(crankedObjective) // Here we assume that every bridgedfund.Objective is for a ledger channel.
 		if err != nil {
 			return
-			}
+		}
 
 		err = e.destroyObjectiveAndChannelIfChallengeCleared(crankedObjective)
+		if err != nil {
+			return
+		}
 	}
 	err = e.executeSideEffects(sideEffects)
 	return
