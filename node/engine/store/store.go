@@ -9,7 +9,6 @@ import (
 	"github.com/statechannels/go-nitro/channel"
 	"github.com/statechannels/go-nitro/channel/consensus_channel"
 	"github.com/statechannels/go-nitro/crypto"
-	"github.com/statechannels/go-nitro/node/engine/chainservice"
 	"github.com/statechannels/go-nitro/payments"
 	"github.com/statechannels/go-nitro/protocols"
 	"github.com/statechannels/go-nitro/types"
@@ -21,7 +20,6 @@ const (
 	ErrNoSuchChannel    = types.ConstError("store: failed to find required channel data")
 	ErrLoadVouchers     = types.ConstError("store: could not load vouchers")
 	lastBlockNumSeenKey = "lastBlockNumSeen"
-	latestBlockSeenKey  = "latestBlockSeen"
 )
 
 // Store is responsible for persisting objectives, objective metadata, states, signatures, private keys and blockchain data
@@ -42,8 +40,6 @@ type Store interface {
 	ReleaseChannelFromOwnership(types.Destination) error                         // Release channel from being owned by any objective
 	GetLastBlockNumSeen() (uint64, error)
 	SetLastBlockNumSeen(uint64) error
-	GetLatestBlock() (chainservice.LatestBlock, error)
-	SetLatestBlock(chainservice.LatestBlock) error
 
 	ConsensusChannelStore
 	payments.VoucherStore

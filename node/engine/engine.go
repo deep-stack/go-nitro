@@ -185,8 +185,7 @@ func (e *Engine) run(ctx context.Context) {
 		var res EngineEvent
 		var err error
 
-		blockTicker := time.NewTicker(15 * time.Second)
-		channelTicker := time.NewTicker(5 * time.Second)
+		blockTicker := time.NewTicker(5 * time.Second)
 
 		select {
 
@@ -207,7 +206,7 @@ func (e *Engine) run(ctx context.Context) {
 		case <-blockTicker.C:
 			blockNum := e.chain.GetLastConfirmedBlockNum()
 			err = e.store.SetLastBlockNumSeen(blockNum)
-		case <-channelTicker.C:
+			e.checkError(err)
 			block := e.chain.GetLatestBlock()
 			err = e.processStoreChannels(block)
 		case <-ctx.Done():
@@ -616,6 +615,7 @@ func (e *Engine) handleCounterChallengeRequest(request types.CounterChallengeReq
 	default:
 		return fmt.Errorf("unknown counter challenge action")
 	}
+
 	_, err = e.attemptProgress(objective)
 	if err != nil {
 		return err
@@ -955,17 +955,17 @@ func (e *Engine) logMessage(msg protocols.Message, direction messageDirection) {
 }
 
 // processStoreChannels perform necessary actions for all channels in store
-func (e *Engine) processStoreChannels(latestblock chainservice.LatestBlock) error {
+func (e *Engine) processStoreChannels(latestblock chainservice.Block) error {
 	channels, err := e.store.GetAllChannels()
 	if err != nil {
 		return err
 	}
 
 	for _, ch := range channels {
-		// Store current on chain channel mode
+		// Update on chain channel mode and store the channel
 		prevChannelMode := ch.OnChain.ChannelMode
-		currentChannelMode := ch.UpdateChannelMode(latestblock.Timestamp)
-		if currentChannelMode != prevChannelMode {
+		ch.UpdateChannelMode(latestblock.Timestamp)
+		if ch.OnChain.ChannelMode != prevChannelMode {
 			err := e.store.SetChannel(ch)
 			if err != nil {
 				return err
@@ -973,7 +973,7 @@ func (e *Engine) processStoreChannels(latestblock chainservice.LatestBlock) erro
 		}
 
 		// Liquidate assets for finalized channels
-		if currentChannelMode == channel.Finalized {
+		if ch.OnChain.ChannelMode == channel.Finalized {
 			obj, ok := e.store.GetObjectiveByChannelId(ch.Id)
 			dDfo, isDdfo := obj.(*directdefund.Objective)
 

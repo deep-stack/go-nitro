@@ -15,7 +15,6 @@ import (
 	ta "github.com/statechannels/go-nitro/internal/testactors"
 	td "github.com/statechannels/go-nitro/internal/testdata"
 	"github.com/statechannels/go-nitro/internal/testhelpers"
-	"github.com/statechannels/go-nitro/node/engine/chainservice"
 	"github.com/statechannels/go-nitro/node/engine/store"
 	"github.com/statechannels/go-nitro/protocols"
 	"github.com/statechannels/go-nitro/protocols/directfund"
@@ -247,52 +246,6 @@ func TestGetLastBlockNumSeenDurableStore(t *testing.T) {
 	_ = durableStore.SetLastBlockNumSeen(want)
 
 	got, err := durableStore.GetLastBlockNumSeen()
-	if err != nil {
-		t.Fatal(err)
-	}
-
-	if diff := cmp.Diff(got, want); diff != "" {
-		t.Fatalf("fetched result different than expected %s", diff)
-	}
-}
-
-func TestGetLatestBlockMemStore(t *testing.T) {
-	sk := common.Hex2Bytes(`2af069c584758f9ec47c4224a8becc1983f28acfbe837bd7710b70f9fc6d5e44`)
-	ms := store.NewMemStore(sk)
-
-	want := chainservice.LatestBlock{
-		BlockNum:  15,
-		Timestamp: 100,
-	}
-	_ = ms.SetLatestBlock(want)
-
-	got, err := ms.GetLatestBlock()
-	if err != nil {
-		t.Fatal(err)
-	}
-
-	if diff := cmp.Diff(got, want); diff != "" {
-		t.Fatalf("fetched result different than expected %s", diff)
-	}
-}
-
-func TestGetLatestBlockDurableStore(t *testing.T) {
-	pk := common.Hex2Bytes(`2af069c584758f9ec47c4224a8becc1983f28acfbe837bd7710b70f9fc6d5e44`)
-
-	dataFolder, cleanup := testhelpers.GenerateTempStoreFolder()
-	defer cleanup()
-	durableStore, err := store.NewDurableStore(pk, dataFolder, buntdb.Config{})
-	if err != nil {
-		t.Fatal(err)
-	}
-
-	want := chainservice.LatestBlock{
-		BlockNum:  15,
-		Timestamp: 100,
-	}
-	_ = durableStore.SetLatestBlock(want)
-
-	got, err := durableStore.GetLatestBlock()
 	if err != nil {
 		t.Fatal(err)
 	}

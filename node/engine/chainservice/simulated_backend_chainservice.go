@@ -53,7 +53,6 @@ func (b *BackendWrapper) ChainID(ctx context.Context) (*big.Int, error) {
 }
 
 func (b *BackendWrapper) TransactionSender(context.Context, *ethTypes.Transaction, common.Hash, uint) (common.Address, error) {
-	// TODO: Handle TransactionSender in BackendWrapper
 	return common.Address{}, nil
 }
 

@@ -23,13 +23,13 @@ import (
 )
 
 type ChainOpts struct {
-	ChainUrl        string
-	ChainStartBlock uint64
-	ChainAuthToken  string
-	ChainPk         string
-	NaAddress       common.Address
-	VpaAddress      common.Address
-	CaAddress       common.Address
+	ChainUrl           string
+	ChainStartBlockNum uint64
+	ChainAuthToken     string
+	ChainPk            string
+	NaAddress          common.Address
+	VpaAddress         common.Address
+	CaAddress          common.Address
 }
 
 var (
@@ -124,28 +124,28 @@ func NewEthChainService(chainOpts ChainOpts) (ChainService, error) {
 		panic(err)
 	}
 
-	return newEthChainService(ethClient, chainOpts.ChainStartBlock, na, chainOpts.NaAddress, chainOpts.CaAddress, chainOpts.VpaAddress, txSigner)
+	return newEthChainService(ethClient, chainOpts.ChainStartBlockNum, na, chainOpts.NaAddress, chainOpts.CaAddress, chainOpts.VpaAddress, txSigner)
 }
 
 // newEthChainService constructs a chain service that submits transactions to a NitroAdjudicator
 // and listens to events from an eventSource
-func newEthChainService(chain ethChain, startBlock uint64, na *NitroAdjudicator.NitroAdjudicator,
+func newEthChainService(chain ethChain, startBlockNum uint64, na *NitroAdjudicator.NitroAdjudicator,
 	naAddress, caAddress, vpaAddress common.Address, txSigner *bind.TransactOpts,
 ) (*EthChainService, error) {
 	ctx, cancelCtx := context.WithCancel(context.Background())
 
 	logger := logging.LoggerWithAddress(slog.Default(), txSigner.From)
 
-	block, err := chain.BlockByNumber(ctx, new(big.Int).SetUint64(startBlock))
+	block, err := chain.BlockByNumber(ctx, new(big.Int).SetUint64(startBlockNum))
 	if err != nil {
 		cancelCtx()
 		return nil, err
 	}
-	latestBlock := LatestBlock{
-		BlockNum:  startBlock,
+	startBlock := Block{
+		BlockNum:  block.NumberU64(),
 		Timestamp: block.Time(),
 	}
-	tracker := NewEventTracker(latestBlock)
+	tracker := NewEventTracker(startBlock)
 
 	// Use a buffered channel so we don't have to worry about blocking on writing to the channel.
 	ecs := EthChainService{chain, na, naAddress, caAddress, vpaAddress, txSigner, make(chan Event, 10), logger, ctx, cancelCtx, &sync.WaitGroup{}, tracker, nil, nil}
@@ -164,7 +164,7 @@ func newEthChainService(chain ethChain, startBlock uint64, na *NitroAdjudicator.
 	go ecs.listenForErrors(errChan)
 
 	// Search for any missed events emitted while this node was offline
-	err = ecs.checkForMissedEvents(startBlock)
+	err = ecs.checkForMissedEvents(startBlock.BlockNum)
 	if err != nil {
 		return nil, err
 	}
@@ -340,7 +340,7 @@ func (ecs *EthChainService) dispatchChainEvents(logs []ethTypes.Log) error {
 				return fmt.Errorf("error in ParseDeposited: %w", err)
 			}
 
-			event := NewDepositedEvent(nad.Destination, LatestBlock{BlockNum: l.BlockNumber, Timestamp: block.Time()}, l.TxIndex, nad.Asset, nad.DestinationHoldings)
+			event := NewDepositedEvent(nad.Destination, Block{BlockNum: l.BlockNumber, Timestamp: block.Time()}, l.TxIndex, nad.Asset, nad.DestinationHoldings)
 			ecs.out <- event
 
 		case allocationUpdatedTopic:
@@ -364,7 +364,7 @@ func (ecs *EthChainService) dispatchChainEvents(logs []ethTypes.Log) error {
 			}
 			ecs.logger.Debug("assetAddress", "assetAddress", assetAddress)
 
-			event := NewAllocationUpdatedEvent(au.ChannelId, LatestBlock{BlockNum: l.BlockNumber, Timestamp: block.Time()}, l.TxIndex, assetAddress, au.FinalHoldings)
+			event := NewAllocationUpdatedEvent(au.ChannelId, Block{BlockNum: l.BlockNumber, Timestamp: block.Time()}, l.TxIndex, assetAddress, au.FinalHoldings)
 			ecs.out <- event
 
 		case concludedTopic:
@@ -374,7 +374,7 @@ func (ecs *EthChainService) dispatchChainEvents(logs []ethTypes.Log) error {
 				return fmt.Errorf("error in ParseConcluded: %w", err)
 			}
 
-			event := ConcludedEvent{commonEvent: commonEvent{channelID: ce.ChannelId, block: LatestBlock{BlockNum: l.BlockNumber, Timestamp: block.Time()}}}
+			event := ConcludedEvent{commonEvent: commonEvent{channelID: ce.ChannelId, block: Block{BlockNum: l.BlockNumber, Timestamp: block.Time()}}}
 			ecs.out <- event
 
 		case challengeRegisteredTopic:
@@ -401,7 +401,7 @@ func (ecs *EthChainService) dispatchChainEvents(logs []ethTypes.Log) error {
 
 			event := NewChallengeRegisteredEvent(
 				cr.ChannelId,
-				LatestBlock{BlockNum: l.BlockNumber, Timestamp: block.Time()},
+				Block{BlockNum: l.BlockNumber, Timestamp: block.Time()},
 				l.TxIndex,
 				state.VariablePart{
 					AppData: cr.Candidate.VariablePart.AppData,
@@ -419,7 +419,7 @@ func (ecs *EthChainService) dispatchChainEvents(logs []ethTypes.Log) error {
 			if err != nil {
 				return fmt.Errorf("error in ParseCheckpointed: %w", err)
 			}
-			event := NewChallengeClearedEvent(cp.ChannelId, LatestBlock{BlockNum: l.BlockNumber, Timestamp: block.Time()}, l.TxIndex, cp.NewTurnNumRecord)
+			event := NewChallengeClearedEvent(cp.ChannelId, Block{BlockNum: l.BlockNumber, Timestamp: block.Time()}, l.TxIndex, cp.NewTurnNumRecord)
 			ecs.out <- event
 		default:
 			ecs.logger.Info("Ignoring unknown chain event topic", "topic", l.Topics[0].String())
@@ -529,7 +529,7 @@ func (ecs *EthChainService) listenForNewBlocks(errorChan chan<- error, newBlockC
 			return
 
 		case newBlock := <-newBlockChan:
-			block := LatestBlock{BlockNum: newBlock.Number.Uint64(), Timestamp: newBlock.Time}
+			block := Block{BlockNum: newBlock.Number.Uint64(), Timestamp: newBlock.Time}
 			ecs.logger.Log(ecs.ctx, logging.LevelTrace, "detected new block", "block-num", block.BlockNum)
 			ecs.updateEventTracker(errorChan, &block, nil)
 		}
@@ -537,7 +537,7 @@ func (ecs *EthChainService) listenForNewBlocks(errorChan chan<- error, newBlockC
 }
 
 // updateEventTracker accepts a new block number and/or new event and dispatches a chain event if there are enough block confirmations
-func (ecs *EthChainService) updateEventTracker(errorChan chan<- error, block *LatestBlock, chainEvent *ethTypes.Log) {
+func (ecs *EthChainService) updateEventTracker(errorChan chan<- error, block *Block, chainEvent *ethTypes.Log) {
 	// lock the mutex for the shortest amount of time. The mutex only need to be locked to update the eventTracker data structure
 	ecs.eventTracker.mu.Lock()
 
@@ -638,7 +638,7 @@ func (ecs *EthChainService) GetLastConfirmedBlockNum() uint64 {
 	return confirmedBlockNum
 }
 
-func (ecs *EthChainService) GetLatestBlock() LatestBlock {
+func (ecs *EthChainService) GetLatestBlock() Block {
 	return ecs.eventTracker.latestBlock
 }
 

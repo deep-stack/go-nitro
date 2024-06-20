@@ -15,14 +15,14 @@ import (
 // Event dictates which methods all chain events must implement
 type Event interface {
 	ChannelID() types.Destination
-	Block() LatestBlock
+	Block() Block
 	TxIndex() uint
 }
 
 // commonEvent declares fields shared by all chain events
 type commonEvent struct {
 	channelID types.Destination
-	block     LatestBlock
+	block     Block
 	txIndex   uint
 }
 
@@ -30,7 +30,7 @@ func (ce commonEvent) ChannelID() types.Destination {
 	return ce.channelID
 }
 
-func (ce commonEvent) Block() LatestBlock {
+func (ce commonEvent) Block() Block {
 	return ce.block
 }
 
@@ -89,7 +89,7 @@ type ChallengeRegisteredEvent struct {
 // NewChallengeRegisteredEvent constructs a ChallengeRegisteredEvent
 func NewChallengeRegisteredEvent(
 	channelId types.Destination,
-	block LatestBlock,
+	block Block,
 	txIndex uint,
 	variablePart state.VariablePart,
 	sigs []state.Signature,
@@ -136,11 +136,11 @@ func (cr ChallengeRegisteredEvent) String() string {
 	return "Challenge registered for Channel " + cr.channelID.String() + " at Block " + fmt.Sprint(cr.block.BlockNum)
 }
 
-func NewDepositedEvent(channelId types.Destination, block LatestBlock, txIndex uint, assetAddress common.Address, nowHeld *big.Int) DepositedEvent {
+func NewDepositedEvent(channelId types.Destination, block Block, txIndex uint, assetAddress common.Address, nowHeld *big.Int) DepositedEvent {
 	return DepositedEvent{commonEvent{channelId, block, txIndex}, assetAddress, nowHeld}
 }
 
-func NewAllocationUpdatedEvent(channelId types.Destination, block LatestBlock, txIndex uint, assetAddress common.Address, assetAmount *big.Int) AllocationUpdatedEvent {
+func NewAllocationUpdatedEvent(channelId types.Destination, block Block, txIndex uint, assetAddress common.Address, assetAmount *big.Int) AllocationUpdatedEvent {
 	return AllocationUpdatedEvent{commonEvent{channelId, block, txIndex}, assetAndAmount{AssetAddress: assetAddress, AssetAmount: assetAmount}}
 }
 
@@ -153,7 +153,7 @@ func (cc ChallengeClearedEvent) String() string {
 	return "Challenge cleared for Channel " + cc.channelID.String() + " at Block " + fmt.Sprint(cc.block.BlockNum)
 }
 
-func NewChallengeClearedEvent(channelId types.Destination, block LatestBlock, txIndex uint, newTurnNumRecord *big.Int) ChallengeClearedEvent {
+func NewChallengeClearedEvent(channelId types.Destination, block Block, txIndex uint, newTurnNumRecord *big.Int) ChallengeClearedEvent {
 	return ChallengeClearedEvent{commonEvent: commonEvent{channelID: channelId, block: block, txIndex: txIndex}, newTurnNumRecord: newTurnNumRecord}
 }
 
@@ -176,7 +176,7 @@ type ChainService interface {
 	// GetLastConfirmedBlockNum returns the highest blockNum that satisfies the chainservice's REQUIRED_BLOCK_CONFIRMATIONS
 	GetLastConfirmedBlockNum() uint64
 	// GetLatestBlock returns the latest block
-	GetLatestBlock() LatestBlock
+	GetLatestBlock() Block
 	// Close closes the ChainService
 	Close() error
 }

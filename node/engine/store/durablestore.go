@@ -12,7 +12,6 @@ import (
 	"github.com/statechannels/go-nitro/channel"
 	"github.com/statechannels/go-nitro/channel/consensus_channel"
 	"github.com/statechannels/go-nitro/crypto"
-	"github.com/statechannels/go-nitro/node/engine/chainservice"
 	"github.com/statechannels/go-nitro/payments"
 	"github.com/statechannels/go-nitro/protocols"
 	"github.com/statechannels/go-nitro/protocols/directdefund"
@@ -244,35 +243,6 @@ func (ds *DurableStore) GetLastBlockNumSeen() (uint64, error) {
 func (ds *DurableStore) SetLastBlockNumSeen(blockNumber uint64) error {
 	return ds.lastBlockNumSeen.Update(func(tx *buntdb.Tx) error {
 		_, _, err := tx.Set(lastBlockNumSeenKey, strconv.FormatUint(blockNumber, 10), nil)
-		return err
-	})
-}
-
-func (ds *DurableStore) GetLatestBlock() (chainservice.LatestBlock, error) {
-	var result chainservice.LatestBlock
-	err := ds.lastBlockNumSeen.View(func(tx *buntdb.Tx) error {
-		vJSON, err := tx.Get(latestBlockSeenKey)
-		if err != nil {
-			if errors.Is(err, buntdb.ErrNotFound) {
-				result = chainservice.LatestBlock{BlockNum: 0, Timestamp: 0}
-				return nil
-			}
-			return err
-		}
-
-		return json.Unmarshal([]byte(vJSON), &result)
-	})
-
-	return result, err
-}
-
-func (ds *DurableStore) SetLatestBlock(block chainservice.LatestBlock) error {
-	jsonBlock, err := json.Marshal(block)
-	if err != nil {
-		return fmt.Errorf("Error in marshalling %w", err)
-	}
-	return ds.lastBlockNumSeen.Update(func(tx *buntdb.Tx) error {
-		_, _, err := tx.Set(latestBlockSeenKey, string(jsonBlock), nil)
 		return err
 	})
 }

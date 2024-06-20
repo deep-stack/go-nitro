@@ -399,17 +399,13 @@ func (c *Channel) UpdateWithChainEvent(event chainservice.Event) (*Channel, erro
 	return c, nil
 }
 
-// UpdateChannelMode returns the mode of the channel
-// It determines the mode based on the channel 'FinalizesAt' timestamp
-func (c *Channel) UpdateChannelMode(latestBlockTime uint64) ChannelMode {
+// UpdateChannelMode update channel mode based on the channel FinalizesAt timestamp and latest block timestamp
+func (c *Channel) UpdateChannelMode(latestBlockTime uint64) {
 	if c.OnChain.FinalizesAt.Cmp(big.NewInt(0)) == 0 {
 		c.OnChain.ChannelMode = Open
-		return Open
 	} else if c.OnChain.FinalizesAt.Cmp(new(big.Int).SetUint64(latestBlockTime)) <= 0 {
 		c.OnChain.ChannelMode = Finalized
-		return Finalized
 	} else {
 		c.OnChain.ChannelMode = Challenge
-		return Challenge
 	}
 }

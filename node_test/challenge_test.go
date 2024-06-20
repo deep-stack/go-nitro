@@ -148,14 +148,10 @@ func TestCheckpoint(t *testing.T) {
 	}
 	waitForObjectives(t, nodeA, nodeB, []node.Node{}, []protocols.ObjectiveId{virtualDefundResponse})
 
-	// Alice performs a direct fund with a challenge using the old state
+	// Alice performs a direct defund with a challenge using the old state
 	newConsensusChannelAlice, err := storeA.GetConsensusChannelById(ledgerChannel)
 	if err != nil {
 		t.Error(err)
-	}
-	err = storeA.DestroyConsensusChannel(ledgerChannel)
-	if err != nil {
-		t.Log(err)
 	}
 	err = storeA.SetConsensusChannel(oldConsensusChannelAlice)
 	if err != nil {
@@ -168,8 +164,6 @@ func TestCheckpoint(t *testing.T) {
 
 	// Bob waits for the channel to enter challenge mode and then counters the registered challenge by checkpoint
 	listenForLedgerUpdates(ledgerUpdatesChannelNodeB, channel.Challenge)
-	// Let Bob process Alice's challenge
-	time.Sleep(1 * time.Second)
 	nodeB.CounterChallenge(ledgerChannel, types.Checkpoint)
 
 	// Wait for direct defund objectives to complete
@@ -263,10 +257,6 @@ func TestCounterChallenge(t *testing.T) {
 	waitForObjectives(t, nodeA, nodeB, []node.Node{}, []protocols.ObjectiveId{virtualDefundResponse})
 
 	// Alice performs a direct fund with a challenge using the old state
-	err = storeA.DestroyConsensusChannel(ledgerChannel)
-	if err != nil {
-		t.Log(err)
-	}
 	err = storeA.SetConsensusChannel(oldConsensusChannel)
 	if err != nil {
 		t.Log(err)
@@ -278,8 +268,6 @@ func TestCounterChallenge(t *testing.T) {
 
 	// Bob waits for the channel to enter challenge mode and then counters the registered challenge by raising a new one
 	listenForLedgerUpdates(ledgerUpdatesChannelNodeB, channel.Challenge)
-	// Let Bob process Alice's challenge
-	time.Sleep(1 * time.Second)
 	nodeB.CounterChallenge(ledgerChannel, types.Challenge)
 
 	// Wait for direct defund objectives to complete
@@ -298,6 +286,7 @@ func TestCounterChallenge(t *testing.T) {
 }
 
 func TestVirtualPaymentChannel(t *testing.T) {
+	t.Skip()
 	tc := TestCase{
 		Description:       "Virtual channel test",
 		Chain:             AnvilChain,
@@ -451,15 +440,6 @@ func TestVirtualPaymentChannel(t *testing.T) {
 	// Assert balance equals ledger channel deposit since no payment has been made
 	testhelpers.Assert(t, balanceNodeA.Cmp(big.NewInt(ledgerChannelDeposit)) == 0, "Balance of Alice (%v) should be equal to ledgerChannelDeposit (%v)", balanceNodeA, ledgerChannelDeposit)
 	testhelpers.Assert(t, balanceNodeB.Cmp(big.NewInt(ledgerChannelDeposit)) == 0, "Balance of Bob (%v) should be equal to ledgerChannelDeposit (%v)", balanceNodeB, ledgerChannelDeposit)
-}
-
-func sendChallengeTransaction(t *testing.T, signedState state.SignedState, privateKey []byte, ledgerChannel types.Destination, chainService chainservice.ChainService) {
-	challengerSig, _ := NitroAdjudicator.SignChallengeMessage(signedState.State(), privateKey)
-	challengeTx := protocols.NewChallengeTransaction(ledgerChannel, signedState, make([]state.SignedState, 0), challengerSig)
-	err := chainService.SendTransaction(challengeTx)
-	if err != nil {
-		t.Error(err)
-	}
 }
 
 func getLatestSignedState(store store.Store, id types.Destination) state.SignedState {

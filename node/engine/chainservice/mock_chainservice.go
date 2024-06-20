@@ -52,12 +52,12 @@ func (mc *MockChainService) GetLastConfirmedBlockNum() uint64 {
 	return blockNum
 }
 
-func (mc *MockChainService) GetLatestBlock() LatestBlock {
+func (mc *MockChainService) GetLatestBlock() Block {
 	mc.chain.blockNumMu.Lock()
 	blockNum := mc.chain.BlockNum
 	mc.chain.blockNumMu.Unlock()
 
-	return LatestBlock{
+	return Block{
 		BlockNum: blockNum,
 	}
 }

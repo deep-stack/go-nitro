@@ -290,5 +290,5 @@ export type ChannelStatus = "Proposed" | "Open" | "Closing" | "Complete";
 export enum ChannelMode {
   Open,
   Challenge,
-  Finalized
+  Finalized,
 }
