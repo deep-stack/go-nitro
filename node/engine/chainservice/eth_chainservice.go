@@ -39,6 +39,7 @@ var (
 	depositedTopic           = naAbi.Events["Deposited"].ID
 	challengeRegisteredTopic = naAbi.Events["ChallengeRegistered"].ID
 	challengeClearedTopic    = naAbi.Events["ChallengeCleared"].ID
+	reclaimedTopic           = naAbi.Events["Reclaimed"].ID
 )
 
 var topicsToWatch = []common.Hash{
@@ -47,6 +48,7 @@ var topicsToWatch = []common.Hash{
 	depositedTopic,
 	challengeRegisteredTopic,
 	challengeClearedTopic,
+	reclaimedTopic,
 }
 
 const (
@@ -421,6 +423,17 @@ func (ecs *EthChainService) dispatchChainEvents(logs []ethTypes.Log) error {
 			}
 			event := NewChallengeClearedEvent(cp.ChannelId, Block{BlockNum: l.BlockNumber, Timestamp: block.Time()}, l.TxIndex, cp.NewTurnNumRecord)
 			ecs.out <- event
+
+		case reclaimedTopic:
+			ecs.logger.Debug("Processing Reclaimed event")
+			ce, err := ecs.na.ParseReclaimed(l)
+			if err != nil {
+				return fmt.Errorf("error in ParseReclaimed: %w", err)
+			}
+
+			event := ReclaimedEvent{commonEvent: commonEvent{channelID: ce.ChannelId, block: Block{BlockNum: l.BlockNumber, Timestamp: block.Time()}, txIndex: l.TxIndex}}
+			ecs.out <- event
+
 		default:
 			ecs.logger.Info("Ignoring unknown chain event topic", "topic", l.Topics[0].String())
 
@@ -639,6 +652,8 @@ func (ecs *EthChainService) GetLastConfirmedBlockNum() uint64 {
 }
 
 func (ecs *EthChainService) GetLatestBlock() Block {
+	ecs.eventTracker.mu.Lock()
+	defer ecs.eventTracker.mu.Unlock()
 	return ecs.eventTracker.latestBlock
 }
 

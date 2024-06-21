@@ -1,6 +1,8 @@
 // SPDX-License-Identifier: MIT
 pragma solidity 0.8.17;
 
+import {INitroTypes} from './INitroTypes.sol';
+
 /**
  * @dev The IMultiAssetHolder interface calls for functions that allow assets to be transferred from one channel to other channel and/or external destinations, as well as for guarantees to be claimed.
  */
@@ -39,7 +41,8 @@ interface IMultiAssetHolder {
 
     /**
      * @param sourceChannelId Id of a ledger channel containing a guarantee.
-     * @param sourceStateHash Hash of the state stored when the source channel finalized.
+     * @param fixedPart Data describing properties of the state channel that do not change with state updates.
+     * @param variablePart Data describing properties of the state channel that change with state updates.
      * @param sourceOutcomeBytes The abi.encode of source channel outcome
      * @param sourceAssetIndex the index of the targetted asset in the source outcome.
      * @param indexOfTargetInSource The index of the guarantee allocation to the target channel in the source outcome.
@@ -49,7 +52,8 @@ interface IMultiAssetHolder {
      */
     struct ReclaimArgs {
         bytes32 sourceChannelId;
-        bytes32 sourceStateHash;
+        INitroTypes.FixedPart fixedPart;
+        INitroTypes.VariablePart variablePart;
         bytes sourceOutcomeBytes;
         uint256 sourceAssetIndex;
         uint256 indexOfTargetInSource;
