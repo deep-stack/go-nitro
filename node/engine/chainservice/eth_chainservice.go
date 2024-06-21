@@ -561,22 +561,26 @@ func (ecs *EthChainService) listenForNewBlocks(errorChan chan<- error, newBlockC
 			}
 
 			// Use exponential backoff loop to attempt to re-establish subscription
+			retryFailed := true
 			for backoffTime := MIN_BACKOFF_TIME; backoffTime < MAX_BACKOFF_TIME; backoffTime *= 2 {
 				newBlockSub, err := ecs.chain.SubscribeNewHead(ecs.ctx, newBlockChan)
 				if err != nil {
-					errorChan <- fmt.Errorf("subscribeNewHead failed to resubscribe: %w", err)
+					ecs.logger.Warn("subscribeNewHead failed to resubscribe: " + err.Error())
 					time.Sleep(backoffTime)
 					continue
 				}
 
 				ecs.newBlockSub = newBlockSub
 				ecs.logger.Debug("resubscribed to chain new blocks")
+				retryFailed = false
 				break
 			}
 
-			ecs.logger.Error("subscribeNewHead failed to resubscribe")
-			errorChan <- fmt.Errorf("subscribeNewHead failed to resubscribe")
-			return
+			if retryFailed {
+				ecs.logger.Error("subscribeNewHead failed to resubscribe")
+				errorChan <- fmt.Errorf("subscribeNewHead failed to resubscribe")
+				return
+			}
 
 		case newBlock := <-newBlockChan:
 			block := Block{BlockNum: newBlock.Number.Uint64(), Timestamp: newBlock.Time}
