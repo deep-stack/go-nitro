@@ -669,7 +669,7 @@ func TestExitL2WithVirtualChannelStateUnilaterally(t *testing.T) {
 			{Type: voucherAmountSigTy},
 		}
 
-		voucherAmountSignatureData := VoucherAmountSignature{
+		voucherAmountSignatureData := protocols.VoucherAmountSignature{
 			Amount:    nodeAPrimeVirtualPaymentVoucher.Amount,
 			Signature: NitroAdjudicator.ConvertSignature(nodeAPrimeVirtualPaymentVoucher.Signature),
 		}
