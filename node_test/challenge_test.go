@@ -286,7 +286,6 @@ func TestCounterChallenge(t *testing.T) {
 }
 
 func TestVirtualPaymentChannel(t *testing.T) {
-	t.Skip()
 	tc := TestCase{
 		Description:       "Virtual channel test",
 		Chain:             AnvilChain,

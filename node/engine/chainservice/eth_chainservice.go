@@ -327,9 +327,9 @@ func (ecs *EthChainService) SendTransaction(tx protocols.ChainTransaction) error
 // and dispatches events to the out channel
 func (ecs *EthChainService) dispatchChainEvents(logs []ethTypes.Log) error {
 	for _, l := range logs {
-		block, err := ecs.chain.BlockByNumber(context.Background(), new(big.Int).SetUint64(l.BlockNumber))
+		block, err := ecs.chain.BlockByHash(context.Background(), l.BlockHash)
 		if err != nil {
-			return fmt.Errorf("error in BlockByNumber %w", err)
+			return fmt.Errorf("error in getting block by hash %w", err)
 		}
 
 		switch l.Topics[0] {
