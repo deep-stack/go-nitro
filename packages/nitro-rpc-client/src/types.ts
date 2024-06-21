@@ -241,6 +241,7 @@ export type LedgerChannelInfo = {
   ID: string;
   Status: ChannelStatus;
   Balance: LedgerChannelBalance;
+  ChannelMode: keyof typeof ChannelMode;
 };
 
 export type LedgerChannelBalance = {
@@ -285,3 +286,9 @@ export type AssetMetadata = {
 };
 
 export type ChannelStatus = "Proposed" | "Open" | "Closing" | "Complete";
+
+export enum ChannelMode {
+  Open,
+  Challenge,
+  Finalized,
+}

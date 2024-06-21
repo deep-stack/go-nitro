@@ -5,7 +5,6 @@ import (
 	"errors"
 	"fmt"
 	"math/big"
-	"time"
 
 	"github.com/ethereum/go-ethereum/common"
 	"github.com/statechannels/go-nitro/channel/state"
@@ -15,10 +14,12 @@ import (
 )
 
 type OnChainData struct {
-	Holdings    types.Funds
-	Outcome     outcome.Exit
-	StateHash   common.Hash
-	FinalizesAt *big.Int
+	Holdings                 types.Funds
+	Outcome                  outcome.Exit
+	StateHash                common.Hash
+	FinalizesAt              *big.Int
+	IsChallengeInitiatedByMe bool
+	ChannelMode              ChannelMode
 }
 
 type OffChainData struct {
@@ -45,8 +46,8 @@ type ChainUpdateData struct {
 
 // isNewChainEvent returns true if the event has a greater block number (or equal blocknumber but with greater tx index) than prior chain events process by the receiver.
 func (c *Channel) isNewChainEvent(event chainservice.Event) bool {
-	return event.BlockNum() > c.LastChainUpdate.BlockNum ||
-		(event.BlockNum() == c.LastChainUpdate.BlockNum && event.TxIndex() > c.LastChainUpdate.TxIndex)
+	return event.Block().BlockNum > c.LastChainUpdate.BlockNum ||
+		(event.Block().BlockNum == c.LastChainUpdate.BlockNum && event.TxIndex() > c.LastChainUpdate.TxIndex)
 }
 
 // New constructs a new Channel from the supplied state.
@@ -66,6 +67,8 @@ func New(s state.State, myIndex uint) (*Channel, error) {
 	c.MyIndex = myIndex
 	c.OnChain.Holdings = make(types.Funds)
 	c.OnChain.FinalizesAt = big.NewInt(0)
+	c.OnChain.IsChallengeInitiatedByMe = false
+	c.OnChain.ChannelMode = Open
 	c.FixedPart = s.FixedPart().Clone()
 	c.OffChain.LatestSupportedStateTurnNum = MaxTurnNum // largest uint64 value reserved for "no supported state"
 
@@ -145,6 +148,8 @@ func (c *Channel) Clone() *Channel {
 	d.FixedPart = c.FixedPart.Clone()
 	d.OnChain.Holdings = c.OnChain.Holdings
 	d.OnChain.FinalizesAt = c.OnChain.FinalizesAt
+	d.OnChain.ChannelMode = c.OnChain.ChannelMode
+	d.OnChain.IsChallengeInitiatedByMe = c.OnChain.IsChallengeInitiatedByMe
 	return d
 }
 
@@ -368,6 +373,7 @@ func (c *Channel) UpdateWithChainEvent(event chainservice.Event) (*Channel, erro
 		c.OnChain.StateHash = h
 		c.OnChain.Outcome = e.Outcome()
 		c.OnChain.FinalizesAt = e.FinalizesAt
+		c.OnChain.IsChallengeInitiatedByMe = e.IsInitiatedByMe
 		ss, err := e.SignedState(c.FixedPart)
 		if err != nil {
 			return nil, err
@@ -388,22 +394,18 @@ func (c *Channel) UpdateWithChainEvent(event chainservice.Event) (*Channel, erro
 	}
 
 	// Update Channel.LastChainUpdate
-	c.LastChainUpdate.BlockNum = event.BlockNum()
+	c.LastChainUpdate.BlockNum = event.Block().BlockNum
 	c.LastChainUpdate.TxIndex = event.TxIndex()
 	return c, nil
 }
 
-// GetChannelMode returns the mode of the channel
-// It determines the mode based on the channel 'FinalizesAt' timestamp
-func (c Channel) GetChannelMode() ChannelMode {
-	// TODO: Get timestamp from latest block as done in _mode method of StatusManager contract
-	currentTimestamp := big.NewInt(time.Now().Unix())
-
+// UpdateChannelMode update channel mode based on the channel FinalizesAt timestamp and latest block timestamp
+func (c *Channel) UpdateChannelMode(latestBlockTime uint64) {
 	if c.OnChain.FinalizesAt.Cmp(big.NewInt(0)) == 0 {
-		return Open
-	} else if c.OnChain.FinalizesAt.Cmp(currentTimestamp) <= 0 {
-		return Finalized
+		c.OnChain.ChannelMode = Open
+	} else if c.OnChain.FinalizesAt.Cmp(new(big.Int).SetUint64(latestBlockTime)) <= 0 {
+		c.OnChain.ChannelMode = Finalized
 	} else {
-		return Challenge
+		c.OnChain.ChannelMode = Challenge
 	}
 }

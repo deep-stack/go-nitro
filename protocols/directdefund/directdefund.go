@@ -48,7 +48,7 @@ type Objective struct {
 	// Whether a withdraw transaction has been declared as a side effect in a previous crank
 	withdrawTransactionSubmitted bool
 
-	IsChallengeInitiatedByMe      bool
+	IsChallenge                   bool
 	challengeTransactionSubmitted bool
 
 	IsCheckpoint                   bool
@@ -131,7 +131,7 @@ func NewObjective(
 		init.finalTurnNum = latestSS.TurnNum
 	}
 
-	init.IsChallengeInitiatedByMe = request.IsChallenge
+	init.IsChallenge = request.IsChallenge
 	return init, nil
 }
 
@@ -241,7 +241,7 @@ func (o *Objective) Crank(secretKey *[]byte) (protocols.Objective, protocols.Sid
 	}
 
 	// Direct defund with challenge
-	if updated.IsChallengeInitiatedByMe || updated.IsCheckpoint || updated.C.GetChannelMode() != channel.Open {
+	if updated.IsChallenge || updated.IsCheckpoint || updated.C.OnChain.ChannelMode != channel.Open {
 		return o.crankWithChallenge(updated, sideEffects, secretKey)
 	}
 
@@ -251,7 +251,7 @@ func (o *Objective) Crank(secretKey *[]byte) (protocols.Objective, protocols.Sid
 
 func (o *Objective) crankWithChallenge(updated Objective, sideEffects protocols.SideEffects, secretKey *[]byte) (protocols.Objective, protocols.SideEffects, protocols.WaitingFor, error) {
 	// Initiate challenge transaction
-	if updated.IsChallengeInitiatedByMe && !updated.challengeTransactionSubmitted {
+	if updated.IsChallenge && !updated.challengeTransactionSubmitted {
 		latestSupportedSignedState, err := updated.C.LatestSupportedSignedState()
 		if err != nil {
 			return &updated, sideEffects, WaitingForNothing, err
@@ -277,12 +277,12 @@ func (o *Objective) crankWithChallenge(updated Objective, sideEffects protocols.
 	}
 
 	// Wait for channel to finalize
-	if updated.C.GetChannelMode() == channel.Challenge {
+	if updated.C.OnChain.ChannelMode == channel.Challenge {
 		return &updated, sideEffects, WaitingForFinalization, nil
 	}
 
 	// Liquidate the assets
-	if updated.C.GetChannelMode() == channel.Finalized && !updated.withdrawTransactionSubmitted && !updated.FullyWithdrawn() {
+	if updated.C.OnChain.ChannelMode == channel.Finalized && !updated.withdrawTransactionSubmitted && !updated.FullyWithdrawn() {
 		latestSupportedSignedState, _ := updated.C.LatestSupportedSignedState()
 		transferTx := protocols.NewTransferAllTransaction(updated.C.Id, latestSupportedSignedState)
 		sideEffects.TransactionsToSubmit = append(sideEffects.TransactionsToSubmit, transferTx)
@@ -291,13 +291,13 @@ func (o *Objective) crankWithChallenge(updated Objective, sideEffects protocols.
 	}
 
 	// Direct defund with challenge objective is complete after asset liquidation
-	if updated.C.GetChannelMode() == channel.Finalized && updated.FullyWithdrawn() {
+	if updated.C.OnChain.ChannelMode == channel.Finalized && updated.FullyWithdrawn() {
 		updated.Status = protocols.Completed
 		return &updated, sideEffects, WaitingForNothing, nil
 	}
 
 	// Direct defund with challenge objective is complete after challenge is cleared
-	if updated.C.GetChannelMode() == channel.Open {
+	if updated.C.OnChain.ChannelMode == channel.Open {
 		updated.Status = protocols.Completed
 		return &updated, sideEffects, WaitingForNothing, nil
 	}
@@ -387,7 +387,7 @@ func (o *Objective) clone() Objective {
 	clone.finalTurnNum = o.finalTurnNum
 	clone.withdrawTransactionSubmitted = o.withdrawTransactionSubmitted
 
-	clone.IsChallengeInitiatedByMe = o.IsChallengeInitiatedByMe
+	clone.IsChallenge = o.IsChallenge
 	clone.challengeTransactionSubmitted = o.challengeTransactionSubmitted
 
 	clone.IsCheckpoint = o.IsCheckpoint

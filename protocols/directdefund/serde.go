@@ -15,7 +15,7 @@ type jsonObjective struct {
 	C                              types.Destination
 	FinalTurnNum                   uint64
 	TransactionSumbmitted          bool
-	IsChallengeInitiatedByMe       bool
+	IsChallenge                    bool
 	ChallengeTransactionSubmitted  bool
 	IsCheckpoint                   bool
 	CheckpointTransactionSubmitted bool
@@ -30,7 +30,7 @@ func (o Objective) MarshalJSON() ([]byte, error) {
 		o.C.Id,
 		o.finalTurnNum,
 		o.withdrawTransactionSubmitted,
-		o.IsChallengeInitiatedByMe,
+		o.IsChallenge,
 		o.challengeTransactionSubmitted,
 		o.checkpointTransactionSubmitted,
 		o.IsCheckpoint,
@@ -60,7 +60,7 @@ func (o *Objective) UnmarshalJSON(data []byte) error {
 	o.C.Id = jsonDDFO.C
 	o.finalTurnNum = jsonDDFO.FinalTurnNum
 	o.withdrawTransactionSubmitted = jsonDDFO.TransactionSumbmitted
-	o.IsChallengeInitiatedByMe = jsonDDFO.IsChallengeInitiatedByMe
+	o.IsChallenge = jsonDDFO.IsChallenge
 	o.challengeTransactionSubmitted = jsonDDFO.ChallengeTransactionSubmitted
 	o.checkpointTransactionSubmitted = jsonDDFO.CheckpointTransactionSubmitted
 	o.IsCheckpoint = jsonDDFO.IsCheckpoint

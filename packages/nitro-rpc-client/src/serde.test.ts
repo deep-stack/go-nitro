@@ -1,4 +1,5 @@
 import { getAndValidateResult } from "./serde";
+import { ChannelMode } from "./types";
 
 describe("get_address", () => {
   it("success: validate response string", () => {
@@ -30,6 +31,7 @@ describe("get_ledger_channel", () => {
           TheirBalance: "0xf368a",
           MyBalance: "0xf3686",
         },
+        ChannelMode: ChannelMode.Open,
       },
     };
 
@@ -43,6 +45,7 @@ describe("get_ledger_channel", () => {
         TheirBalance: 997002n,
         MyBalance: 996998n,
       },
+      ChannelMode: "Open",
     };
 
     const validatedResponse = getAndValidateResult(

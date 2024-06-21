@@ -185,8 +185,7 @@ func (e *Engine) run(ctx context.Context) {
 		var res EngineEvent
 		var err error
 
-		blockTicker := time.NewTicker(15 * time.Second)
-		channelTicker := time.NewTicker(5 * time.Second)
+		blockTicker := time.NewTicker(5 * time.Second)
 
 		select {
 
@@ -207,8 +206,9 @@ func (e *Engine) run(ctx context.Context) {
 		case <-blockTicker.C:
 			blockNum := e.chain.GetLastConfirmedBlockNum()
 			err = e.store.SetLastBlockNumSeen(blockNum)
-		case <-channelTicker.C:
-			err = e.processStoreChannels()
+			e.checkError(err)
+			block := e.chain.GetLatestBlock()
+			err = e.processStoreChannels(block)
 		case <-ctx.Done():
 			e.wg.Done()
 			return
@@ -430,8 +430,8 @@ func (e *Engine) handleMessage(message protocols.Message) (EngineEvent, error) {
 //   - generates an updated objective, and
 //   - attempts progress.
 func (e *Engine) handleChainEvent(chainEvent chainservice.Event) (EngineEvent, error) {
-	e.logger.Info("Handling chain event", "blockNum", chainEvent.BlockNum(), "event", chainEvent)
-	err := e.store.SetLastBlockNumSeen(chainEvent.BlockNum())
+	e.logger.Info("Handling chain event", "blockNum", chainEvent.Block().BlockNum, "event", chainEvent)
+	err := e.store.SetLastBlockNumSeen(chainEvent.Block().BlockNum)
 	if err != nil {
 		return EngineEvent{}, err
 	}
@@ -473,6 +473,7 @@ func (e *Engine) handleChainEvent(chainEvent chainservice.Event) (EngineEvent, e
 	if err != nil {
 		return EngineEvent{}, err
 	}
+	updatedChannel.UpdateChannelMode(chainEvent.Block().Timestamp)
 
 	err = e.store.SetChannel(updatedChannel)
 	if err != nil {
@@ -610,7 +611,7 @@ func (e *Engine) handleCounterChallengeRequest(request types.CounterChallengeReq
 	case types.Checkpoint:
 		obj.IsCheckpoint = true
 	case types.Challenge:
-		obj.IsChallengeInitiatedByMe = true
+		obj.IsChallenge = true
 	default:
 		return fmt.Errorf("unknown counter challenge action")
 	}
@@ -954,20 +955,30 @@ func (e *Engine) logMessage(msg protocols.Message, direction messageDirection) {
 }
 
 // processStoreChannels perform necessary actions for all channels in store
-func (e *Engine) processStoreChannels() error {
+func (e *Engine) processStoreChannels(latestblock chainservice.Block) error {
 	channels, err := e.store.GetAllChannels()
 	if err != nil {
 		return err
 	}
 
 	for _, ch := range channels {
+		// Update on chain channel mode and store the channel
+		prevChannelMode := ch.OnChain.ChannelMode
+		ch.UpdateChannelMode(latestblock.Timestamp)
+		if ch.OnChain.ChannelMode != prevChannelMode {
+			err := e.store.SetChannel(ch)
+			if err != nil {
+				return err
+			}
+		}
+
 		// Liquidate assets for finalized channels
-		if ch.GetChannelMode() == channel.Finalized {
+		if ch.OnChain.ChannelMode == channel.Finalized {
 			obj, ok := e.store.GetObjectiveByChannelId(ch.Id)
 			dDfo, isDdfo := obj.(*directdefund.Objective)
 
-			if ok && isDdfo && dDfo.IsChallengeInitiatedByMe {
-				_, err = e.attemptProgress(obj)
+			if ok && isDdfo && dDfo.C.OnChain.IsChallengeInitiatedByMe {
+				_, err = e.attemptProgress(dDfo)
 				if err != nil {
 					return err
 				}

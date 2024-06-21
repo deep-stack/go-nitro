@@ -28,8 +28,8 @@ func InitializeNode(chainOpts chainservice.ChainOpts, storeOpts store.StoreOpts,
 	if err != nil {
 		return nil, nil, nil, nil, err
 	}
-	if storeBlockNum > chainOpts.ChainStartBlock {
-		chainOpts.ChainStartBlock = storeBlockNum
+	if storeBlockNum > chainOpts.ChainStartBlockNum {
+		chainOpts.ChainStartBlockNum = storeBlockNum
 	}
 
 	slog.Info("Initializing chain service...")

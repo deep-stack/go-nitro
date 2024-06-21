@@ -209,13 +209,13 @@ func main() {
 		Before: altsrc.InitInputSourceWithContext(flags, altsrc.NewTomlSourceFromFlagFunc(CONFIG)),
 		Action: func(cCtx *cli.Context) error {
 			chainOpts := chainservice.ChainOpts{
-				ChainUrl:        chainUrl,
-				ChainStartBlock: chainStartBlock,
-				ChainAuthToken:  chainAuthToken,
-				ChainPk:         chainPk,
-				NaAddress:       common.HexToAddress(naAddress),
-				VpaAddress:      common.HexToAddress(vpaAddress),
-				CaAddress:       common.HexToAddress(caAddress),
+				ChainUrl:           chainUrl,
+				ChainStartBlockNum: chainStartBlock,
+				ChainAuthToken:     chainAuthToken,
+				ChainPk:            chainPk,
+				NaAddress:          common.HexToAddress(naAddress),
+				VpaAddress:         common.HexToAddress(vpaAddress),
+				CaAddress:          common.HexToAddress(caAddress),
 			}
 
 			storeOpts := store.StoreOpts{

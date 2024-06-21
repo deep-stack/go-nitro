@@ -98,13 +98,13 @@ func setupChainService(tc TestCase, tp TestParticipant, si sharedTestInfrastruct
 	case AnvilChain:
 		ethAccountIndex := tp.Port - testactors.START_PORT
 		cs, err := chainservice.NewEthChainService(chainservice.ChainOpts{
-			ChainUrl:        si.anvilChain.ChainUrl,
-			ChainStartBlock: 0,
-			ChainAuthToken:  si.anvilChain.ChainAuthToken,
-			NaAddress:       si.anvilChain.ContractAddresses.NaAddress,
-			VpaAddress:      si.anvilChain.ContractAddresses.VpaAddress,
-			CaAddress:       si.anvilChain.ContractAddresses.CaAddress,
-			ChainPk:         si.anvilChain.ChainPks[ethAccountIndex],
+			ChainUrl:           si.anvilChain.ChainUrl,
+			ChainStartBlockNum: 0,
+			ChainAuthToken:     si.anvilChain.ChainAuthToken,
+			NaAddress:          si.anvilChain.ContractAddresses.NaAddress,
+			VpaAddress:         si.anvilChain.ContractAddresses.VpaAddress,
+			CaAddress:          si.anvilChain.ContractAddresses.CaAddress,
+			ChainPk:            si.anvilChain.ChainPks[ethAccountIndex],
 		})
 		if err != nil {
 			panic(err)

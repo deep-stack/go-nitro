@@ -1,6 +1,7 @@
 import Ajv, { JTDDataType } from "ajv/dist/jtd";
 
 import {
+  ChannelMode,
   ChannelStatus,
   CounterChallengeAction,
   CounterChallengeResult,
@@ -57,6 +58,7 @@ const ledgerChannelSchema = {
   properties: {
     ID: { type: "string" },
     Status: { type: "string" },
+    ChannelMode: { type: "int32" },
     Balance: {
       properties: {
         AssetAddress: { type: "string" },
@@ -317,6 +319,7 @@ function convertToInternalLedgerChannelType(
   return {
     ...result,
     Status: result.Status as ChannelStatus,
+    ChannelMode: ChannelMode[result.ChannelMode] as keyof typeof ChannelMode,
     Balance: {
       ...result.Balance,
       TheirBalance: BigInt(result.Balance.TheirBalance),

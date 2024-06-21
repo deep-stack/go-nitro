@@ -66,7 +66,6 @@ func TestSetGetObjective(t *testing.T) {
 		}
 
 		got, err = ms.GetObjectiveById(want.Id())
-
 		if err != nil {
 			t.Errorf("expected to find the inserted objective, but didn't: %s", err)
 		}

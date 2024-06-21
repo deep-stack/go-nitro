@@ -9,7 +9,9 @@ import (
 	"github.com/ethereum/go-ethereum/accounts/abi/bind/backends"
 	"github.com/ethereum/go-ethereum/common"
 	"github.com/ethereum/go-ethereum/core"
+	ethTypes "github.com/ethereum/go-ethereum/core/types"
 	"github.com/ethereum/go-ethereum/crypto"
+
 	NitroAdjudicator "github.com/statechannels/go-nitro/node/engine/chainservice/adjudicator"
 	ConsensusApp "github.com/statechannels/go-nitro/node/engine/chainservice/consensusapp"
 	Token "github.com/statechannels/go-nitro/node/engine/chainservice/erc20"
@@ -48,6 +50,10 @@ type BackendWrapper struct {
 
 func (b *BackendWrapper) ChainID(ctx context.Context) (*big.Int, error) {
 	return big.NewInt(TEST_CHAIN_ID), nil
+}
+
+func (b *BackendWrapper) TransactionSender(context.Context, *ethTypes.Transaction, common.Hash, uint) (common.Address, error) {
+	return common.Address{}, nil
 }
 
 // SimulatedBackendChainService extends EthChainService to automatically mine a block for every transaction
