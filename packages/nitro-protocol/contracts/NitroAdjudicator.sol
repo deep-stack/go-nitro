@@ -29,12 +29,12 @@ contract NitroAdjudicator is INitroAdjudicator, ForceMove, MultiAssetHolder {
 
     function mirrorConcludeAndTransferAllAssets(
         bytes32 l1ChannelId,
-        FixedPart memory mirrorFixedPart,
-        SignedVariablePart memory mirrorCandidate
+        FixedPart memory fixedPart,
+        SignedVariablePart memory candidate
     ) public virtual {
-        bytes32 mirrorChannelId = _concludeMirror(l1ChannelId, mirrorFixedPart, mirrorCandidate);
+        bytes32 mirrorChannelId = _concludeMirror(l1ChannelId, fixedPart, candidate);
 
-        mirrorTransferAllAssets(mirrorChannelId, mirrorCandidate.variablePart.outcome, bytes32(0));
+        mirrorTransferAllAssets(mirrorChannelId, candidate.variablePart.outcome, bytes32(0));
     }
 
     function mirrorTransferAllAssets(

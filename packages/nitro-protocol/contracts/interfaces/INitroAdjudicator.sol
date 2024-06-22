@@ -35,8 +35,8 @@ interface INitroAdjudicator is IMultiAssetHolder, IForceMove {
 
     function mirrorConcludeAndTransferAllAssets(
         bytes32 l1ChannelId,
-        FixedPart memory mirrorFixedPart,
-        SignedVariablePart memory mirrorCandidate
+        FixedPart memory fixedPart,
+        SignedVariablePart memory candidate
     ) external;
 
     function mirrorTransferAllAssets(

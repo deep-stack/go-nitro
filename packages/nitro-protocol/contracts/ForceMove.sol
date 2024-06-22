@@ -177,25 +177,25 @@ contract ForceMove is IForceMove, StatusManager {
 
     function _concludeMirror(
         bytes32 l1ChannelId,
-        FixedPart memory mirrorFixedPart,
-        SignedVariablePart memory mirrorCandidate
+        FixedPart memory fixedPart,
+        SignedVariablePart memory candidate
     ) internal returns (bytes32 mirrorChannelId)  {
 
         // Get mirrorchannelid
-        mirrorChannelId = NitroUtils.getChannelId(mirrorFixedPart);
+        mirrorChannelId = NitroUtils.getChannelId(fixedPart);
         // Check that its the same channel as in map
         bytes32 derivedL1ChannelId = getL1Channel(mirrorChannelId);
         require(derivedL1ChannelId == l1ChannelId, 'Found mirror for wrong channel');
         // Validate that state is final
-        require(mirrorCandidate.variablePart.isFinal, 'State must be final');
+        require(candidate.variablePart.isFinal, 'State must be final');
         // Use it to liquidate assets
         RecoveredVariablePart memory recoveredVariablePart = recoverVariablePart(
-            mirrorFixedPart,
-            mirrorCandidate
+            fixedPart,
+            candidate
         );
         require(
             NitroUtils.getClaimedSignersNum(recoveredVariablePart.signedBy) ==
-                mirrorFixedPart.participants.length,
+                fixedPart.participants.length,
             '!unanimous'
         );
 
@@ -205,7 +205,7 @@ contract ForceMove is IForceMove, StatusManager {
                 0,
                 uint48(block.timestamp), //solhint-disable-line not-rely-on-time
                 bytes32(0),
-                NitroUtils.hashOutcome(mirrorCandidate.variablePart.outcome)
+                NitroUtils.hashOutcome(candidate.variablePart.outcome)
             )
         );
 
