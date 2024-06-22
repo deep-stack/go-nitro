@@ -69,6 +69,10 @@ func TestExitL2WithLedgerChannelState(t *testing.T) {
 	nodeAPrime, _, _, _, _ := setupIntegrationNode(tcL2, tcL2.Participants[1], infraL2, []string{}, dataFolder)
 	defer nodeAPrime.Close()
 
+	// Seperate chain service to listen for events
+	testChainService := setupChainService(tcL1, tcL1.Participants[0], infraL1)
+	defer testChainService.Close()
+
 	mirroredLedgerChannelId := types.Destination{}
 	l1ChannelId := types.Destination{}
 
@@ -110,7 +114,10 @@ func TestExitL2WithLedgerChannelState(t *testing.T) {
 			t.Error(err)
 		}
 
-		time.Sleep(2 * time.Second)
+		// Listen for allocation updated event
+		event := waitForEvent(t, testChainService.EventFeed(), chainservice.AllocationUpdatedEvent{})
+		_, ok := event.(chainservice.AllocationUpdatedEvent)
+		testhelpers.Assert(t, ok, "Expected allocation updated event")
 
 		balanceNodeA, _ := infraL1.anvilChain.GetAccountBalance(tcL1.Participants[0].Address())
 		balanceNodeB, _ := infraL1.anvilChain.GetAccountBalance(tcL1.Participants[1].Address())
@@ -172,6 +179,10 @@ func TestExitL2WithPayments(t *testing.T) {
 	nodeAPrime, _, _, _, _ := setupIntegrationNode(tcL2, tcL2.Participants[1], infraL2, []string{}, dataFolder)
 	defer nodeAPrime.Close()
 
+	// Seperate chain service to listen for events
+	testChainService := setupChainService(tcL1, tcL1.Participants[0], infraL1)
+	defer testChainService.Close()
+
 	l2ChannelSignedState := state.SignedState{}
 
 	// Create ledger channel on L1 and mirror it on L2
@@ -228,7 +239,10 @@ func TestExitL2WithPayments(t *testing.T) {
 			t.Error(err)
 		}
 
-		time.Sleep(2 * time.Second)
+		// Listen for allocation updated event
+		event := waitForEvent(t, testChainService.EventFeed(), chainservice.AllocationUpdatedEvent{})
+		_, ok := event.(chainservice.AllocationUpdatedEvent)
+		testhelpers.Assert(t, ok, "Expected allocation updated event")
 
 		balanceNodeA, _ := infraL1.anvilChain.GetAccountBalance(tcL1.Participants[0].Address())
 		balanceNodeB, _ := infraL1.anvilChain.GetAccountBalance(tcL1.Participants[1].Address())
@@ -340,7 +354,10 @@ func TestExitL2WithLedgerChannelStateUnilaterally(t *testing.T) {
 			t.Error(err)
 		}
 
-		time.Sleep(2 * time.Second)
+		// Listen for allocation updated event
+		event = waitForEvent(t, testChainService.EventFeed(), chainservice.AllocationUpdatedEvent{})
+		_, ok = event.(chainservice.AllocationUpdatedEvent)
+		testhelpers.Assert(t, ok, "Expected allocation updated event")
 
 		balanceNodeA, _ := infraL1.anvilChain.GetAccountBalance(tcL1.Participants[0].Address())
 		balanceNodeB, _ := infraL1.anvilChain.GetAccountBalance(tcL1.Participants[1].Address())
@@ -540,7 +557,11 @@ func TestExitL2WithVirtualChannelStateUnilaterally(t *testing.T) {
 			t.Error(err)
 		}
 
-		time.Sleep(2 * time.Second)
+		// Listen for reclaimed event
+		event = waitForEvent(t, testChainService.EventFeed(), chainservice.ReclaimedEvent{})
+		_, ok = event.(chainservice.ReclaimedEvent)
+		testhelpers.Assert(t, ok, "Expected reclaimed event")
+
 		l2SignedState = getLatestSignedState(storeAPrime, mirroredLedgerChannelId)
 
 		// Compute new state outcome allocations
@@ -577,7 +598,10 @@ func TestExitL2WithVirtualChannelStateUnilaterally(t *testing.T) {
 			t.Error(err)
 		}
 
-		time.Sleep(2 * time.Second)
+		// Listen for allocation updated event
+		event = waitForEvent(t, testChainService.EventFeed(), chainservice.AllocationUpdatedEvent{})
+		_, ok = event.(chainservice.AllocationUpdatedEvent)
+		testhelpers.Assert(t, ok, "Expected allocation updated event")
 
 		balanceNodeA, _ := infraL1.anvilChain.GetAccountBalance(tcL1.Participants[0].Address())
 		balanceNodeB, _ := infraL1.anvilChain.GetAccountBalance(tcL1.Participants[1].Address())
