@@ -17,7 +17,6 @@ import (
 	NitroAdjudicator "github.com/statechannels/go-nitro/node/engine/chainservice/adjudicator"
 	"github.com/statechannels/go-nitro/node/engine/store"
 	"github.com/statechannels/go-nitro/node/query"
-	"github.com/statechannels/go-nitro/payments"
 	"github.com/statechannels/go-nitro/protocols"
 	"github.com/statechannels/go-nitro/types"
 )
@@ -179,7 +178,14 @@ func TestExitL2WithPayments(t *testing.T) {
 	l1ChannelId, mirroredLedgerChannelId := createL1L2Channels(t, nodeA, nodeB, nodeAPrime, nodeBPrime, storeA, tcL1, tcL2, chainServiceB)
 
 	t.Run("Create virtual channel on mirrored ledger channel and make payments", func(t *testing.T) {
-		virtualChannel, _ := makePaymentsOnL2(t, nodeAPrime, nodeBPrime, storeBPrime, tcL2, payAmount)
+		virtualChannel := createL2VirtualChannel(t, nodeAPrime, nodeBPrime, storeBPrime, tcL2, payAmount)
+
+		// Bridge pays APrime
+		nodeBPrime.Pay(virtualChannel.Id, big.NewInt(payAmount))
+
+		// Wait for APrime to recieve voucher
+		nodeAPrimeVoucher := <-nodeAPrime.ReceivedVouchers()
+		t.Logf("Voucher recieved %+v", nodeAPrimeVoucher)
 
 		// Virtual defund
 		virtualDefundResponse, _ := nodeBPrime.ClosePaymentChannel(virtualChannel.Id)
@@ -198,7 +204,7 @@ func TestExitL2WithPayments(t *testing.T) {
 		testhelpers.Assert(t, balanceNodeAPrime.Cmp(big.NewInt(ledgerChannelDeposit+payAmount)) == 0, "Balance of node APrime (%v) should be equal to (%v)", balanceNodeAPrime, ledgerChannelDeposit+payAmount)
 	})
 
-	t.Run("Exit to L1 using L2 ledger channel state", func(t *testing.T) {
+	t.Run("Exit to L1 using updated L2 ledger channel state after making payments", func(t *testing.T) {
 		l2SignedState := getLatestSignedState(storeBPrime, mirroredLedgerChannelId)
 		l2StateClone := l2SignedState.State().Clone()
 
@@ -289,13 +295,20 @@ func TestExitL2WithLedgerChannelStateUnilaterally(t *testing.T) {
 	l1ChannelId, mirroredLedgerChannelId := createL1L2Channels(t, nodeA, nodeB, nodeAPrime, nodeBPrime, storeA, tcL1, tcL2, chainServiceB)
 
 	// Create virtual channel on mirrored ledger channel and make payments
-	virtualChannel, _ := makePaymentsOnL2(t, nodeAPrime, nodeBPrime, storeBPrime, tcL2, payAmount)
+	virtualChannel := createL2VirtualChannel(t, nodeAPrime, nodeBPrime, storeBPrime, tcL2, payAmount)
+
+	// Bridge pays APrime
+	nodeBPrime.Pay(virtualChannel.Id, big.NewInt(payAmount))
+
+	// Wait for APrime to recieve voucher
+	nodeAPrimeVoucher := <-nodeAPrime.ReceivedVouchers()
+	t.Logf("Voucher recieved %+v", nodeAPrimeVoucher)
 
 	// Virtual defund
 	virtualDefundResponse, _ := nodeBPrime.ClosePaymentChannel(virtualChannel.Id)
 	waitForObjectives(t, nodeBPrime, nodeAPrime, []node.Node{}, []protocols.ObjectiveId{virtualDefundResponse})
 
-	t.Run("Exit to L1 using L2 ledger channel state", func(t *testing.T) {
+	t.Run("Exit to L1 using L2 ledger channel state unilaterally", func(t *testing.T) {
 		l2SignedState := getLatestSignedState(storeBPrime, mirroredLedgerChannelId)
 
 		// Close bridge nodes
@@ -394,10 +407,19 @@ func TestExitL2WithVirtualChannelStateUnilaterally(t *testing.T) {
 	l1ChannelId, mirroredLedgerChannelId := createL1L2Channels(t, nodeA, nodeB, nodeAPrime, nodeBPrime, storeA, tcL1, tcL2, chainServiceB)
 
 	// Create virtual channel on mirrored ledger channel on L2 and make payments
-	virtualChannel, nodeAPrimeVirtualPaymentVoucher := makePaymentsOnL2(t, nodeAPrime, nodeBPrime, storeBPrime, tcL2, payAmount)
-	virtualChannelId := virtualChannel.Id
+	virtualChannel := createL2VirtualChannel(t, nodeAPrime, nodeBPrime, storeBPrime, tcL2, payAmount)
 
-	t.Run("Exit to L1 using L2 ledger channel state", func(t *testing.T) {
+	// Bridge pays APrime
+	nodeBPrime.Pay(virtualChannel.Id, big.NewInt(payAmount))
+
+	// Wait for APrime to recieve voucher
+	nodeAPrimeVoucher := <-nodeAPrime.ReceivedVouchers()
+	t.Logf("Voucher recieved %+v", nodeAPrimeVoucher)
+
+	virtualChannelId := virtualChannel.Id
+	nodeAPrimeVirtualPaymentVoucher := nodeAPrimeVoucher
+
+	t.Run("Exit to L1 from L2 virtual channel state unilaterally", func(t *testing.T) {
 		// Close bridge nodes
 		nodeB.Close()
 		nodeBPrime.Close()
@@ -612,7 +634,7 @@ func createL1L2Channels(t *testing.T, nodeA node.Node, nodeB node.Node, nodeAPri
 	return l1LedgerChannelId, response.ChannelId
 }
 
-func makePaymentsOnL2(t *testing.T, nodeAPrime node.Node, nodeBPrime node.Node, L2bridgeStore store.Store, tcL2 TestCase, payAmount int64) (*channel.Channel, payments.Voucher) {
+func createL2VirtualChannel(t *testing.T, nodeAPrime node.Node, nodeBPrime node.Node, L2bridgeStore store.Store, tcL2 TestCase, payAmount int64) *channel.Channel {
 	// Create virtual channel on mirrored ledger channel on L2 and make payments
 	virtualOutcome := initialPaymentOutcome(*nodeBPrime.Address, *nodeAPrime.Address, types.Address{})
 
@@ -623,12 +645,5 @@ func makePaymentsOnL2(t *testing.T, nodeAPrime node.Node, nodeBPrime node.Node, 
 
 	virtualChannel, _ := L2bridgeStore.GetChannelById(virtualResponse.ChannelId)
 
-	// Bridge pays APrime
-	nodeBPrime.Pay(virtualResponse.ChannelId, big.NewInt(payAmount))
-
-	// Wait for APrime to recieve voucher
-	nodeAPrimeVoucher := <-nodeAPrime.ReceivedVouchers()
-	t.Logf("Voucher recieved %+v", nodeAPrimeVoucher)
-
-	return virtualChannel, nodeAPrimeVoucher
+	return virtualChannel
 }

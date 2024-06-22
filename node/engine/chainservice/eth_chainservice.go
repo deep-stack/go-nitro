@@ -577,7 +577,6 @@ func (ecs *EthChainService) listenForNewBlocks(errorChan chan<- error, newBlockC
 			}
 
 			if retryFailed {
-				ecs.logger.Error("subscribeNewHead failed to resubscribe")
 				errorChan <- fmt.Errorf("subscribeNewHead failed to resubscribe")
 				return
 			}

@@ -141,6 +141,7 @@ type ReclaimTransaction struct {
 func NewReclaimTransaction(channelId types.Destination, reclaimArgs NitroAdjudicator.IMultiAssetHolderReclaimArgs) ReclaimTransaction {
 	return ReclaimTransaction{ChainTransaction: ChainTransactionBase{channelId: channelId}, ReclaimArgs: reclaimArgs}
 }
+
 type GenerateMirrorTransaction struct {
 	ChainTransaction
 	MirrorChannelId types.Destination
