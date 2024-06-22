@@ -566,7 +566,7 @@ func TestExitL2WithVirtualChannelStateUnilaterally(t *testing.T) {
 	})
 }
 
-func createL1L2Channels (t *testing.T, nodeA node.Node, nodeB node.Node, nodeAPrime node.Node, nodeBPrime node.Node, nodeStore store.Store, tcL1 TestCase, tcL2 TestCase, bridgeChainService chainservice.ChainService) (types.Destination, types.Destination){
+func createL1L2Channels(t *testing.T, nodeA node.Node, nodeB node.Node, nodeAPrime node.Node, nodeBPrime node.Node, nodeStore store.Store, tcL1 TestCase, tcL2 TestCase, bridgeChainService chainservice.ChainService) (types.Destination, types.Destination) {
 	// Create ledger channel
 	l1LedgerChannelId := openLedgerChannel(t, nodeA, nodeB, types.Address{}, uint32(tcL1.ChallengeDuration))
 
@@ -612,23 +612,23 @@ func createL1L2Channels (t *testing.T, nodeA node.Node, nodeB node.Node, nodeAPr
 	return l1LedgerChannelId, response.ChannelId
 }
 
-func makePaymentsOnL2 (t *testing.T, nodeAPrime node.Node, nodeBPrime node.Node, L2bridgeStore store.Store, tcL2 TestCase, payAmount int64) (*channel.Channel, payments.Voucher) {
-			// Create virtual channel on mirrored ledger channel on L2 and make payments
-			virtualOutcome := initialPaymentOutcome(*nodeBPrime.Address, *nodeAPrime.Address, types.Address{})
+func makePaymentsOnL2(t *testing.T, nodeAPrime node.Node, nodeBPrime node.Node, L2bridgeStore store.Store, tcL2 TestCase, payAmount int64) (*channel.Channel, payments.Voucher) {
+	// Create virtual channel on mirrored ledger channel on L2 and make payments
+	virtualOutcome := initialPaymentOutcome(*nodeBPrime.Address, *nodeAPrime.Address, types.Address{})
 
-			virtualResponse, _ := nodeBPrime.CreatePaymentChannel([]types.Address{}, *nodeAPrime.Address, uint32(tcL2.ChallengeDuration), virtualOutcome)
-			waitForObjectives(t, nodeBPrime, nodeAPrime, []node.Node{}, []protocols.ObjectiveId{virtualResponse.Id})
+	virtualResponse, _ := nodeBPrime.CreatePaymentChannel([]types.Address{}, *nodeAPrime.Address, uint32(tcL2.ChallengeDuration), virtualOutcome)
+	waitForObjectives(t, nodeBPrime, nodeAPrime, []node.Node{}, []protocols.ObjectiveId{virtualResponse.Id})
 
-			checkPaymentChannel(t, virtualResponse.ChannelId, virtualOutcome, query.Open, nodeBPrime, nodeAPrime)
+	checkPaymentChannel(t, virtualResponse.ChannelId, virtualOutcome, query.Open, nodeBPrime, nodeAPrime)
 
-			virtualChannel, _ := L2bridgeStore.GetChannelById(virtualResponse.ChannelId)
+	virtualChannel, _ := L2bridgeStore.GetChannelById(virtualResponse.ChannelId)
 
-			// Bridge pays APrime
-			nodeBPrime.Pay(virtualResponse.ChannelId, big.NewInt(payAmount))
+	// Bridge pays APrime
+	nodeBPrime.Pay(virtualResponse.ChannelId, big.NewInt(payAmount))
 
-			// Wait for APrime to recieve voucher
-			nodeAPrimeVoucher := <-nodeAPrime.ReceivedVouchers()
-			t.Logf("Voucher recieved %+v", nodeAPrimeVoucher)
+	// Wait for APrime to recieve voucher
+	nodeAPrimeVoucher := <-nodeAPrime.ReceivedVouchers()
+	t.Logf("Voucher recieved %+v", nodeAPrimeVoucher)
 
-			return virtualChannel, nodeAPrimeVoucher
+	return virtualChannel, nodeAPrimeVoucher
 }
