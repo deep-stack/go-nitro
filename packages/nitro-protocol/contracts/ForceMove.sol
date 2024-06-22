@@ -179,11 +179,11 @@ contract ForceMove is IForceMove, StatusManager {
         bytes32 l1ChannelId,
         FixedPart memory mirrorFixedPart,
         SignedVariablePart memory mirrorCandidate
-        ) internal returns (bytes32 mirrorChannelId)  {
+    ) internal returns (bytes32 mirrorChannelId)  {
 
-        // get mirrorchannelid
+        // Get mirrorchannelid
         mirrorChannelId = NitroUtils.getChannelId(mirrorFixedPart);
-        // check that its the same channel as in map
+        // Check that its the same channel as in map
         bytes32 derivedL1ChannelId = getL1Channel(mirrorChannelId);
         require(derivedL1ChannelId == l1ChannelId, 'Found mirror for wrong channel');
         // Validate that state is final

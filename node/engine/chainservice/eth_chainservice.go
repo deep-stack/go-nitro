@@ -339,7 +339,7 @@ func (ecs *EthChainService) SendTransaction(tx protocols.ChainTransaction) error
 		_, er := ecs.na.MirrorTransferAllAssets(ecs.defaultTxOpts(), channelId, nitroVariablePart.Outcome, stateHash)
 		return er
 	case protocols.GenerateMirrorTransaction:
-		_, err := ecs.na.GenerateMirror(ecs.defaultTxOpts(), tx.ChannelId(), tx.MirrorChannelId)
+		_, err := ecs.na.GenerateMirroredMap(ecs.defaultTxOpts(), tx.ChannelId(), tx.MirrorChannelId)
 		return err
 	case protocols.MirrorWithdrawAllTransaction:
 		signedState := tx.SignedState.State()

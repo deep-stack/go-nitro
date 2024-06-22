@@ -384,6 +384,7 @@ contract MultiAssetHolder is IMultiAssetHolder, StatusManager {
         // store fingerprint of modified source outcome
         sourceOutcome[sourceAssetIndex].allocations = newSourceAllocations;
         reclaimArgs.variablePart.outcome = sourceOutcome;
+
         _updateFingerprint(
             sourceChannelId,
             NitroUtils.hashState(reclaimArgs.fixedPart, reclaimArgs.variablePart),
