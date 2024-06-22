@@ -1,104 +1,104 @@
 {
   "deployInfrastructureContracts": {
     "satp": {
-      "NitroAdjudicator": 3469167
+      "NitroAdjudicator": 4146699
     }
   },
   "directlyFundAChannelWithETHFirst": {
-    "satp": 46496
+    "satp": 46595
   },
   "directlyFundAChannelWithETHSecond": {
-    "satp": 29408
+    "satp": 29507
   },
   "batchFundChannelsWithETHFirst": {
     "satp": {
-      "1": 60300,
-      "5": 192100,
-      "10": 356835,
-      "20": 686269,
-      "50": 1674655,
-      "100": 3321861
+      "1": 60399,
+      "5": 192595,
+      "10": 357825,
+      "20": 688249,
+      "50": 1679605,
+      "100": 3331761
     }
   },
   "batchFundChannelsWithETHSecond": {
     "satp": {
-      "1": 43212,
-      "5": 106660,
-      "10": 185955,
-      "20": 344509,
-      "50": 820255,
-      "100": 1613061
+      "1": 43311,
+      "5": 107155,
+      "10": 186945,
+      "20": 346489,
+      "50": 825205,
+      "100": 1622961
     }
   },
   "batchFundChannelsWithERCFirst": {
     "satp": {
-      "1": 105476,
-      "5": 221717,
-      "10": 383795,
-      "20": 707963,
-      "50": 1680455,
-      "100": 3301247
+      "1": 105558,
+      "5": 222227,
+      "10": 384815,
+      "20": 710003,
+      "50": 1685555,
+      "100": 3311447
     }
   },
   "batchFundChannelsWithERCSecond": {
     "satp": {
-      "1": 91806,
-      "5": 140862,
-      "10": 212915,
-      "20": 366203,
-      "50": 826055,
-      "100": 1592447
+      "1": 91888,
+      "5": 141270,
+      "10": 213935,
+      "20": 368243,
+      "50": 831155,
+      "100": 1602647
     }
   },
   "directlyFundAChannelWithERC20First": {
     "satp": {
       "approve": 46193,
-      "deposit": 69866
+      "deposit": 69968
     }
   },
   "directlyFundAChannelWithERC20Second": {
     "satp": {
       "approve": 46193,
-      "deposit": 52778
+      "deposit": 52880
     }
   },
   "ETHexit": {
-    "satp": 111559
+    "satp": 112110
   },
   "ERC20exit": {
-    "satp": 112735
+    "satp": 113284
   },
   "ETHexitSad": {
     "satp": {
-      "challenge": 113191,
-      "transferAllAssets": 82026,
-      "total": 195217
+      "challenge": 113938,
+      "transferAllAssets": 82260,
+      "total": 196198
     }
   },
   "ETHexitSadLedgerFunded": {
     "satp": {
-      "challengeX": 113191,
-      "challengeL": 106328,
-      "transferAllAssetsL": 62113,
-      "transferAllAssetsX": 82026,
-      "total": 363658
+      "challengeX": 113938,
+      "challengeL": 107045,
+      "transferAllAssetsL": 62348,
+      "transferAllAssetsX": 82260,
+      "total": 365591
     }
   },
   "ETHexitSadVirtualFunded": {
     "satp": {
-      "challengeL": 122434,
-      "challengeV": 172782,
-      "reclaimL": 81687,
-      "transferAllAssetsL": 113726,
-      "total": 490629
+      "challengeL": 123211,
+      "challengeV": 173923,
+      "reclaimL": 82063,
+      "transferAllAssetsL": 113960,
+      "total": 493157
     }
   },
   "ETHClearChallenge": {
     "satp": {
-      "checkpointX": 73981,
-      "challengeResponseX": 96527,
-      "checkpointL": 69977,
-      "challengeResponseL": 89700,
+      "checkpointX": 74353,
+      "challengeResponseX": 97230,
+      "checkpointL": 70334,
+      "challengeResponseL": 90373,
       "challengeResponseV": 0
     }
   }
