@@ -76,27 +76,6 @@ func NewChallengeTransaction(
 	}
 }
 
-type MirrorChallengeTransaction struct {
-	ChainTransaction
-	Candidate     state.SignedState
-	Proof         []state.SignedState
-	ChallengerSig crypto.Signature
-}
-
-func NewMirrorChallengeTransaction(
-	channelId types.Destination,
-	candidate state.SignedState,
-	proof []state.SignedState,
-	challengerSig crypto.Signature,
-) MirrorChallengeTransaction {
-	return MirrorChallengeTransaction{
-		ChainTransaction: ChainTransactionBase{channelId: channelId},
-		Candidate:        candidate,
-		Proof:            proof,
-		ChallengerSig:    challengerSig,
-	}
-}
-
 type TransferAllTransaction struct {
 	ChainTransaction
 	TransferState state.SignedState
@@ -142,28 +121,19 @@ func NewReclaimTransaction(channelId types.Destination, reclaimArgs NitroAdjudic
 	return ReclaimTransaction{ChainTransaction: ChainTransactionBase{channelId: channelId}, ReclaimArgs: reclaimArgs}
 }
 
-type GenerateMirrorTransaction struct {
+type SetL2ToL1Transaction struct {
 	ChainTransaction
 	MirrorChannelId types.Destination
 }
 
-func NewGenerateMirrorTransaction(
+func NewSetL2ToL1Transaction(
 	channelId types.Destination,
 	mirrorChannelId types.Destination,
-) GenerateMirrorTransaction {
-	return GenerateMirrorTransaction{
+) SetL2ToL1Transaction {
+	return SetL2ToL1Transaction{
 		ChainTransaction: ChainTransactionBase{channelId: channelId},
 		MirrorChannelId:  mirrorChannelId,
 	}
-}
-
-type MirrorReclaimTransaction struct {
-	ChainTransaction
-	ReclaimArgs NitroAdjudicator.IMultiAssetHolderReclaimArgs
-}
-
-func NewMirrorReclaimTransaction(channelId types.Destination, reclaimArgs NitroAdjudicator.IMultiAssetHolderReclaimArgs) MirrorReclaimTransaction {
-	return MirrorReclaimTransaction{ChainTransaction: ChainTransactionBase{channelId: channelId}, ReclaimArgs: reclaimArgs}
 }
 
 // SideEffects are effects to be executed by an imperative shell

@@ -300,12 +300,6 @@ func (ecs *EthChainService) SendTransaction(tx protocols.ChainTransaction) error
 		challengerSig := NitroAdjudicator.ConvertSignature(tx.ChallengerSig)
 		_, err := ecs.na.Challenge(ecs.defaultTxOpts(), fp, proof, candidate, challengerSig)
 		return err
-	case protocols.MirrorChallengeTransaction:
-		fp, candidate := NitroAdjudicator.ConvertSignedStateToFixedPartAndSignedVariablePart(tx.Candidate)
-		proof := NitroAdjudicator.ConvertSignedStatesToProof(tx.Proof)
-		challengerSig := NitroAdjudicator.ConvertSignature(tx.ChallengerSig)
-		_, err := ecs.na.MirrorChallenge(ecs.defaultTxOpts(), fp, proof, candidate, challengerSig)
-		return err
 	case protocols.CheckpointTransaction:
 		fp, candidate := NitroAdjudicator.ConvertSignedStateToFixedPartAndSignedVariablePart(tx.Candidate)
 		proof := NitroAdjudicator.ConvertSignedStatesToProof(tx.Proof)
@@ -338,8 +332,8 @@ func (ecs *EthChainService) SendTransaction(tx protocols.ChainTransaction) error
 
 		_, er := ecs.na.MirrorTransferAllAssets(ecs.defaultTxOpts(), channelId, nitroVariablePart.Outcome, stateHash)
 		return er
-	case protocols.GenerateMirrorTransaction:
-		_, err := ecs.na.GenerateMirroredMap(ecs.defaultTxOpts(), tx.ChannelId(), tx.MirrorChannelId)
+	case protocols.SetL2ToL1Transaction:
+		_, err := ecs.na.SetL2ToL1(ecs.defaultTxOpts(), tx.ChannelId(), tx.MirrorChannelId)
 		return err
 	case protocols.MirrorWithdrawAllTransaction:
 		signedState := tx.SignedState.State()
@@ -352,10 +346,7 @@ func (ecs *EthChainService) SendTransaction(tx protocols.ChainTransaction) error
 			VariablePart: nitroVariablePart,
 			Sigs:         nitroSignatures,
 		}
-		_, err := ecs.na.MirrorConcludeAndTransferAllAssets(ecs.defaultTxOpts(), tx.ChannelId(), nitroFixedPart, candidate)
-		return err
-	case protocols.MirrorReclaimTransaction:
-		_, err := ecs.na.MirrorReclaim(ecs.defaultTxOpts(), tx.ChannelId(), tx.ReclaimArgs)
+		_, err := ecs.na.MirrorConcludeAndTransferAllAssets(ecs.defaultTxOpts(), nitroFixedPart, candidate)
 		return err
 	default:
 		return fmt.Errorf("unexpected transaction type %T", tx)

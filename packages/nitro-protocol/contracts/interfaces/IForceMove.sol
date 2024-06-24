@@ -22,13 +22,6 @@ interface IForceMove is INitroTypes {
         Signature memory challengerSig
     ) external;
 
-    function mirrorChallenge(
-        FixedPart memory fixedPart,
-        SignedVariablePart[] memory proof,
-        SignedVariablePart memory candidate,
-        Signature memory challengerSig
-    ) external;
-
     /**
      * @notice Overwrites the `turnNumRecord` stored against a channel by providing a candidate with higher turn number.
      * @dev Overwrites the `turnNumRecord` stored against a channel by providing a candidate with higher turn number.

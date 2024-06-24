@@ -80,50 +80,6 @@ contract ForceMove is IForceMove, StatusManager {
         );
     }
 
-    function mirrorChallenge(
-        FixedPart memory fixedPart,
-        SignedVariablePart[] memory proof,
-        SignedVariablePart memory candidate,
-        Signature memory challengerSig
-    ) external virtual override {
-        bytes32 mirrorChannelId = NitroUtils.getChannelId(fixedPart);
-        uint48 candidateTurnNum = candidate.variablePart.turnNum;
-
-        if (_mirrorMode(mirrorChannelId) == ChannelMode.Open) {
-            _mirrorRequireNonDecreasedTurnNumber(mirrorChannelId, candidateTurnNum);
-        } else if (_mirrorMode(mirrorChannelId) == ChannelMode.Challenge) {
-            _mirrorRequireIncreasedTurnNumber(mirrorChannelId, candidateTurnNum);
-        } else {
-            // This should revert.
-            _requireMirrorChannelNotFinalized(mirrorChannelId);
-        }
-
-        bool supported;
-        string memory reason;
-        (supported, reason) = _stateIsSupported(fixedPart, proof, candidate);
-        require(supported, reason);
-
-        bytes32 supportedStateHash = NitroUtils.hashState(fixedPart, candidate.variablePart);
-        _requireChallengerIsParticipant(supportedStateHash, fixedPart.participants, challengerSig);
-
-        // effects
-        emit ChallengeRegistered(
-            mirrorChannelId,
-            uint48(block.timestamp) + fixedPart.challengeDuration, //solhint-disable-line not-rely-on-time
-            proof,
-            candidate
-        );
-
-        mirrorStatusOf[mirrorChannelId] = _generateStatus(
-            ChannelData(
-                candidateTurnNum,
-                uint48(block.timestamp) + fixedPart.challengeDuration, //solhint-disable-line not-rely-on-time
-                supportedStateHash,
-                NitroUtils.hashOutcome(candidate.variablePart.outcome)
-            )
-        );
-    }
-
     /**
      * @notice Overwrites the `turnNumRecord` stored against a channel by providing a proof with higher turn number.
      * @dev Overwrites the `turnNumRecord` stored against a channel by providing a proof with higher turn number.
@@ -173,43 +129,6 @@ contract ForceMove is IForceMove, StatusManager {
         SignedVariablePart memory candidate
     ) external virtual override {
         _conclude(fixedPart, candidate);
-    }
-
-    function _concludeMirror(
-        bytes32 l1ChannelId,
-        FixedPart memory fixedPart,
-        SignedVariablePart memory candidate
-    ) internal returns (bytes32 mirrorChannelId)  {
-
-        // Get mirrorchannelid
-        mirrorChannelId = NitroUtils.getChannelId(fixedPart);
-        // Check that its the same channel as in map
-        bytes32 derivedL1ChannelId = getL1Channel(mirrorChannelId);
-        require(derivedL1ChannelId == l1ChannelId, 'Found mirror for wrong channel');
-        // Validate that state is final
-        require(candidate.variablePart.isFinal, 'State must be final');
-        // Use it to liquidate assets
-        RecoveredVariablePart memory recoveredVariablePart = recoverVariablePart(
-            fixedPart,
-            candidate
-        );
-        require(
-            NitroUtils.getClaimedSignersNum(recoveredVariablePart.signedBy) ==
-                fixedPart.participants.length,
-            '!unanimous'
-        );
-
-        // effects
-        mirrorStatusOf[mirrorChannelId] = _generateStatus(
-            ChannelData(
-                0,
-                uint48(block.timestamp), //solhint-disable-line not-rely-on-time
-                bytes32(0),
-                NitroUtils.hashOutcome(candidate.variablePart.outcome)
-            )
-        );
-
-        emit Concluded(mirrorChannelId, uint48(block.timestamp)); //solhint-disable-line not-rely-on-time
     }
 
     /**
@@ -376,18 +295,6 @@ contract ForceMove is IForceMove, StatusManager {
     }
 
     /**
-     * @notice Checks that the submitted turnNumRecord is strictly greater than the turnNumRecord stored on chain.
-     * @dev Checks that the submitted turnNumRecord is strictly greater than the turnNumRecord stored on chain.
-     * @param channelId Unique identifier for a channel.
-     * @param newTurnNumRecord New turnNumRecord intended to overwrite existing value
-     */
-    function _mirrorRequireIncreasedTurnNumber(bytes32 channelId, uint48 newTurnNumRecord) internal view {
-        (uint48 turnNumRecord, , ) = _unpackMirrorStatus(channelId);
-        require(newTurnNumRecord > turnNumRecord, 'turnNumRecord not increased.');
-    }
-
-
-    /**
      * @notice Checks that the submitted turnNumRecord is greater than or equal to the turnNumRecord stored on chain.
      * @dev Checks that the submitted turnNumRecord is greater than or equal to the turnNumRecord stored on chain.
      * @param channelId Unique identifier for a channel.
@@ -402,35 +309,12 @@ contract ForceMove is IForceMove, StatusManager {
     }
 
     /**
-     * @notice Checks that the submitted turnNumRecord is greater than or equal to the turnNumRecord stored on chain.
-     * @dev Checks that the submitted turnNumRecord is greater than or equal to the turnNumRecord stored on chain.
-     * @param channelId Unique identifier for a channel.
-     * @param newTurnNumRecord New turnNumRecord intended to overwrite existing value
-     */
-    function _mirrorRequireNonDecreasedTurnNumber(
-        bytes32 channelId,
-        uint48 newTurnNumRecord
-    ) internal view {
-        (uint48 turnNumRecord, , ) = _unpackMirrorStatus(channelId);
-        require(newTurnNumRecord >= turnNumRecord, 'turnNumRecord decreased.');
-    }
-
-    /**
      * @notice Checks that a given channel is NOT in the Finalized mode.
      * @dev Checks that a given channel is in the Challenge mode.
      * @param channelId Unique identifier for a channel.
      */
     function _requireChannelNotFinalized(bytes32 channelId) internal view {
         require(_mode(channelId) != ChannelMode.Finalized, 'Channel finalized.');
-    }
-
-    /**
-     * @notice Checks that a given channel is NOT in the Finalized mode.
-     * @dev Checks that a given channel is in the Challenge mode.
-     * @param channelId Unique identifier for a channel.
-     */
-    function _requireMirrorChannelNotFinalized(bytes32 channelId) internal view {
-        require(_mirrorMode(channelId) != ChannelMode.Finalized, 'Channel finalized.');
     }
 
     /**

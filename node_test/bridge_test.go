@@ -189,7 +189,7 @@ func TestExitL2WithPayments(t *testing.T) {
 	l1ChannelId, mirroredLedgerChannelId := createL1L2Channels(t, nodeA, nodeB, nodeAPrime, nodeBPrime, storeA, tcL1, tcL2, chainServiceB)
 
 	t.Run("Create virtual channel on mirrored ledger channel and make payments", func(t *testing.T) {
-		virtualChannel := createL2VirtualChannel(t, nodeAPrime, nodeBPrime, storeBPrime, tcL2, payAmount)
+		virtualChannel := createL2VirtualChannel(t, nodeAPrime, nodeBPrime, storeBPrime, tcL2)
 
 		// Bridge pays APrime
 		nodeBPrime.Pay(virtualChannel.Id, big.NewInt(payAmount))
@@ -309,7 +309,7 @@ func TestExitL2WithLedgerChannelStateUnilaterally(t *testing.T) {
 	l1ChannelId, mirroredLedgerChannelId := createL1L2Channels(t, nodeA, nodeB, nodeAPrime, nodeBPrime, storeA, tcL1, tcL2, chainServiceB)
 
 	// Create virtual channel on mirrored ledger channel and make payments
-	virtualChannel := createL2VirtualChannel(t, nodeAPrime, nodeBPrime, storeBPrime, tcL2, payAmount)
+	virtualChannel := createL2VirtualChannel(t, nodeAPrime, nodeBPrime, storeBPrime, tcL2)
 
 	// Bridge pays APrime
 	nodeBPrime.Pay(virtualChannel.Id, big.NewInt(payAmount))
@@ -329,9 +329,9 @@ func TestExitL2WithLedgerChannelStateUnilaterally(t *testing.T) {
 		nodeB.Close()
 		nodeBPrime.Close()
 
-		// Node A calls modified `challenge` contract method with L2 ledger channel state
+		// Node A calls `challenge` contract method with L2 ledger channel state
 		challengerSig, _ := NitroAdjudicator.SignChallengeMessage(l2SignedState.State(), tcL1.Participants[0].PrivateKey)
-		challengeTx := protocols.NewMirrorChallengeTransaction(l1ChannelId, l2SignedState, []state.SignedState{}, challengerSig)
+		challengeTx := protocols.NewChallengeTransaction(l1ChannelId, l2SignedState, []state.SignedState{}, challengerSig)
 		err := chainServiceA.SendTransaction(challengeTx)
 		if err != nil {
 			t.Error(err)
@@ -424,7 +424,7 @@ func TestExitL2WithVirtualChannelStateUnilaterally(t *testing.T) {
 	l1ChannelId, mirroredLedgerChannelId := createL1L2Channels(t, nodeA, nodeB, nodeAPrime, nodeBPrime, storeA, tcL1, tcL2, chainServiceB)
 
 	// Create virtual channel on mirrored ledger channel on L2 and make payments
-	virtualChannel := createL2VirtualChannel(t, nodeAPrime, nodeBPrime, storeBPrime, tcL2, payAmount)
+	virtualChannel := createL2VirtualChannel(t, nodeAPrime, nodeBPrime, storeBPrime, tcL2)
 
 	// Bridge pays APrime
 	nodeBPrime.Pay(virtualChannel.Id, big.NewInt(payAmount))
@@ -491,7 +491,7 @@ func TestExitL2WithVirtualChannelStateUnilaterally(t *testing.T) {
 
 		// Node A calls modified `challenge` with L2 virtual channel state
 		virtualChallengerSig, _ := NitroAdjudicator.SignChallengeMessage(signedVirtualState.State(), tcL1.Participants[0].PrivateKey)
-		mirrroVirtualChallengeTx := protocols.NewMirrorChallengeTransaction(virtualChannelId, signedVirtualState, []state.SignedState{signedPostFundState}, virtualChallengerSig)
+		mirrroVirtualChallengeTx := protocols.NewChallengeTransaction(virtualChannelId, signedVirtualState, []state.SignedState{signedPostFundState}, virtualChallengerSig)
 		err = chainServiceA.SendTransaction(mirrroVirtualChallengeTx)
 		if err != nil {
 			t.Error(err)
@@ -511,7 +511,7 @@ func TestExitL2WithVirtualChannelStateUnilaterally(t *testing.T) {
 
 		// Node A calls modified `challenge` with L2 ledger channel state
 		challengerSig, _ := NitroAdjudicator.SignChallengeMessage(l2SignedState.State(), tcL1.Participants[0].PrivateKey)
-		challengeTx := protocols.NewMirrorChallengeTransaction(l1ChannelId, l2SignedState, []state.SignedState{}, challengerSig)
+		challengeTx := protocols.NewChallengeTransaction(l1ChannelId, l2SignedState, []state.SignedState{}, challengerSig)
 		err = chainServiceA.SendTransaction(challengeTx)
 		if err != nil {
 			t.Error(err)
@@ -551,7 +551,7 @@ func TestExitL2WithVirtualChannelStateUnilaterally(t *testing.T) {
 			TargetAssetIndex:      common.Big0,
 		}
 
-		reclaimTx := protocols.NewMirrorReclaimTransaction(l1ChannelId, reclaimArgs)
+		reclaimTx := protocols.NewReclaimTransaction(l1ChannelId, reclaimArgs)
 		err = chainServiceA.SendTransaction(reclaimTx)
 		if err != nil {
 			t.Error(err)
@@ -648,9 +648,9 @@ func createL1L2Channels(t *testing.T, nodeA node.Node, nodeB node.Node, nodeAPri
 
 	t.Log("Completed bridge-fund objective")
 
-	// Node B calls contract method to store L1ChannelId => L2ChannelId and L1ChannelId => L2ChannelId maps on contract
-	generateMirrorTx := protocols.NewGenerateMirrorTransaction(l1LedgerChannelId, response.ChannelId)
-	err = bridgeChainService.SendTransaction(generateMirrorTx)
+	// Node B calls contract method to store L2ChannelId => L1ChannelId
+	setL2ToL1Tx := protocols.NewSetL2ToL1Transaction(l1LedgerChannelId, response.ChannelId)
+	err = bridgeChainService.SendTransaction(setL2ToL1Tx)
 	if err != nil {
 		t.Error(err)
 	}
@@ -658,7 +658,7 @@ func createL1L2Channels(t *testing.T, nodeA node.Node, nodeB node.Node, nodeAPri
 	return l1LedgerChannelId, response.ChannelId
 }
 
-func createL2VirtualChannel(t *testing.T, nodeAPrime node.Node, nodeBPrime node.Node, L2bridgeStore store.Store, tcL2 TestCase, payAmount int64) *channel.Channel {
+func createL2VirtualChannel(t *testing.T, nodeAPrime node.Node, nodeBPrime node.Node, L2bridgeStore store.Store, tcL2 TestCase) *channel.Channel {
 	// Create virtual channel on mirrored ledger channel on L2 and make payments
 	virtualOutcome := initialPaymentOutcome(*nodeBPrime.Address, *nodeAPrime.Address, types.Address{})
 

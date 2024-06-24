@@ -69,8 +69,6 @@ interface IMultiAssetHolder {
      */
     function reclaim(ReclaimArgs memory reclaimArgs) external;
 
-    function mirrorReclaim(bytes32 l1ChannelIdArg, ReclaimArgs memory reclaimArgs) external;
-
     /**
      * @dev Indicates that a deposit has been made.
      * @param destination The channel being deposited into.

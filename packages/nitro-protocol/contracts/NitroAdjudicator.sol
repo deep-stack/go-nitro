@@ -28,11 +28,10 @@ contract NitroAdjudicator is INitroAdjudicator, ForceMove, MultiAssetHolder {
     }
 
     function mirrorConcludeAndTransferAllAssets(
-        bytes32 l1ChannelId,
         FixedPart memory fixedPart,
         SignedVariablePart memory candidate
     ) public virtual {
-        bytes32 mirrorChannelId = _concludeMirror(l1ChannelId, fixedPart, candidate);
+        bytes32 mirrorChannelId = _conclude(fixedPart, candidate);
 
         mirrorTransferAllAssets(mirrorChannelId, candidate.variablePart.outcome, bytes32(0));
     }
@@ -43,10 +42,10 @@ contract NitroAdjudicator is INitroAdjudicator, ForceMove, MultiAssetHolder {
         bytes32 stateHash
     ) public virtual {
         // checks
-        _requireMirrorChannelFinalized(mirrorChannelId);
-        _requireMirrorMatchingFingerprint(stateHash, NitroUtils.hashOutcome(outcome), mirrorChannelId);
+        _requireChannelFinalized(mirrorChannelId);
+        _requireMatchingFingerprint(stateHash, NitroUtils.hashOutcome(outcome), mirrorChannelId);
 
-        bytes32 l1ChannelId = getL1Channel(mirrorChannelId);
+        bytes32 l1ChannelId = getL2ToL1(mirrorChannelId);
 
         // computation
         bool allocatesOnlyZerosForAllAssets = true;
@@ -92,9 +91,9 @@ contract NitroAdjudicator is INitroAdjudicator, ForceMove, MultiAssetHolder {
 
         if (allocatesOnlyZerosForAllAssets) {
             delete statusOf[l1ChannelId];
-            delete mirrorStatusOf[mirrorChannelId];
+            delete statusOf[mirrorChannelId];
         } else {
-            _updateMirrorFingerprint(mirrorChannelId, stateHash, NitroUtils.hashOutcome(outcome));
+            _updateFingerprint(mirrorChannelId, stateHash, NitroUtils.hashOutcome(outcome));
         }
 
         // interactions
