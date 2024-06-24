@@ -567,7 +567,7 @@ func TestVirtualPaymentChannelWithObjective(t *testing.T) {
 	paymentAmount := 2000
 	nodeB.Pay(response.ChannelId, big.NewInt(int64(paymentAmount)))
 	nodeAVoucher := <-nodeA.ReceivedVouchers()
-	t.Log("vocuher recieved  for channel", nodeAVoucher.ChannelId)
+	t.Log("voucher recieved  for channel", nodeAVoucher.ChannelId)
 
 	// Alice initiates the challenge transaction
 	ledgerResponse, err := nodeA.CloseLedgerChannel(ledgerChannel, true)

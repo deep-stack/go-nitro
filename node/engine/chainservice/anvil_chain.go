@@ -14,8 +14,9 @@ import (
 )
 
 const (
-	CHAIN_AUTH_TOKEN = ""
-	CHAIN_URL        = "ws://127.0.0.1:8545"
+	CHAIN_AUTH_TOKEN       = ""
+	CHAIN_URL_WITHOUT_PORT = "ws://127.0.0.1"
+	DEFAULT_CHAIN_PORT     = "8545"
 )
 
 // Funded accounts in anvil chain
@@ -23,6 +24,7 @@ var ChainPks = []string{
 	"ac0974bec39a17e36ba4a6b4d238ff944bacb478cbed5efcae784d7bf4f2ff80",
 	"59c6995e998f97a5a0044966f0945389dc9e86dae88c7a8412f4603b6b78690d",
 	"5de4111afa1a4b94908f83103eb1f1706367c2e68ca870fc3fb9a804cdab365a",
+	"7c852118294e51e653712a81e05800f419141751be58f605c371e15141b007a6",
 }
 
 type AnvilChain struct {
@@ -34,8 +36,12 @@ type AnvilChain struct {
 	ContractAddresses chainutils.ContractAddresses
 }
 
-func NewAnvilChain() (*AnvilChain, error) {
-	anvilChain, err := StartAnvil()
+func NewAnvilChain(chainPort string) (*AnvilChain, error) {
+	if chainPort == "" {
+		chainPort = DEFAULT_CHAIN_PORT
+	}
+
+	anvilChain, err := StartAnvil(chainPort)
 	if err != nil {
 		return nil, err
 	}
@@ -64,13 +70,14 @@ func (chain AnvilChain) GetLatestBlock() (*ethTypes.Block, error) {
 	return chain.ethClient.BlockByNumber(context.Background(), nil)
 }
 
-func StartAnvil() (AnvilChain, error) {
+func StartAnvil(chainPort string) (AnvilChain, error) {
 	anvilChain := AnvilChain{}
+	anvilChain.ChainUrl = CHAIN_URL_WITHOUT_PORT + ":" + chainPort
+	anvilChain.AnvilCmd = exec.Command("anvil", "--chain-id", "1337", "--block-time", "1", "--silent", "--port", chainPort)
+
 	anvilChain.ChainAuthToken = CHAIN_AUTH_TOKEN
-	anvilChain.ChainUrl = CHAIN_URL
 	anvilChain.ChainPks = ChainPks
 
-	anvilChain.AnvilCmd = exec.Command("anvil", "--chain-id", "1337", "--block-time", "1", "--silent")
 	anvilChain.AnvilCmd.Stdout = os.Stdout
 	anvilChain.AnvilCmd.Stderr = os.Stderr
 	err := anvilChain.AnvilCmd.Start()

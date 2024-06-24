@@ -8,6 +8,18 @@ import {IStatusManager} from './interfaces/IStatusManager.sol';
  */
 contract StatusManager is IStatusManager {
     mapping(bytes32 => bytes32) public statusOf;
+    mapping(bytes32 => bytes32) public l2Tol1;
+
+    // TODO: Add ownerOf check
+    // Function to set map from l2ChannelId to l1ChannelId
+    function setL2ToL1(bytes32 l1ChannelId, bytes32 l2ChannelId) public {
+        l2Tol1[l2ChannelId] = l1ChannelId;
+    }
+
+    // Function to retrieve the mapped value of l2ChannelId
+    function getL2ToL1(bytes32 l2ChannelId) public view returns (bytes32) {
+        return l2Tol1[l2ChannelId];
+    }
 
     /**
      * @notice Computes the ChannelMode for a given channelId.

@@ -320,6 +320,34 @@ func (ecs *EthChainService) SendTransaction(tx protocols.ChainTransaction) error
 	case protocols.ReclaimTransaction:
 		_, err := ecs.na.Reclaim(ecs.defaultTxOpts(), tx.ReclaimArgs)
 		return err
+	case protocols.MirrorTransferAllTransaction:
+		transferState := tx.TransferState.State()
+		channelId := transferState.ChannelId()
+		stateHash, err := transferState.Hash()
+		if err != nil {
+			return err
+		}
+
+		nitroVariablePart := NitroAdjudicator.ConvertVariablePart(transferState.VariablePart())
+
+		_, er := ecs.na.MirrorTransferAllAssets(ecs.defaultTxOpts(), channelId, nitroVariablePart.Outcome, stateHash)
+		return er
+	case protocols.SetL2ToL1Transaction:
+		_, err := ecs.na.SetL2ToL1(ecs.defaultTxOpts(), tx.ChannelId(), tx.MirrorChannelId)
+		return err
+	case protocols.MirrorWithdrawAllTransaction:
+		signedState := tx.SignedState.State()
+		signatures := tx.SignedState.Signatures()
+		nitroFixedPart := NitroAdjudicator.INitroTypesFixedPart(NitroAdjudicator.ConvertFixedPart(signedState.FixedPart()))
+		nitroVariablePart := NitroAdjudicator.ConvertVariablePart(signedState.VariablePart())
+		nitroSignatures := []NitroAdjudicator.INitroTypesSignature{NitroAdjudicator.ConvertSignature(signatures[0]), NitroAdjudicator.ConvertSignature(signatures[1])}
+
+		candidate := NitroAdjudicator.INitroTypesSignedVariablePart{
+			VariablePart: nitroVariablePart,
+			Sigs:         nitroSignatures,
+		}
+		_, err := ecs.na.MirrorConcludeAndTransferAllAssets(ecs.defaultTxOpts(), nitroFixedPart, candidate)
+		return err
 	default:
 		return fmt.Errorf("unexpected transaction type %T", tx)
 	}
@@ -524,22 +552,25 @@ func (ecs *EthChainService) listenForNewBlocks(errorChan chan<- error, newBlockC
 			}
 
 			// Use exponential backoff loop to attempt to re-establish subscription
+			retryFailed := true
 			for backoffTime := MIN_BACKOFF_TIME; backoffTime < MAX_BACKOFF_TIME; backoffTime *= 2 {
 				newBlockSub, err := ecs.chain.SubscribeNewHead(ecs.ctx, newBlockChan)
 				if err != nil {
-					errorChan <- fmt.Errorf("subscribeNewHead failed to resubscribe: %w", err)
+					ecs.logger.Warn("subscribeNewHead failed to resubscribe: " + err.Error())
 					time.Sleep(backoffTime)
 					continue
 				}
 
 				ecs.newBlockSub = newBlockSub
 				ecs.logger.Debug("resubscribed to chain new blocks")
+				retryFailed = false
 				break
 			}
 
-			ecs.logger.Error("subscribeNewHead failed to resubscribe")
-			errorChan <- fmt.Errorf("subscribeNewHead failed to resubscribe")
-			return
+			if retryFailed {
+				errorChan <- fmt.Errorf("subscribeNewHead failed to resubscribe")
+				return
+			}
 
 		case newBlock := <-newBlockChan:
 			block := Block{BlockNum: newBlock.Number.Uint64(), Timestamp: newBlock.Time}

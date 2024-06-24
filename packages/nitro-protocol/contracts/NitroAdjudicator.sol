@@ -27,6 +27,80 @@ contract NitroAdjudicator is INitroAdjudicator, ForceMove, MultiAssetHolder {
         transferAllAssets(channelId, candidate.variablePart.outcome, bytes32(0));
     }
 
+    function mirrorConcludeAndTransferAllAssets(
+        FixedPart memory fixedPart,
+        SignedVariablePart memory candidate
+    ) public virtual {
+        bytes32 mirrorChannelId = _conclude(fixedPart, candidate);
+
+        mirrorTransferAllAssets(mirrorChannelId, candidate.variablePart.outcome, bytes32(0));
+    }
+
+    // TODO: Refactor common code
+    function mirrorTransferAllAssets(
+        bytes32 mirrorChannelId,
+        Outcome.SingleAssetExit[] memory outcome,
+        bytes32 stateHash
+    ) public virtual {
+        // checks
+        _requireChannelFinalized(mirrorChannelId);
+        _requireMatchingFingerprint(stateHash, NitroUtils.hashOutcome(outcome), mirrorChannelId);
+
+        bytes32 l1ChannelId = getL2ToL1(mirrorChannelId);
+
+        // computation
+        bool allocatesOnlyZerosForAllAssets = true;
+        Outcome.SingleAssetExit[] memory exit = new Outcome.SingleAssetExit[](outcome.length);
+        uint256[] memory initialHoldings = new uint256[](outcome.length);
+        uint256[] memory totalPayouts = new uint256[](outcome.length);
+        for (uint256 assetIndex = 0; assetIndex < outcome.length; assetIndex++) {
+            Outcome.SingleAssetExit memory assetOutcome = outcome[assetIndex];
+            Outcome.Allocation[] memory allocations = assetOutcome.allocations;
+            address asset = outcome[assetIndex].asset;
+            initialHoldings[assetIndex] = holdings[asset][l1ChannelId];
+            (
+                Outcome.Allocation[] memory newAllocations,
+                bool allocatesOnlyZeros,
+                Outcome.Allocation[] memory exitAllocations,
+                uint256 totalPayoutsForAsset
+            ) = compute_transfer_effects_and_interactions(
+                    initialHoldings[assetIndex],
+                    allocations,
+                    new uint256[](0)
+                );
+            if (!allocatesOnlyZeros) allocatesOnlyZerosForAllAssets = false;
+            totalPayouts[assetIndex] = totalPayoutsForAsset;
+            outcome[assetIndex].allocations = newAllocations;
+            exit[assetIndex] = Outcome.SingleAssetExit(
+                asset,
+                assetOutcome.assetMetadata,
+                exitAllocations
+            );
+        }
+
+        // effects
+        for (uint256 assetIndex = 0; assetIndex < outcome.length; assetIndex++) {
+            address asset = outcome[assetIndex].asset;
+            holdings[asset][l1ChannelId] -= totalPayouts[assetIndex];
+            emit AllocationUpdated(
+                l1ChannelId,
+                assetIndex,
+                initialHoldings[assetIndex],
+                holdings[asset][l1ChannelId]
+            );
+        }
+
+        if (allocatesOnlyZerosForAllAssets) {
+            delete statusOf[l1ChannelId];
+            delete statusOf[mirrorChannelId];
+        } else {
+            _updateFingerprint(mirrorChannelId, stateHash, NitroUtils.hashOutcome(outcome));
+        }
+
+        // interactions
+        _executeExit(exit);
+    }
+
     /**
      * @notice Liquidates all assets for the channel
      * @dev Liquidates all assets for the channel

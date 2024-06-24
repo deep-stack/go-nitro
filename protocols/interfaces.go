@@ -46,6 +46,15 @@ func NewWithdrawAllTransaction(channelId types.Destination, signedState state.Si
 	return WithdrawAllTransaction{SignedState: signedState, ChainTransaction: ChainTransactionBase{channelId: channelId}}
 }
 
+type MirrorWithdrawAllTransaction struct {
+	ChainTransaction
+	SignedState state.SignedState
+}
+
+func NewMirrorWithdrawAllTransaction(channelId types.Destination, signedState state.SignedState) MirrorWithdrawAllTransaction {
+	return MirrorWithdrawAllTransaction{SignedState: signedState, ChainTransaction: ChainTransactionBase{channelId: channelId}}
+}
+
 type ChallengeTransaction struct {
 	ChainTransaction
 	Candidate     state.SignedState
@@ -76,6 +85,15 @@ func NewTransferAllTransaction(channelId types.Destination, state state.SignedSt
 	return TransferAllTransaction{ChainTransaction: ChainTransactionBase{channelId: channelId}, TransferState: state}
 }
 
+type MirrorTransferAllTransaction struct {
+	ChainTransaction
+	TransferState state.SignedState
+}
+
+func NewMirrorTransferAllTransaction(channelId types.Destination, state state.SignedState) MirrorTransferAllTransaction {
+	return MirrorTransferAllTransaction{ChainTransaction: ChainTransactionBase{channelId: channelId}, TransferState: state}
+}
+
 type CheckpointTransaction struct {
 	ChainTransaction
 	Candidate state.SignedState
@@ -101,6 +119,21 @@ type ReclaimTransaction struct {
 
 func NewReclaimTransaction(channelId types.Destination, reclaimArgs NitroAdjudicator.IMultiAssetHolderReclaimArgs) ReclaimTransaction {
 	return ReclaimTransaction{ChainTransaction: ChainTransactionBase{channelId: channelId}, ReclaimArgs: reclaimArgs}
+}
+
+type SetL2ToL1Transaction struct {
+	ChainTransaction
+	MirrorChannelId types.Destination
+}
+
+func NewSetL2ToL1Transaction(
+	channelId types.Destination,
+	mirrorChannelId types.Destination,
+) SetL2ToL1Transaction {
+	return SetL2ToL1Transaction{
+		ChainTransaction: ChainTransactionBase{channelId: channelId},
+		MirrorChannelId:  mirrorChannelId,
+	}
 }
 
 // SideEffects are effects to be executed by an imperative shell

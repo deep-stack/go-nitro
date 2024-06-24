@@ -24,6 +24,7 @@ import (
 	"github.com/statechannels/go-nitro/node/query"
 	"github.com/statechannels/go-nitro/payments"
 	"github.com/statechannels/go-nitro/protocols"
+	"github.com/statechannels/go-nitro/protocols/bridgedfund"
 	"github.com/statechannels/go-nitro/protocols/directdefund"
 	"github.com/statechannels/go-nitro/protocols/directfund"
 	"github.com/statechannels/go-nitro/protocols/virtualdefund"
@@ -580,6 +581,12 @@ func (e *Engine) handleObjectiveRequest(or protocols.ObjectiveRequest) (EngineEv
 		// Retaining the consensus channel since it's needed to process a challenge-registered event for a virtual channel and obtain the ledger channel ID.
 
 		return e.attemptProgress(&ddfo)
+	case bridgedfund.ObjectiveRequest:
+		bfo, err := bridgedfund.NewObjective(request, true, myAddress, chainId, e.store.GetChannelsByParticipant, e.store.GetConsensusChannel)
+		if err != nil {
+			return failedEngineEvent, fmt.Errorf("handleAPIEvent: Could not create bridgedfund objective for %+v: %w", request, err)
+		}
+		return e.attemptProgress(&bfo)
 
 	default:
 		return failedEngineEvent, fmt.Errorf("handleAPIEvent: Unknown objective type %T", request)
@@ -728,6 +735,11 @@ func (e *Engine) attemptProgress(objective protocols.Objective) (outgoing Engine
 			return
 		}
 
+		err = e.spawnConsensusChannelIfBridgedFundObjective(crankedObjective) // Here we assume that every bridgedfund.Objective is for a ledger channel.
+		if err != nil {
+			return
+		}
+
 		err = e.destroyObjectiveAndChannelIfChallengeCleared(crankedObjective)
 		if err != nil {
 			return
@@ -792,23 +804,35 @@ func (e Engine) registerPaymentChannel(vfo virtualfund.Objective) error {
 	return e.vm.Register(vfo.V.Id, payments.GetPayer(postfund.Participants), payments.GetPayee(postfund.Participants), startingBalance)
 }
 
-// spawnConsensusChannelIfDirectFundObjective will attempt to create and store a ConsensusChannel derived from the supplied Objective if it is a directfund.Objective.
+// spawnConsensusChannel will attempt to create and store a ConsensusChannel derived from the supplied Objective if it is a directfund.Objective or bridgedfund.Objective.
 // The associated Channel will remain in the store.
+func (e Engine) spawnConsensusChannel(crankedObjective protocols.Objective, createChannelFunc func() (*consensus_channel.ConsensusChannel, error)) error {
+	c, err := createChannelFunc()
+	if err != nil {
+		return fmt.Errorf("could not create consensus channel for objective %s: %w", crankedObjective.Id(), err)
+	}
+	err = e.store.SetConsensusChannel(c)
+	if err != nil {
+		return fmt.Errorf("could not store consensus channel for objective %s: %w", crankedObjective.Id(), err)
+	}
+	// Destroy the channel since the consensus channel takes over governance:
+	err = e.store.DestroyChannel(c.Id)
+	if err != nil {
+		return fmt.Errorf("could not destroy consensus channel for objective %s: %w", crankedObjective.Id(), err)
+	}
+	return nil
+}
+
 func (e Engine) spawnConsensusChannelIfDirectFundObjective(crankedObjective protocols.Objective) error {
 	if dfo, isDfo := crankedObjective.(*directfund.Objective); isDfo {
-		c, err := dfo.CreateConsensusChannel()
-		if err != nil {
-			return fmt.Errorf("could not create consensus channel for objective %s: %w", crankedObjective.Id(), err)
-		}
-		err = e.store.SetConsensusChannel(c)
-		if err != nil {
-			return fmt.Errorf("could not store consensus channel for objective %s: %w", crankedObjective.Id(), err)
-		}
-		// Destroy the channel since the consensus channel takes over governance:
-		err = e.store.DestroyChannel(c.Id)
-		if err != nil {
-			return fmt.Errorf("could not destroy consensus channel for objective %s: %w", crankedObjective.Id(), err)
-		}
+		return e.spawnConsensusChannel(crankedObjective, dfo.CreateConsensusChannel)
+	}
+	return nil
+}
+
+func (e Engine) spawnConsensusChannelIfBridgedFundObjective(crankedObjective protocols.Objective) error {
+	if bfo, isBfo := crankedObjective.(*bridgedfund.Objective); isBfo {
+		return e.spawnConsensusChannel(crankedObjective, bfo.CreateConsensusChannel)
 	}
 	return nil
 }
@@ -916,6 +940,10 @@ func (e *Engine) constructObjectiveFromMessage(id protocols.ObjectiveId, p proto
 			return &directdefund.Objective{}, fromMsgErr(id, err)
 		}
 		return &ddfo, nil
+
+	case bridgedfund.IsBridgedFundObjective(id):
+		bfo, err := bridgedfund.ConstructFromPayload(false, p, *e.store.GetAddress())
+		return &bfo, err
 
 	default:
 		return &directfund.Objective{}, errors.New("cannot handle unimplemented objective type")
