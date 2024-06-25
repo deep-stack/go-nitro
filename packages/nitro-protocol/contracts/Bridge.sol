@@ -3,7 +3,7 @@ pragma solidity 0.8.17;
 import {StatusManager} from './StatusManager.sol';
 
 contract Bridge is StatusManager {
-
+  // TODO: Use OpenZepplin ownable contract
   // Make `onlyOwner` modifier
   address private _owner;
 
@@ -18,13 +18,6 @@ contract Bridge is StatusManager {
   modifier onlyOwner() {
     require(owner() == msg.sender, "Ownership Assertion: Caller of the function is not the owner.");
     _;
-  }
-
-  // Owner only method to save mirrored ledger channel state
-  function saveMirroredChannelStatus( bytes32 channelId, bytes32 stateHash,bytes32 outcomeHash) public virtual onlyOwner {
-    statusOf[channelId] = _generateStatus(
-  ChannelData( 0, 0, stateHash, outcomeHash)
-    );
   }
 
   // Owner only method to update mirrored ledger channel state
