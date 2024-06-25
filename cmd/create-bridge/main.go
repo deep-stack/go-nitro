@@ -21,17 +21,17 @@ func run() ([]*exec.Cmd, error) {
 	const STATE_CHANNEL_PK = "2d999770f7b5d49b694080f987b82bbc9fc9ac2b4dcc10b0f8aba7d700f69c6d"
 
 	// start 2 anvil chains
-	anvilCmd1, err := chain.StartAnvil("8545")
+	anvilCmdL1, err := chain.StartAnvil("8545")
 	if err != nil {
 		return runningCmd, err
 	}
-	runningCmd = append(runningCmd, anvilCmd1)
+	runningCmd = append(runningCmd, anvilCmdL1)
 
-	anvilCmd2, err := chain.StartAnvil("8546")
+	anvilCmdL2, err := chain.StartAnvil("8546")
 	if err != nil {
 		return runningCmd, err
 	}
-	runningCmd = append(runningCmd, anvilCmd2)
+	runningCmd = append(runningCmd, anvilCmdL2)
 
 	// Deploy contracts
 	contractAddresses, err := chain.DeployContracts(context.Background(), "ws://127.0.0.1:8545", "", CHAIN_PK)
@@ -39,7 +39,7 @@ func run() ([]*exec.Cmd, error) {
 		return runningCmd, err
 	}
 
-	chainOpts1 := chainservice.ChainOpts{
+	chainOptsL1 := chainservice.ChainOpts{
 		ChainUrl:           "ws://127.0.0.1:8545",
 		ChainStartBlockNum: 0,
 		ChainAuthToken:     "",
@@ -49,7 +49,7 @@ func run() ([]*exec.Cmd, error) {
 		CaAddress:          contractAddresses.CaAddress,
 	}
 
-	chainOpts2 := chainservice.ChainOpts{
+	chainOptsL2 := chainservice.ChainOpts{
 		ChainUrl:           "ws://127.0.0.1:8546",
 		ChainStartBlockNum: 0,
 		ChainAuthToken:     "",
@@ -60,19 +60,19 @@ func run() ([]*exec.Cmd, error) {
 		CaAddress:  contractAddresses.CaAddress,
 	}
 
-	storeOpts1 := store.StoreOpts{
+	storeOptsL1 := store.StoreOpts{
 		PkBytes:            common.Hex2Bytes(STATE_CHANNEL_PK),
 		UseDurableStore:    false,
 		DurableStoreFolder: "",
 	}
 
-	storeOpts2 := store.StoreOpts{
+	storeOptsL2 := store.StoreOpts{
 		PkBytes:            common.Hex2Bytes(STATE_CHANNEL_PK),
 		UseDurableStore:    false,
 		DurableStoreFolder: "",
 	}
 
-	messageOpts1 := p2pms.MessageOpts{
+	messageOptsL1 := p2pms.MessageOpts{
 		PkBytes:   common.Hex2Bytes(STATE_CHANNEL_PK),
 		Port:      3005,
 		BootPeers: nil,
@@ -80,23 +80,24 @@ func run() ([]*exec.Cmd, error) {
 	}
 
 	// TODO: Discuss use of test message service between nodePrime and counterparty prime
-	messageOpts2 := p2pms.MessageOpts{
+	messageOptsL2 := p2pms.MessageOpts{
 		PkBytes:   common.Hex2Bytes(STATE_CHANNEL_PK),
 		Port:      3006,
 		BootPeers: nil,
 		PublicIp:  "127.0.0.1",
 	}
 
-	nodeB, _, _, _, err := node.InitializeNode(chainOpts1, storeOpts1, messageOpts1)
+	nodeL1, _, _, _, err := node.InitializeNode(chainOptsL1, storeOptsL1, messageOptsL1)
 	if err != nil {
 		return runningCmd, err
 	}
-	nodeBPrime, _, _, _, err := node.InitializeNode(chainOpts2, storeOpts2, messageOpts2)
+	nodeL2, _, _, _, err := node.InitializeNode(chainOptsL2, storeOptsL2, messageOptsL2)
 	if err != nil {
 		return runningCmd, err
 	}
 
-	bridge.New(nodeB, nodeBPrime)
+	bridge := bridge.New(nodeL1, nodeL2)
+	defer bridge.Close()
 
 	utils.WaitForKillSignal()
 	utils.StopCommands(runningCmd...)
