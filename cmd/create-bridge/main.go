@@ -17,8 +17,8 @@ import (
 func run() ([]*exec.Cmd, error) {
 	runningCmd := []*exec.Cmd{}
 
-	const CHAIN_PK = "ac0974bec39a17e36ba4a6b4d238ff944bacb478cbed5efcae784d7bf4f2ff80"
-	const STATE_CHANNEL_PK = "2d999770f7b5d49b694080f987b82bbc9fc9ac2b4dcc10b0f8aba7d700f69c6d"
+	const CHAIN_PK = "59c6995e998f97a5a0044966f0945389dc9e86dae88c7a8412f4603b6b78690d"
+	const STATE_CHANNEL_PK = "0279651921cd800ac560c21ceea27aab0107b67daf436cdd25ce84cad30159b4"
 
 	// start 2 anvil chains
 	anvilCmdL1, err := chain.StartAnvil("8545")
@@ -87,16 +87,16 @@ func run() ([]*exec.Cmd, error) {
 		PublicIp:  "127.0.0.1",
 	}
 
-	nodeL1, _, _, _, err := node.InitializeNode(chainOptsL1, storeOptsL1, messageOptsL1)
+	nodeL1, storeL1, _, _, err := node.InitializeNode(chainOptsL1, storeOptsL1, messageOptsL1)
 	if err != nil {
 		return runningCmd, err
 	}
-	nodeL2, _, _, _, err := node.InitializeNode(chainOptsL2, storeOptsL2, messageOptsL2)
+	nodeL2, storeL2, _, _, err := node.InitializeNode(chainOptsL2, storeOptsL2, messageOptsL2)
 	if err != nil {
 		return runningCmd, err
 	}
 
-	bridge := bridge.New(nodeL1, nodeL2)
+	bridge := bridge.New(nodeL1, nodeL2, storeL1, storeL2)
 	defer bridge.Close()
 
 	utils.WaitForKillSignal()
