@@ -39,6 +39,11 @@ func run() ([]*exec.Cmd, error) {
 		return runningCmd, err
 	}
 
+	bridgeAddress, err := chain.DeployL2Contracts(context.Background(), "ws://127.0.0.1:8546", "", CHAIN_PK)
+	if err != nil {
+		return runningCmd, err
+	}
+
 	chainOptsL1 := chainservice.ChainOpts{
 		ChainUrl:           "ws://127.0.0.1:8545",
 		ChainStartBlockNum: 0,
@@ -49,15 +54,12 @@ func run() ([]*exec.Cmd, error) {
 		CaAddress:          contractAddresses.CaAddress,
 	}
 
-	chainOptsL2 := chainservice.ChainOpts{
+	chainOptsL2 := chainservice.L2ChainOpts{
 		ChainUrl:           "ws://127.0.0.1:8546",
 		ChainStartBlockNum: 0,
 		ChainAuthToken:     "",
 		ChainPk:            CHAIN_PK,
-		// TODO: Discuss contract address for node prime
-		NaAddress:  contractAddresses.NaAddress,
-		VpaAddress: contractAddresses.VpaAddress,
-		CaAddress:  contractAddresses.CaAddress,
+		BridgeAddress:      bridgeAddress,
 	}
 
 	storeOptsL1 := store.StoreOpts{
@@ -91,7 +93,7 @@ func run() ([]*exec.Cmd, error) {
 	if err != nil {
 		return runningCmd, err
 	}
-	nodeL2, storeL2, _, _, err := node.InitializeNode(chainOptsL2, storeOptsL2, messageOptsL2)
+	nodeL2, storeL2, _, _, err := node.InitializeL2Node(chainOptsL2, storeOptsL2, messageOptsL2)
 	if err != nil {
 		return runningCmd, err
 	}
