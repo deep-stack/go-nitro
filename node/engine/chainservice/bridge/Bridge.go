@@ -31,8 +31,8 @@ var (
 
 // BridgeMetaData contains all meta data concerning the Bridge contract.
 var BridgeMetaData = &bind.MetaData{
-	ABI: "[{\"inputs\":[],\"stateMutability\":\"nonpayable\",\"type\":\"constructor\"},{\"inputs\":[{\"internalType\":\"bytes32\",\"name\":\"l2ChannelId\",\"type\":\"bytes32\"}],\"name\":\"getL2ToL1\",\"outputs\":[{\"internalType\":\"bytes32\",\"name\":\"\",\"type\":\"bytes32\"}],\"stateMutability\":\"view\",\"type\":\"function\"},{\"inputs\":[{\"internalType\":\"bytes32\",\"name\":\"channelId\",\"type\":\"bytes32\"}],\"name\":\"getMirroredChannelStatus\",\"outputs\":[{\"internalType\":\"bytes32\",\"name\":\"\",\"type\":\"bytes32\"}],\"stateMutability\":\"view\",\"type\":\"function\"},{\"inputs\":[{\"internalType\":\"bytes32\",\"name\":\"\",\"type\":\"bytes32\"}],\"name\":\"l2Tol1\",\"outputs\":[{\"internalType\":\"bytes32\",\"name\":\"\",\"type\":\"bytes32\"}],\"stateMutability\":\"view\",\"type\":\"function\"},{\"inputs\":[],\"name\":\"owner\",\"outputs\":[{\"internalType\":\"address\",\"name\":\"\",\"type\":\"address\"}],\"stateMutability\":\"view\",\"type\":\"function\"},{\"inputs\":[{\"internalType\":\"bytes32\",\"name\":\"l1ChannelId\",\"type\":\"bytes32\"},{\"internalType\":\"bytes32\",\"name\":\"l2ChannelId\",\"type\":\"bytes32\"}],\"name\":\"setL2ToL1\",\"outputs\":[],\"stateMutability\":\"nonpayable\",\"type\":\"function\"},{\"inputs\":[{\"internalType\":\"bytes32\",\"name\":\"\",\"type\":\"bytes32\"}],\"name\":\"statusOf\",\"outputs\":[{\"internalType\":\"bytes32\",\"name\":\"\",\"type\":\"bytes32\"}],\"stateMutability\":\"view\",\"type\":\"function\"},{\"inputs\":[{\"internalType\":\"bytes32\",\"name\":\"channelId\",\"type\":\"bytes32\"},{\"internalType\":\"bytes32\",\"name\":\"stateHash\",\"type\":\"bytes32\"},{\"internalType\":\"bytes32\",\"name\":\"outcomeHash\",\"type\":\"bytes32\"}],\"name\":\"updateMirroredChannelStatus\",\"outputs\":[],\"stateMutability\":\"nonpayable\",\"type\":\"function\"}]",
-	Bin: "0x6080806040523461002857600280546001600160a01b03191633179055610452908161002e8239f35b600080fdfe6080604081815260048036101561001557600080fd5b600092833560e01c908163486f14d1146103d45750806377027728146103935780638a7ca6641461034e5780638da5cb5b146102f7578063c7df14e2146102b3578063d3a50807146100b75763e34e51801461007057600080fd5b346100b35760207ffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffc3601126100b357602092829135815280845220549051908152f35b8280fd5b50346100b35760607ffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffc3601126100b3578035906024356044359073ffffffffffffffffffffffffffffffffffffffff918260025416330361023057848752866020528587205493865190608082019167ffffffffffffffff92818110848211176102045784916060918b528860d01c815265ffffffffffff8960a01c166020820152868b820152015287519260208401948552888401528783526060830191838310908311176101d85750865251902016918452836020527fffffffffffff000000000000000000000000000000000000000000000000000079ffffffffffff00000000000000000000000000000000000000008216911617179082205580f35b8860416024927f4e487b7100000000000000000000000000000000000000000000000000000000835252fd5b60248b6041857f4e487b7100000000000000000000000000000000000000000000000000000000835252fd5b60848460208851917f08c379a0000000000000000000000000000000000000000000000000000000008352820152603d60248201527f4f776e65727368697020417373657274696f6e3a2043616c6c6572206f66207460448201527f68652066756e6374696f6e206973206e6f7420746865206f776e65722e0000006064820152fd5b50346100b35760207ffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffc3601126100b357602092829135815280845220549051908152f35b50503461034a57817ffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffc36011261034a5760209073ffffffffffffffffffffffffffffffffffffffff600254169051908152f35b5080fd5b50346100b35760207ffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffc3601126100b35760209282913581526001845220549051908152f35b50346100b357817ffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffc3601126100b35760243583526001602052359082205580f35b92919050346104185760207ffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffc36011261041857926020933581526001845220548152f35b8380fdfea2646970667358221220991462e400674131dfe749d3ba2b1a83f03321997540f77c02aa78d7a4c189cf64736f6c63430008110033",
+	ABI: "[{\"anonymous\":false,\"inputs\":[{\"indexed\":true,\"internalType\":\"address\",\"name\":\"previousOwner\",\"type\":\"address\"},{\"indexed\":true,\"internalType\":\"address\",\"name\":\"newOwner\",\"type\":\"address\"}],\"name\":\"OwnershipTransferred\",\"type\":\"event\"},{\"inputs\":[{\"internalType\":\"bytes32\",\"name\":\"l2ChannelId\",\"type\":\"bytes32\"}],\"name\":\"getL2ToL1\",\"outputs\":[{\"internalType\":\"bytes32\",\"name\":\"\",\"type\":\"bytes32\"}],\"stateMutability\":\"view\",\"type\":\"function\"},{\"inputs\":[{\"internalType\":\"bytes32\",\"name\":\"channelId\",\"type\":\"bytes32\"}],\"name\":\"getMirroredChannelStatus\",\"outputs\":[{\"internalType\":\"bytes32\",\"name\":\"\",\"type\":\"bytes32\"}],\"stateMutability\":\"view\",\"type\":\"function\"},{\"inputs\":[{\"internalType\":\"bytes32\",\"name\":\"\",\"type\":\"bytes32\"}],\"name\":\"l2Tol1\",\"outputs\":[{\"internalType\":\"bytes32\",\"name\":\"\",\"type\":\"bytes32\"}],\"stateMutability\":\"view\",\"type\":\"function\"},{\"inputs\":[],\"name\":\"owner\",\"outputs\":[{\"internalType\":\"address\",\"name\":\"\",\"type\":\"address\"}],\"stateMutability\":\"view\",\"type\":\"function\"},{\"inputs\":[],\"name\":\"renounceOwnership\",\"outputs\":[],\"stateMutability\":\"nonpayable\",\"type\":\"function\"},{\"inputs\":[{\"internalType\":\"bytes32\",\"name\":\"l1ChannelId\",\"type\":\"bytes32\"},{\"internalType\":\"bytes32\",\"name\":\"l2ChannelId\",\"type\":\"bytes32\"}],\"name\":\"setL2ToL1\",\"outputs\":[],\"stateMutability\":\"nonpayable\",\"type\":\"function\"},{\"inputs\":[{\"internalType\":\"bytes32\",\"name\":\"\",\"type\":\"bytes32\"}],\"name\":\"statusOf\",\"outputs\":[{\"internalType\":\"bytes32\",\"name\":\"\",\"type\":\"bytes32\"}],\"stateMutability\":\"view\",\"type\":\"function\"},{\"inputs\":[{\"internalType\":\"address\",\"name\":\"newOwner\",\"type\":\"address\"}],\"name\":\"transferOwnership\",\"outputs\":[],\"stateMutability\":\"nonpayable\",\"type\":\"function\"},{\"inputs\":[{\"internalType\":\"bytes32\",\"name\":\"channelId\",\"type\":\"bytes32\"},{\"internalType\":\"bytes32\",\"name\":\"stateHash\",\"type\":\"bytes32\"},{\"internalType\":\"bytes32\",\"name\":\"outcomeHash\",\"type\":\"bytes32\"}],\"name\":\"updateMirroredChannelStatus\",\"outputs\":[],\"stateMutability\":\"nonpayable\",\"type\":\"function\"}]",
+	Bin: "0x6080806040523461005b5760008054336001600160a01b0319821681178355916001600160a01b03909116907f8be0079c531659141344cd1fd0a4f28419497f9722a3daafe3b4186f6b6457e09080a361060390816100618239f35b600080fdfe608060408181526004908136101561001657600080fd5b600092833560e01c908163486f14d11461050757508063715018a614610468578063770277281461041e5780638a7ca664146103d85780638da5cb5b14610387578063c7df14e2146101c5578063d3a508071461020b578063e34e5180146101c55763f2fde38b1461008757600080fd5b346101c15760207ffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffc3601126101c15781359173ffffffffffffffffffffffffffffffffffffffff918284168094036101bd576100e161054e565b831561013a5750508254827fffffffffffffffffffffffff00000000000000000000000000000000000000008216178455167f8be0079c531659141344cd1fd0a4f28419497f9722a3daafe3b4186f6b6457e08380a380f35b90602060849251917f08c379a0000000000000000000000000000000000000000000000000000000008352820152602660248201527f4f776e61626c653a206e6577206f776e657220697320746865207a65726f206160448201527f64647265737300000000000000000000000000000000000000000000000000006064820152fd5b8480fd5b8280fd5b5090346101c15760207ffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffc3601126101c15760209282913581526001845220549051908152f35b508290346103835760607ffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffc36011261038357823560443560243561024d61054e565b828552600160205283852054918451608081019067ffffffffffffffff918181108382111761035757839160609189528660d01c815265ffffffffffff8760a01c16602082015285898201520152855191602083019384528683015285825260608201908282109082111761032b579073ffffffffffffffffffffffffffffffffffffffff929186525190201691845260016020527fffffffffffff000000000000000000000000000000000000000000000000000079ffffffffffff00000000000000000000000000000000000000008216911617179082205580f35b60248760418a7f4e487b7100000000000000000000000000000000000000000000000000000000835252fd5b60248960418c7f4e487b7100000000000000000000000000000000000000000000000000000000835252fd5b5080fd5b83823461038357817ffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffc3601126103835773ffffffffffffffffffffffffffffffffffffffff60209254169051908152f35b5090346101c15760207ffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffc3601126101c15760209282913581526002845220549051908152f35b5090346101c157817ffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffc3601126101c15761045661054e565b60243583526002602052359082205580f35b833461050457807ffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffc3601126105045761049f61054e565b8073ffffffffffffffffffffffffffffffffffffffff81547fffffffffffffffffffffffff000000000000000000000000000000000000000081168355167f8be0079c531659141344cd1fd0a4f28419497f9722a3daafe3b4186f6b6457e08280a380f35b80fd5b9290503461054a5760207ffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffc36011261054a57926020933581526002845220548152f35b8380fd5b73ffffffffffffffffffffffffffffffffffffffff60005416330361056f57565b60646040517f08c379a000000000000000000000000000000000000000000000000000000000815260206004820152602060248201527f4f776e61626c653a2063616c6c6572206973206e6f7420746865206f776e65726044820152fdfea26469706673582212208ccb63a6873baf26a3e26d25a2d8acbe688e7732593c60795af43e57f6396fd664736f6c63430008110033",
 }
 
 // BridgeABI is the input ABI used to generate the binding from.
@@ -357,6 +357,27 @@ func (_Bridge *BridgeCallerSession) StatusOf(arg0 [32]byte) ([32]byte, error) {
 	return _Bridge.Contract.StatusOf(&_Bridge.CallOpts, arg0)
 }
 
+// RenounceOwnership is a paid mutator transaction binding the contract method 0x715018a6.
+//
+// Solidity: function renounceOwnership() returns()
+func (_Bridge *BridgeTransactor) RenounceOwnership(opts *bind.TransactOpts) (*types.Transaction, error) {
+	return _Bridge.contract.Transact(opts, "renounceOwnership")
+}
+
+// RenounceOwnership is a paid mutator transaction binding the contract method 0x715018a6.
+//
+// Solidity: function renounceOwnership() returns()
+func (_Bridge *BridgeSession) RenounceOwnership() (*types.Transaction, error) {
+	return _Bridge.Contract.RenounceOwnership(&_Bridge.TransactOpts)
+}
+
+// RenounceOwnership is a paid mutator transaction binding the contract method 0x715018a6.
+//
+// Solidity: function renounceOwnership() returns()
+func (_Bridge *BridgeTransactorSession) RenounceOwnership() (*types.Transaction, error) {
+	return _Bridge.Contract.RenounceOwnership(&_Bridge.TransactOpts)
+}
+
 // SetL2ToL1 is a paid mutator transaction binding the contract method 0x77027728.
 //
 // Solidity: function setL2ToL1(bytes32 l1ChannelId, bytes32 l2ChannelId) returns()
@@ -378,6 +399,27 @@ func (_Bridge *BridgeTransactorSession) SetL2ToL1(l1ChannelId [32]byte, l2Channe
 	return _Bridge.Contract.SetL2ToL1(&_Bridge.TransactOpts, l1ChannelId, l2ChannelId)
 }
 
+// TransferOwnership is a paid mutator transaction binding the contract method 0xf2fde38b.
+//
+// Solidity: function transferOwnership(address newOwner) returns()
+func (_Bridge *BridgeTransactor) TransferOwnership(opts *bind.TransactOpts, newOwner common.Address) (*types.Transaction, error) {
+	return _Bridge.contract.Transact(opts, "transferOwnership", newOwner)
+}
+
+// TransferOwnership is a paid mutator transaction binding the contract method 0xf2fde38b.
+//
+// Solidity: function transferOwnership(address newOwner) returns()
+func (_Bridge *BridgeSession) TransferOwnership(newOwner common.Address) (*types.Transaction, error) {
+	return _Bridge.Contract.TransferOwnership(&_Bridge.TransactOpts, newOwner)
+}
+
+// TransferOwnership is a paid mutator transaction binding the contract method 0xf2fde38b.
+//
+// Solidity: function transferOwnership(address newOwner) returns()
+func (_Bridge *BridgeTransactorSession) TransferOwnership(newOwner common.Address) (*types.Transaction, error) {
+	return _Bridge.Contract.TransferOwnership(&_Bridge.TransactOpts, newOwner)
+}
+
 // UpdateMirroredChannelStatus is a paid mutator transaction binding the contract method 0xd3a50807.
 //
 // Solidity: function updateMirroredChannelStatus(bytes32 channelId, bytes32 stateHash, bytes32 outcomeHash) returns()
@@ -397,4 +439,157 @@ func (_Bridge *BridgeSession) UpdateMirroredChannelStatus(channelId [32]byte, st
 // Solidity: function updateMirroredChannelStatus(bytes32 channelId, bytes32 stateHash, bytes32 outcomeHash) returns()
 func (_Bridge *BridgeTransactorSession) UpdateMirroredChannelStatus(channelId [32]byte, stateHash [32]byte, outcomeHash [32]byte) (*types.Transaction, error) {
 	return _Bridge.Contract.UpdateMirroredChannelStatus(&_Bridge.TransactOpts, channelId, stateHash, outcomeHash)
+}
+
+// BridgeOwnershipTransferredIterator is returned from FilterOwnershipTransferred and is used to iterate over the raw logs and unpacked data for OwnershipTransferred events raised by the Bridge contract.
+type BridgeOwnershipTransferredIterator struct {
+	Event *BridgeOwnershipTransferred // Event containing the contract specifics and raw log
+
+	contract *bind.BoundContract // Generic contract to use for unpacking event data
+	event    string              // Event name to use for unpacking event data
+
+	logs chan types.Log        // Log channel receiving the found contract events
+	sub  ethereum.Subscription // Subscription for errors, completion and termination
+	done bool                  // Whether the subscription completed delivering logs
+	fail error                 // Occurred error to stop iteration
+}
+
+// Next advances the iterator to the subsequent event, returning whether there
+// are any more events found. In case of a retrieval or parsing error, false is
+// returned and Error() can be queried for the exact failure.
+func (it *BridgeOwnershipTransferredIterator) Next() bool {
+	// If the iterator failed, stop iterating
+	if it.fail != nil {
+		return false
+	}
+	// If the iterator completed, deliver directly whatever's available
+	if it.done {
+		select {
+		case log := <-it.logs:
+			it.Event = new(BridgeOwnershipTransferred)
+			if err := it.contract.UnpackLog(it.Event, it.event, log); err != nil {
+				it.fail = err
+				return false
+			}
+			it.Event.Raw = log
+			return true
+
+		default:
+			return false
+		}
+	}
+	// Iterator still in progress, wait for either a data or an error event
+	select {
+	case log := <-it.logs:
+		it.Event = new(BridgeOwnershipTransferred)
+		if err := it.contract.UnpackLog(it.Event, it.event, log); err != nil {
+			it.fail = err
+			return false
+		}
+		it.Event.Raw = log
+		return true
+
+	case err := <-it.sub.Err():
+		it.done = true
+		it.fail = err
+		return it.Next()
+	}
+}
+
+// Error returns any retrieval or parsing error occurred during filtering.
+func (it *BridgeOwnershipTransferredIterator) Error() error {
+	return it.fail
+}
+
+// Close terminates the iteration process, releasing any pending underlying
+// resources.
+func (it *BridgeOwnershipTransferredIterator) Close() error {
+	it.sub.Unsubscribe()
+	return nil
+}
+
+// BridgeOwnershipTransferred represents a OwnershipTransferred event raised by the Bridge contract.
+type BridgeOwnershipTransferred struct {
+	PreviousOwner common.Address
+	NewOwner      common.Address
+	Raw           types.Log // Blockchain specific contextual infos
+}
+
+// FilterOwnershipTransferred is a free log retrieval operation binding the contract event 0x8be0079c531659141344cd1fd0a4f28419497f9722a3daafe3b4186f6b6457e0.
+//
+// Solidity: event OwnershipTransferred(address indexed previousOwner, address indexed newOwner)
+func (_Bridge *BridgeFilterer) FilterOwnershipTransferred(opts *bind.FilterOpts, previousOwner []common.Address, newOwner []common.Address) (*BridgeOwnershipTransferredIterator, error) {
+
+	var previousOwnerRule []interface{}
+	for _, previousOwnerItem := range previousOwner {
+		previousOwnerRule = append(previousOwnerRule, previousOwnerItem)
+	}
+	var newOwnerRule []interface{}
+	for _, newOwnerItem := range newOwner {
+		newOwnerRule = append(newOwnerRule, newOwnerItem)
+	}
+
+	logs, sub, err := _Bridge.contract.FilterLogs(opts, "OwnershipTransferred", previousOwnerRule, newOwnerRule)
+	if err != nil {
+		return nil, err
+	}
+	return &BridgeOwnershipTransferredIterator{contract: _Bridge.contract, event: "OwnershipTransferred", logs: logs, sub: sub}, nil
+}
+
+// WatchOwnershipTransferred is a free log subscription operation binding the contract event 0x8be0079c531659141344cd1fd0a4f28419497f9722a3daafe3b4186f6b6457e0.
+//
+// Solidity: event OwnershipTransferred(address indexed previousOwner, address indexed newOwner)
+func (_Bridge *BridgeFilterer) WatchOwnershipTransferred(opts *bind.WatchOpts, sink chan<- *BridgeOwnershipTransferred, previousOwner []common.Address, newOwner []common.Address) (event.Subscription, error) {
+
+	var previousOwnerRule []interface{}
+	for _, previousOwnerItem := range previousOwner {
+		previousOwnerRule = append(previousOwnerRule, previousOwnerItem)
+	}
+	var newOwnerRule []interface{}
+	for _, newOwnerItem := range newOwner {
+		newOwnerRule = append(newOwnerRule, newOwnerItem)
+	}
+
+	logs, sub, err := _Bridge.contract.WatchLogs(opts, "OwnershipTransferred", previousOwnerRule, newOwnerRule)
+	if err != nil {
+		return nil, err
+	}
+	return event.NewSubscription(func(quit <-chan struct{}) error {
+		defer sub.Unsubscribe()
+		for {
+			select {
+			case log := <-logs:
+				// New log arrived, parse the event and forward to the user
+				event := new(BridgeOwnershipTransferred)
+				if err := _Bridge.contract.UnpackLog(event, "OwnershipTransferred", log); err != nil {
+					return err
+				}
+				event.Raw = log
+
+				select {
+				case sink <- event:
+				case err := <-sub.Err():
+					return err
+				case <-quit:
+					return nil
+				}
+			case err := <-sub.Err():
+				return err
+			case <-quit:
+				return nil
+			}
+		}
+	}), nil
+}
+
+// ParseOwnershipTransferred is a log parse operation binding the contract event 0x8be0079c531659141344cd1fd0a4f28419497f9722a3daafe3b4186f6b6457e0.
+//
+// Solidity: event OwnershipTransferred(address indexed previousOwner, address indexed newOwner)
+func (_Bridge *BridgeFilterer) ParseOwnershipTransferred(log types.Log) (*BridgeOwnershipTransferred, error) {
+	event := new(BridgeOwnershipTransferred)
+	if err := _Bridge.contract.UnpackLog(event, "OwnershipTransferred", log); err != nil {
+		return nil, err
+	}
+	event.Raw = log
+	return event, nil
 }
