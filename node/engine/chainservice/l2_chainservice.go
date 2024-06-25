@@ -25,22 +25,22 @@ type L2ChainOpts struct {
 	ChainStartBlockNum uint64
 	ChainAuthToken     string
 	ChainPk            string
-	bridgeAddress  		 common.Address
+	BridgeAddress      common.Address
 }
 
 type L2ChainService struct {
-	chain                    ethChain
-	bridge                   *Bridge.Bridge
-	bridgeAddress            common.Address
-	txSigner                 *bind.TransactOpts
-	out                      chan Event
-	logger                   *slog.Logger
-	ctx                      context.Context
-	cancel                   context.CancelFunc
-	wg                       *sync.WaitGroup
-	eventTracker             *eventTracker
-	eventSub                 ethereum.Subscription
-	newBlockSub              ethereum.Subscription
+	chain         ethChain
+	bridge        *Bridge.Bridge
+	bridgeAddress common.Address
+	txSigner      *bind.TransactOpts
+	out           chan Event
+	logger        *slog.Logger
+	ctx           context.Context
+	cancel        context.CancelFunc
+	wg            *sync.WaitGroup
+	eventTracker  *eventTracker
+	eventSub      ethereum.Subscription
+	newBlockSub   ethereum.Subscription
 }
 
 // NewEthChainService is a convenient wrapper around newEthChainService, which provides a simpler API
@@ -59,12 +59,12 @@ func NewL2ChainService(l2ChainOpts L2ChainOpts) (*L2ChainService, error) {
 		panic(err)
 	}
 
-	na, err := Bridge.NewBridge(l2ChainOpts.bridgeAddress, ethClient)
+	na, err := Bridge.NewBridge(l2ChainOpts.BridgeAddress, ethClient)
 	if err != nil {
 		panic(err)
 	}
 
-	return newL2ChainService(ethClient, l2ChainOpts.ChainStartBlockNum, na, l2ChainOpts.bridgeAddress, txSigner)
+	return newL2ChainService(ethClient, l2ChainOpts.ChainStartBlockNum, na, l2ChainOpts.BridgeAddress, txSigner)
 }
 
 // newEthChainService constructs a chain service that submits transactions to a NitroAdjudicator
@@ -210,10 +210,8 @@ func (l2cs *L2ChainService) dispatchChainEvents(logs []ethTypes.Log) error {
 		}
 
 		switch l.Topics[0] {
-
 		default:
 			l2cs.logger.Info("Ignoring unknown chain event topic", "topic", l.Topics[0].String())
-
 		}
 	}
 	return nil
