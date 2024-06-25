@@ -87,16 +87,16 @@ func run() ([]*exec.Cmd, error) {
 		PublicIp:  "127.0.0.1",
 	}
 
-	nodeL1, _, _, _, err := node.InitializeNode(chainOptsL1, storeOptsL1, messageOptsL1)
+	nodeL1, storeL1, _, _, err := node.InitializeNode(chainOptsL1, storeOptsL1, messageOptsL1)
 	if err != nil {
 		return runningCmd, err
 	}
-	nodeL2, _, _, _, err := node.InitializeNode(chainOptsL2, storeOptsL2, messageOptsL2)
+	nodeL2, storeL2, _, _, err := node.InitializeNode(chainOptsL2, storeOptsL2, messageOptsL2)
 	if err != nil {
 		return runningCmd, err
 	}
 
-	bridge := bridge.New(nodeL1, nodeL2)
+	bridge := bridge.New(nodeL1, nodeL2, storeL1, storeL2)
 	defer bridge.Close()
 
 	utils.WaitForKillSignal()
