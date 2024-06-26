@@ -138,19 +138,19 @@ func NewSetL2ToL1Transaction(
 
 type UpdateMirroredChannelStatusTransaction struct {
 	ChainTransaction
-	StateHash   types.Bytes32
-	OutcomeHash types.Bytes32
+	StateHash    types.Bytes32
+	OutcomeBytes types.Bytes
 }
 
 func NewUpdateMirroredChannelStatusTransaction(
 	channelId types.Destination,
 	stateHash types.Bytes32,
-	outcomeHash types.Bytes32,
+	outcomeBytes types.Bytes,
 ) UpdateMirroredChannelStatusTransaction {
 	return UpdateMirroredChannelStatusTransaction{
 		ChainTransaction: ChainTransactionBase{channelId: channelId},
 		StateHash:        stateHash,
-		OutcomeHash:      outcomeHash,
+		OutcomeBytes:     outcomeBytes,
 	}
 }
 

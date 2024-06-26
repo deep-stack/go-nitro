@@ -312,6 +312,14 @@ func (o *Objective) Crank(secretKey *[]byte) (protocols.Objective, protocols.Sid
 
 	// Completion
 	updated.Status = protocols.Completed
+
+	// On completion, write mirrored ledger channel state to L2 chain if bridge channel was created by me
+	if updated.C.MyIndex == 0 {
+		latestState, _ := updated.C.LatestSupportedState()
+		latestStateOutcomeBytes, _ := latestState.Outcome.Encode()
+		updateMirroredChannelStateTx := protocols.NewUpdateMirroredChannelStatusTransaction(latestState.ChannelId(), latestState.AppDefinition.Hash(), latestStateOutcomeBytes)
+		sideEffects.TransactionsToSubmit = append(sideEffects.TransactionsToSubmit, updateMirroredChannelStateTx)
+	}
 	return &updated, sideEffects, WaitingForNothing, nil
 }
 

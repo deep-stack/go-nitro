@@ -4,8 +4,8 @@ import {StatusManager} from './StatusManager.sol';
 
 contract Bridge is StatusManager {
   // Owner only method to update mirrored ledger channel state
-  function updateMirroredChannelStatus( bytes32 channelId, bytes32 stateHash,bytes32 outcomeHash) public virtual onlyOwner {
-    _updateFingerprint(channelId, stateHash, outcomeHash);
+  function updateMirroredChannelStatus( bytes32 channelId, bytes32 stateHash,bytes memory outcomeBytes) public virtual onlyOwner {
+    _updateFingerprint(channelId, stateHash, keccak256(outcomeBytes));
   }
 
   function _updateFingerprint(
