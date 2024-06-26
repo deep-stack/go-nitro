@@ -68,7 +68,7 @@ func newL2ChainService(chain ethChain, startBlockNum uint64, bridge *Bridge.Brid
 func (l2cs *L2ChainService) SendTransaction(tx protocols.ChainTransaction) error {
 	switch tx := tx.(type) {
 	case protocols.UpdateMirroredChannelStatusTransaction:
-		_, err := l2cs.bridge.UpdateMirroredChannelStatus(l2cs.defaultTxOpts(), tx.ChannelId(), tx.StateHash, tx.OutcomeHash)
+		_, err := l2cs.bridge.UpdateMirroredChannelStatus(l2cs.defaultTxOpts(), tx.ChannelId(), tx.StateHash, tx.OutcomeBytes)
 		return err
 	case protocols.GetMirroredChannelStatusTransaction:
 		_, err := l2cs.bridge.GetMirroredChannelStatus(&bind.CallOpts{}, tx.ChannelId())

@@ -68,7 +68,7 @@ func InitializeL2Node(l2ChainOpts chainservice.L2ChainOpts, storeOpts store.Stor
 		l2ChainOpts.ChainStartBlockNum = storeBlockNum
 	}
 
-	slog.Info("Initializing chain service...")
+	slog.Info("Initializing L2 chain service...")
 	ourChain, err := chainservice.NewL2ChainService(l2ChainOpts)
 	if err != nil {
 		return nil, nil, nil, nil, err

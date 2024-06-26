@@ -2,6 +2,7 @@ package main
 
 import (
 	"crypto/tls"
+	"fmt"
 	"log"
 	"log/slog"
 	"os"
@@ -13,6 +14,7 @@ import (
 	"github.com/statechannels/go-nitro/internal/logging"
 	"github.com/statechannels/go-nitro/internal/node"
 	"github.com/statechannels/go-nitro/internal/rpc"
+	scNode "github.com/statechannels/go-nitro/node"
 	"github.com/statechannels/go-nitro/node/engine/chainservice"
 	p2pms "github.com/statechannels/go-nitro/node/engine/messageservice/p2p-message-service"
 	"github.com/statechannels/go-nitro/node/engine/store"
@@ -33,11 +35,13 @@ func main() {
 		NA_ADDRESS            = "naaddress"
 		VPA_ADDRESS           = "vpaaddress"
 		CA_ADDRESS            = "caaddress"
+		BRIDGE_ADDRESS        = "bridgeaddress"
 		PUBLIC_IP             = "publicip"
 		MSG_PORT              = "msgport"
 		RPC_PORT              = "rpcport"
 		GUI_PORT              = "guiport"
 		BOOT_PEERS            = "bootpeers"
+		IS_L2                 = "isl2"
 
 		// Keys
 		KEYS_CATEGORY = "Keys:"
@@ -54,10 +58,10 @@ func main() {
 		TLS_CERT_FILEPATH = "tlscertfilepath"
 		TLS_KEY_FILEPATH  = "tlskeyfilepath"
 	)
-	var pkString, chainUrl, chainAuthToken, naAddress, vpaAddress, caAddress, chainPk, durableStoreFolder, bootPeers, publicIp string
+	var pkString, chainUrl, chainAuthToken, naAddress, vpaAddress, caAddress, bridgeAddress, chainPk, durableStoreFolder, bootPeers, publicIp string
 	var msgPort, rpcPort, guiPort int
 	var chainStartBlock uint64
-	var useNats, useDurableStore bool
+	var useNats, useDurableStore, isL2 bool
 
 	var tlsCertFilepath, tlsKeyFilepath string
 
@@ -78,7 +82,14 @@ func main() {
 			Usage:       "Specifies whether to use NATS or http/ws for the rpc server.",
 			Value:       false,
 			Category:    CONNECTIVITY_CATEGORY,
-			Destination: &useNats,
+			Destination: &isL2,
+		}),
+		altsrc.NewBoolFlag(&cli.BoolFlag{
+			Name:        IS_L2,
+			Usage:       "Specifies whether to initialize node on L2 or L1.",
+			Value:       false,
+			Category:    CONNECTIVITY_CATEGORY,
+			Destination: &isL2,
 		}),
 		altsrc.NewBoolFlag(&cli.BoolFlag{
 			Name:        USE_DURABLE_STORE,
@@ -145,6 +156,12 @@ func main() {
 			Destination: &caAddress,
 		}),
 		altsrc.NewStringFlag(&cli.StringFlag{
+			Name:        BRIDGE_ADDRESS,
+			Usage:       "Specifies the address of the bridge contract.",
+			Category:    CONNECTIVITY_CATEGORY,
+			Destination: &bridgeAddress,
+		}),
+		altsrc.NewStringFlag(&cli.StringFlag{
 			Name:        PUBLIC_IP,
 			Usage:       "Specifies the public ip used for the message service.",
 			Value:       "127.0.0.1",
@@ -208,14 +225,25 @@ func main() {
 		Flags:  flags,
 		Before: altsrc.InitInputSourceWithContext(flags, altsrc.NewTomlSourceFromFlagFunc(CONFIG)),
 		Action: func(cCtx *cli.Context) error {
-			chainOpts := chainservice.ChainOpts{
-				ChainUrl:           chainUrl,
-				ChainStartBlockNum: chainStartBlock,
-				ChainAuthToken:     chainAuthToken,
-				ChainPk:            chainPk,
-				NaAddress:          common.HexToAddress(naAddress),
-				VpaAddress:         common.HexToAddress(vpaAddress),
-				CaAddress:          common.HexToAddress(caAddress),
+			var chainOpts interface{}
+			if isL2 {
+				chainOpts = chainservice.L2ChainOpts{
+					ChainUrl:           chainUrl,
+					ChainStartBlockNum: chainStartBlock,
+					ChainAuthToken:     chainAuthToken,
+					ChainPk:            chainPk,
+					BridgeAddress:      common.HexToAddress(bridgeAddress),
+				}
+			} else {
+				chainOpts = chainservice.ChainOpts{
+					ChainUrl:           chainUrl,
+					ChainStartBlockNum: chainStartBlock,
+					ChainAuthToken:     chainAuthToken,
+					ChainPk:            chainPk,
+					NaAddress:          common.HexToAddress(naAddress),
+					VpaAddress:         common.HexToAddress(vpaAddress),
+					CaAddress:          common.HexToAddress(caAddress),
+				}
 			}
 
 			storeOpts := store.StoreOpts{
@@ -238,7 +266,23 @@ func main() {
 
 			logging.SetupDefaultLogger(os.Stdout, slog.LevelDebug)
 
-			node, _, _, _, err := node.InitializeNode(chainOpts, storeOpts, messageOpts)
+			var n *scNode.Node
+			var err error
+
+			if isL2 {
+				if opts, ok := chainOpts.(chainservice.L2ChainOpts); ok {
+					n, _, _, _, err = node.InitializeL2Node(opts, storeOpts, messageOpts)
+				} else {
+					return fmt.Errorf("failed to cast chainOpts to ChainOptsL2")
+				}
+			} else {
+				if opts, ok := chainOpts.(chainservice.ChainOpts); ok {
+					n, _, _, _, err = node.InitializeNode(opts, storeOpts, messageOpts)
+				} else {
+					return fmt.Errorf("failed to cast chainOpts to ChainOpts")
+				}
+			}
+
 			if err != nil {
 				return err
 			}
@@ -251,7 +295,7 @@ func main() {
 				}
 			}
 
-			rpcServer, err := rpc.InitializeRpcServer(node, rpcPort, useNats, &cert)
+			rpcServer, err := rpc.InitializeRpcServer(n, rpcPort, useNats, &cert)
 			if err != nil {
 				return err
 			}
