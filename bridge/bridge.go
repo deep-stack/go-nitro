@@ -19,6 +19,7 @@ type Bridge struct {
 	storeL2                     store.Store
 	completedObjectivesInNodeL1 <-chan protocols.ObjectiveId
 	cancel                      context.CancelFunc
+	mirrorChannelMap            map[types.Destination]types.Destination
 }
 
 func New(nodeL1 *node.Node, nodeL2 *node.Node, storeL1 store.Store, storeL2 store.Store) Bridge {
@@ -30,6 +31,7 @@ func New(nodeL1 *node.Node, nodeL2 *node.Node, storeL1 store.Store, storeL2 stor
 		storeL2:                     storeL2,
 		completedObjectivesInNodeL1: nodeL1.CompletedObjectives(),
 		cancel:                      cancelFunc,
+		mirrorChannelMap:            make(map[types.Destination]types.Destination),
 	}
 
 	go bridge.run(ctx)
@@ -42,7 +44,6 @@ func (b Bridge) run(ctx context.Context) {
 		var err error
 		select {
 		case objId := <-b.completedObjectivesInNodeL1:
-			fmt.Println("IN run called completed objective", objId)
 			err = b.processObjectivesFromL1(objId)
 			b.checkError(err)
 		case <-ctx.Done():
@@ -53,7 +54,6 @@ func (b Bridge) run(ctx context.Context) {
 
 func (b Bridge) processObjectivesFromL1(objId protocols.ObjectiveId) error {
 	objIdArr := strings.Split(string(objId), "-")
-	fmt.Println("OBJ ID AND ARRAY", objId, objIdArr)
 	objectiveType := objIdArr[0]
 	channelId := objIdArr[1]
 
@@ -82,12 +82,16 @@ func (b Bridge) processObjectivesFromL1(objId protocols.ObjectiveId) error {
 		if err != nil {
 			return err
 		}
+		b.mirrorChannelMap[l1LedgerChannel.Id] = l2LedgerChannelResponse.ChannelId
 		fmt.Println("Started creating mirror ledger channel in L2", l2LedgerChannelResponse.ChannelId)
-		<-b.nodeL2.ObjectiveCompleteChan(l2LedgerChannelResponse.Id)
-		fmt.Println("Created mirror ledger channel in L2", l2LedgerChannelResponse.ChannelId)
 	}
 
 	return nil
+}
+
+func (b Bridge) GetMirrorChannel(l1ChannelId types.Destination) (l2ChannelId types.Destination, ok bool) {
+	l2ChannelId, ok = b.mirrorChannelMap[l1ChannelId]
+	return
 }
 
 func (b Bridge) Close() {

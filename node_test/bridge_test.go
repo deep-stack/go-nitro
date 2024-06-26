@@ -725,9 +725,13 @@ func TestBridgeFund(t *testing.T) {
 
 	t.Run("Create ledger channel on L1 and mirror it on L2", func(t *testing.T) {
 		l1LedgerChannelId := openLedgerChannel(t, nodeA, nodeB, types.Address{}, uint32(tcL1.ChallengeDuration))
-		t.Log("Ledger channel created", l1LedgerChannelId)
+		t.Log("L1 channel created", l1LedgerChannelId)
 
-		l1Info, _ := nodeB.GetLedgerChannel(l1LedgerChannelId)
-		t.Log("L1 channel info", l1Info)
+		// Wait for L2 channel to start
+		time.Sleep(1 * time.Second)
+		l2LedgerChannelId, _ := bridge.GetMirrorChannel(l1LedgerChannelId)
+
+		checkLedgerChannel(t, l1LedgerChannelId, initialLedgerOutcome(*nodeA.Address, *nodeB.Address, types.Address{}), query.Open, nodeA)
+		checkLedgerChannel(t, l2LedgerChannelId, initialLedgerOutcome(*nodeBPrime.Address, *nodeAPrime.Address, types.Address{}), query.Open, nodeBPrime)
 	})
 }
