@@ -31,8 +31,8 @@ var (
 
 // BridgeMetaData contains all meta data concerning the Bridge contract.
 var BridgeMetaData = &bind.MetaData{
-	ABI: "[{\"anonymous\":false,\"inputs\":[{\"indexed\":true,\"internalType\":\"address\",\"name\":\"previousOwner\",\"type\":\"address\"},{\"indexed\":true,\"internalType\":\"address\",\"name\":\"newOwner\",\"type\":\"address\"}],\"name\":\"OwnershipTransferred\",\"type\":\"event\"},{\"inputs\":[{\"internalType\":\"bytes32\",\"name\":\"l2ChannelId\",\"type\":\"bytes32\"}],\"name\":\"getL2ToL1\",\"outputs\":[{\"internalType\":\"bytes32\",\"name\":\"\",\"type\":\"bytes32\"}],\"stateMutability\":\"view\",\"type\":\"function\"},{\"inputs\":[{\"internalType\":\"bytes32\",\"name\":\"channelId\",\"type\":\"bytes32\"}],\"name\":\"getMirroredChannelStatus\",\"outputs\":[{\"internalType\":\"bytes32\",\"name\":\"\",\"type\":\"bytes32\"}],\"stateMutability\":\"view\",\"type\":\"function\"},{\"inputs\":[{\"internalType\":\"bytes32\",\"name\":\"\",\"type\":\"bytes32\"}],\"name\":\"l2Tol1\",\"outputs\":[{\"internalType\":\"bytes32\",\"name\":\"\",\"type\":\"bytes32\"}],\"stateMutability\":\"view\",\"type\":\"function\"},{\"inputs\":[],\"name\":\"owner\",\"outputs\":[{\"internalType\":\"address\",\"name\":\"\",\"type\":\"address\"}],\"stateMutability\":\"view\",\"type\":\"function\"},{\"inputs\":[],\"name\":\"renounceOwnership\",\"outputs\":[],\"stateMutability\":\"nonpayable\",\"type\":\"function\"},{\"inputs\":[{\"internalType\":\"bytes32\",\"name\":\"l1ChannelId\",\"type\":\"bytes32\"},{\"internalType\":\"bytes32\",\"name\":\"l2ChannelId\",\"type\":\"bytes32\"}],\"name\":\"setL2ToL1\",\"outputs\":[],\"stateMutability\":\"nonpayable\",\"type\":\"function\"},{\"inputs\":[{\"internalType\":\"bytes32\",\"name\":\"\",\"type\":\"bytes32\"}],\"name\":\"statusOf\",\"outputs\":[{\"internalType\":\"bytes32\",\"name\":\"\",\"type\":\"bytes32\"}],\"stateMutability\":\"view\",\"type\":\"function\"},{\"inputs\":[{\"internalType\":\"address\",\"name\":\"newOwner\",\"type\":\"address\"}],\"name\":\"transferOwnership\",\"outputs\":[],\"stateMutability\":\"nonpayable\",\"type\":\"function\"},{\"inputs\":[{\"internalType\":\"bytes32\",\"name\":\"channelId\",\"type\":\"bytes32\"},{\"internalType\":\"bytes32\",\"name\":\"stateHash\",\"type\":\"bytes32\"},{\"internalType\":\"bytes\",\"name\":\"outcomeBytes\",\"type\":\"bytes\"}],\"name\":\"updateMirroredChannelStatus\",\"outputs\":[],\"stateMutability\":\"nonpayable\",\"type\":\"function\"}]",
-	Bin: "0x6080806040523461005b5760008054336001600160a01b0319821681178355916001600160a01b03909116907f8be0079c531659141344cd1fd0a4f28419497f9722a3daafe3b4186f6b6457e09080a361069690816100618239f35b600080fdfe608060408181526004908136101561001657600080fd5b600092833560e01c908163273dfec81461038f57508063486f14d114610260578063715018a6146102f057806377027728146102a65780638a7ca664146102605780638da5cb5b1461020b578063c7df14e2146101c5578063e34e5180146101c55763f2fde38b1461008757600080fd5b346101c15760207ffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffc3601126101c15781359173ffffffffffffffffffffffffffffffffffffffff918284168094036101bd576100e16105e1565b831561013a5750508254827fffffffffffffffffffffffff00000000000000000000000000000000000000008216178455167f8be0079c531659141344cd1fd0a4f28419497f9722a3daafe3b4186f6b6457e08380a380f35b90602060849251917f08c379a0000000000000000000000000000000000000000000000000000000008352820152602660248201527f4f776e61626c653a206e6577206f776e657220697320746865207a65726f206160448201527f64647265737300000000000000000000000000000000000000000000000000006064820152fd5b8480fd5b8280fd5b5090346101c15760207ffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffc3601126101c15760209282913581526001845220549051908152f35b83823461025c57817ffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffc36011261025c5773ffffffffffffffffffffffffffffffffffffffff60209254169051908152f35b5080fd5b5090346101c15760207ffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffc3601126101c15760209282913581526002845220549051908152f35b5090346101c157817ffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffc3601126101c1576102de6105e1565b60243583526002602052359082205580f35b833461038c57807ffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffc36011261038c576103276105e1565b8073ffffffffffffffffffffffffffffffffffffffff81547fffffffffffffffffffffffff000000000000000000000000000000000000000081168355167f8be0079c531659141344cd1fd0a4f28419497f9722a3daafe3b4186f6b6457e08280a380f35b80fd5b91929050346105dd5760607ffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffc3601126105dd5780359160248035906044359267ffffffffffffffff908185116105d957366023860112156105d95784860135908282116105ae577fffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffe0603f81601f85011601168101818110848211176105835789528181528960209687830193368782840101116101c15780878a93018637830101526104596105e1565b51902091868952600185528789205495885160808101818110858211176105585785916060918c528960d01c815265ffffffffffff8a60a01c1689820152878c82015201528851938685019586528985015288845260608401928484109084111761052e5750509173ffffffffffffffffffffffffffffffffffffffff9160019493885251902016938652527fffffffffffff000000000000000000000000000000000000000000000000000079ffffffffffff00000000000000000000000000000000000000008216911617179082205580f35b60418a917f4e487b7100000000000000000000000000000000000000000000000000000000835252fd5b838c6041857f4e487b7100000000000000000000000000000000000000000000000000000000835252fd5b848b60418a7f4e487b7100000000000000000000000000000000000000000000000000000000835252fd5b838a6041897f4e487b7100000000000000000000000000000000000000000000000000000000835252fd5b8880fd5b8380fd5b73ffffffffffffffffffffffffffffffffffffffff60005416330361060257565b60646040517f08c379a000000000000000000000000000000000000000000000000000000000815260206004820152602060248201527f4f776e61626c653a2063616c6c6572206973206e6f7420746865206f776e65726044820152fdfea2646970667358221220538c639583fe76f8eea20fbc7c5e5edf205c80ed9756db2e849d26800832e60564736f6c63430008110033",
+	ABI: "[{\"anonymous\":false,\"inputs\":[{\"indexed\":true,\"internalType\":\"address\",\"name\":\"previousOwner\",\"type\":\"address\"},{\"indexed\":true,\"internalType\":\"address\",\"name\":\"newOwner\",\"type\":\"address\"}],\"name\":\"OwnershipTransferred\",\"type\":\"event\"},{\"anonymous\":false,\"inputs\":[{\"indexed\":true,\"internalType\":\"bytes32\",\"name\":\"channelId\",\"type\":\"bytes32\"},{\"indexed\":false,\"internalType\":\"bytes32\",\"name\":\"newStatus\",\"type\":\"bytes32\"}],\"name\":\"StatusUpdated\",\"type\":\"event\"},{\"inputs\":[{\"internalType\":\"bytes32\",\"name\":\"l2ChannelId\",\"type\":\"bytes32\"}],\"name\":\"getL2ToL1\",\"outputs\":[{\"internalType\":\"bytes32\",\"name\":\"\",\"type\":\"bytes32\"}],\"stateMutability\":\"view\",\"type\":\"function\"},{\"inputs\":[{\"internalType\":\"bytes32\",\"name\":\"channelId\",\"type\":\"bytes32\"}],\"name\":\"getMirroredChannelStatus\",\"outputs\":[{\"internalType\":\"bytes32\",\"name\":\"\",\"type\":\"bytes32\"}],\"stateMutability\":\"view\",\"type\":\"function\"},{\"inputs\":[{\"internalType\":\"bytes32\",\"name\":\"\",\"type\":\"bytes32\"}],\"name\":\"l2Tol1\",\"outputs\":[{\"internalType\":\"bytes32\",\"name\":\"\",\"type\":\"bytes32\"}],\"stateMutability\":\"view\",\"type\":\"function\"},{\"inputs\":[],\"name\":\"owner\",\"outputs\":[{\"internalType\":\"address\",\"name\":\"\",\"type\":\"address\"}],\"stateMutability\":\"view\",\"type\":\"function\"},{\"inputs\":[],\"name\":\"renounceOwnership\",\"outputs\":[],\"stateMutability\":\"nonpayable\",\"type\":\"function\"},{\"inputs\":[{\"internalType\":\"bytes32\",\"name\":\"l1ChannelId\",\"type\":\"bytes32\"},{\"internalType\":\"bytes32\",\"name\":\"l2ChannelId\",\"type\":\"bytes32\"}],\"name\":\"setL2ToL1\",\"outputs\":[],\"stateMutability\":\"nonpayable\",\"type\":\"function\"},{\"inputs\":[{\"internalType\":\"bytes32\",\"name\":\"\",\"type\":\"bytes32\"}],\"name\":\"statusOf\",\"outputs\":[{\"internalType\":\"bytes32\",\"name\":\"\",\"type\":\"bytes32\"}],\"stateMutability\":\"view\",\"type\":\"function\"},{\"inputs\":[{\"internalType\":\"address\",\"name\":\"newOwner\",\"type\":\"address\"}],\"name\":\"transferOwnership\",\"outputs\":[],\"stateMutability\":\"nonpayable\",\"type\":\"function\"},{\"inputs\":[{\"internalType\":\"bytes32\",\"name\":\"channelId\",\"type\":\"bytes32\"},{\"internalType\":\"bytes32\",\"name\":\"stateHash\",\"type\":\"bytes32\"},{\"internalType\":\"bytes\",\"name\":\"outcomeBytes\",\"type\":\"bytes\"}],\"name\":\"updateMirroredChannelStatus\",\"outputs\":[],\"stateMutability\":\"nonpayable\",\"type\":\"function\"}]",
+	Bin: "0x6080806040523461005b5760008054336001600160a01b0319821681178355916001600160a01b03909116907f8be0079c531659141344cd1fd0a4f28419497f9722a3daafe3b4186f6b6457e09080a36106c090816100618239f35b600080fdfe608060408181526004908136101561001657600080fd5b600092833560e01c908163273dfec81461038f57508063486f14d114610260578063715018a6146102f057806377027728146102a65780638a7ca664146102605780638da5cb5b1461020b578063c7df14e2146101c5578063e34e5180146101c55763f2fde38b1461008757600080fd5b346101c15760207ffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffc3601126101c15781359173ffffffffffffffffffffffffffffffffffffffff918284168094036101bd576100e161060b565b831561013a5750508254827fffffffffffffffffffffffff00000000000000000000000000000000000000008216178455167f8be0079c531659141344cd1fd0a4f28419497f9722a3daafe3b4186f6b6457e08380a380f35b90602060849251917f08c379a0000000000000000000000000000000000000000000000000000000008352820152602660248201527f4f776e61626c653a206e6577206f776e657220697320746865207a65726f206160448201527f64647265737300000000000000000000000000000000000000000000000000006064820152fd5b8480fd5b8280fd5b5090346101c15760207ffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffc3601126101c15760209282913581526001845220549051908152f35b83823461025c57817ffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffc36011261025c5773ffffffffffffffffffffffffffffffffffffffff60209254169051908152f35b5080fd5b5090346101c15760207ffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffc3601126101c15760209282913581526002845220549051908152f35b5090346101c157817ffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffc3601126101c1576102de61060b565b60243583526002602052359082205580f35b833461038c57807ffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffc36011261038c5761032761060b565b8073ffffffffffffffffffffffffffffffffffffffff81547fffffffffffffffffffffffff000000000000000000000000000000000000000081168355167f8be0079c531659141344cd1fd0a4f28419497f9722a3daafe3b4186f6b6457e08280a380f35b80fd5b84929150346101c15760607ffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffc3601126101c1578335916024908135956044359267ffffffffffffffff9384811161060757366023820112156106075780830135958587116105dc577fffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffe0603f81601f8a011601168101818110878211176105b157855286815260209687820192368583830101116105ad57818b92868b930186378301015261045b61060b565b519020908688526001865283882054928451608081018181108882111761058257849160609188528660d01c815265ffffffffffff8760a01c168a8201528c8882015201528451928784019a8b52858401528483526060830195838710908711176105585750507f62e6bf5c61a11078212ba836ebb8494a794e81614008017cced73376a0892aa595969773ffffffffffffffffffffffffffffffffffffffff9185855251902016907fffffffffffff000000000000000000000000000000000000000000000000000079ffffffffffff00000000000000000000000000000000000000008216911617178091868852600185528720558152a280f35b604189917f4e487b7100000000000000000000000000000000000000000000000000000000835252fd5b838b6041857f4e487b7100000000000000000000000000000000000000000000000000000000835252fd5b8a80fd5b838a6041877f4e487b7100000000000000000000000000000000000000000000000000000000835252fd5b82896041867f4e487b7100000000000000000000000000000000000000000000000000000000835252fd5b8780fd5b73ffffffffffffffffffffffffffffffffffffffff60005416330361062c57565b60646040517f08c379a000000000000000000000000000000000000000000000000000000000815260206004820152602060248201527f4f776e61626c653a2063616c6c6572206973206e6f7420746865206f776e65726044820152fdfea26469706673582212201cb0724f9b1fbeab783af5702891fbb03240754a558909af221c69e255bd46ed64736f6c63430008110033",
 }
 
 // BridgeABI is the input ABI used to generate the binding from.
@@ -588,6 +588,151 @@ func (_Bridge *BridgeFilterer) WatchOwnershipTransferred(opts *bind.WatchOpts, s
 func (_Bridge *BridgeFilterer) ParseOwnershipTransferred(log types.Log) (*BridgeOwnershipTransferred, error) {
 	event := new(BridgeOwnershipTransferred)
 	if err := _Bridge.contract.UnpackLog(event, "OwnershipTransferred", log); err != nil {
+		return nil, err
+	}
+	event.Raw = log
+	return event, nil
+}
+
+// BridgeStatusUpdatedIterator is returned from FilterStatusUpdated and is used to iterate over the raw logs and unpacked data for StatusUpdated events raised by the Bridge contract.
+type BridgeStatusUpdatedIterator struct {
+	Event *BridgeStatusUpdated // Event containing the contract specifics and raw log
+
+	contract *bind.BoundContract // Generic contract to use for unpacking event data
+	event    string              // Event name to use for unpacking event data
+
+	logs chan types.Log        // Log channel receiving the found contract events
+	sub  ethereum.Subscription // Subscription for errors, completion and termination
+	done bool                  // Whether the subscription completed delivering logs
+	fail error                 // Occurred error to stop iteration
+}
+
+// Next advances the iterator to the subsequent event, returning whether there
+// are any more events found. In case of a retrieval or parsing error, false is
+// returned and Error() can be queried for the exact failure.
+func (it *BridgeStatusUpdatedIterator) Next() bool {
+	// If the iterator failed, stop iterating
+	if it.fail != nil {
+		return false
+	}
+	// If the iterator completed, deliver directly whatever's available
+	if it.done {
+		select {
+		case log := <-it.logs:
+			it.Event = new(BridgeStatusUpdated)
+			if err := it.contract.UnpackLog(it.Event, it.event, log); err != nil {
+				it.fail = err
+				return false
+			}
+			it.Event.Raw = log
+			return true
+
+		default:
+			return false
+		}
+	}
+	// Iterator still in progress, wait for either a data or an error event
+	select {
+	case log := <-it.logs:
+		it.Event = new(BridgeStatusUpdated)
+		if err := it.contract.UnpackLog(it.Event, it.event, log); err != nil {
+			it.fail = err
+			return false
+		}
+		it.Event.Raw = log
+		return true
+
+	case err := <-it.sub.Err():
+		it.done = true
+		it.fail = err
+		return it.Next()
+	}
+}
+
+// Error returns any retrieval or parsing error occurred during filtering.
+func (it *BridgeStatusUpdatedIterator) Error() error {
+	return it.fail
+}
+
+// Close terminates the iteration process, releasing any pending underlying
+// resources.
+func (it *BridgeStatusUpdatedIterator) Close() error {
+	it.sub.Unsubscribe()
+	return nil
+}
+
+// BridgeStatusUpdated represents a StatusUpdated event raised by the Bridge contract.
+type BridgeStatusUpdated struct {
+	ChannelId [32]byte
+	NewStatus [32]byte
+	Raw       types.Log // Blockchain specific contextual infos
+}
+
+// FilterStatusUpdated is a free log retrieval operation binding the contract event 0x62e6bf5c61a11078212ba836ebb8494a794e81614008017cced73376a0892aa5.
+//
+// Solidity: event StatusUpdated(bytes32 indexed channelId, bytes32 newStatus)
+func (_Bridge *BridgeFilterer) FilterStatusUpdated(opts *bind.FilterOpts, channelId [][32]byte) (*BridgeStatusUpdatedIterator, error) {
+
+	var channelIdRule []interface{}
+	for _, channelIdItem := range channelId {
+		channelIdRule = append(channelIdRule, channelIdItem)
+	}
+
+	logs, sub, err := _Bridge.contract.FilterLogs(opts, "StatusUpdated", channelIdRule)
+	if err != nil {
+		return nil, err
+	}
+	return &BridgeStatusUpdatedIterator{contract: _Bridge.contract, event: "StatusUpdated", logs: logs, sub: sub}, nil
+}
+
+// WatchStatusUpdated is a free log subscription operation binding the contract event 0x62e6bf5c61a11078212ba836ebb8494a794e81614008017cced73376a0892aa5.
+//
+// Solidity: event StatusUpdated(bytes32 indexed channelId, bytes32 newStatus)
+func (_Bridge *BridgeFilterer) WatchStatusUpdated(opts *bind.WatchOpts, sink chan<- *BridgeStatusUpdated, channelId [][32]byte) (event.Subscription, error) {
+
+	var channelIdRule []interface{}
+	for _, channelIdItem := range channelId {
+		channelIdRule = append(channelIdRule, channelIdItem)
+	}
+
+	logs, sub, err := _Bridge.contract.WatchLogs(opts, "StatusUpdated", channelIdRule)
+	if err != nil {
+		return nil, err
+	}
+	return event.NewSubscription(func(quit <-chan struct{}) error {
+		defer sub.Unsubscribe()
+		for {
+			select {
+			case log := <-logs:
+				// New log arrived, parse the event and forward to the user
+				event := new(BridgeStatusUpdated)
+				if err := _Bridge.contract.UnpackLog(event, "StatusUpdated", log); err != nil {
+					return err
+				}
+				event.Raw = log
+
+				select {
+				case sink <- event:
+				case err := <-sub.Err():
+					return err
+				case <-quit:
+					return nil
+				}
+			case err := <-sub.Err():
+				return err
+			case <-quit:
+				return nil
+			}
+		}
+	}), nil
+}
+
+// ParseStatusUpdated is a log parse operation binding the contract event 0x62e6bf5c61a11078212ba836ebb8494a794e81614008017cced73376a0892aa5.
+//
+// Solidity: event StatusUpdated(bytes32 indexed channelId, bytes32 newStatus)
+func (_Bridge *BridgeFilterer) ParseStatusUpdated(log types.Log) (*BridgeStatusUpdated, error) {
+	event := new(BridgeStatusUpdated)
+	if err := _Bridge.contract.UnpackLog(event, "StatusUpdated", log); err != nil {
 		return nil, err
 	}
 	event.Raw = log

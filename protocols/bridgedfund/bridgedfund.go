@@ -21,6 +21,7 @@ const (
 	WaitingForCompletePrefund  protocols.WaitingFor = "WaitingForCompletePrefund"
 	WaitingForCompletePostFund protocols.WaitingFor = "WaitingForCompletePostFund"
 	WaitingForNothing          protocols.WaitingFor = "WaitingForNothing" // Finished
+	WaitingForStatusUpdate 	   protocols.WaitingFor = "WaitingForStatusUpdate"
 )
 
 const (
@@ -37,6 +38,7 @@ func FundOnChainEffect(cId types.Destination, asset string, amount types.Funds) 
 type Objective struct {
 	Status protocols.ObjectiveStatus
 	C      *channel.Channel
+	transactionSubmitted     bool        // whether a transition for the objective has been submitted or not
 }
 
 // GetChannelByIdFunction specifies a function that can be used to retrieve channels from a store.
@@ -310,16 +312,21 @@ func (o *Objective) Crank(secretKey *[]byte) (protocols.Objective, protocols.Sid
 		return &updated, sideEffects, WaitingForCompletePostFund, nil
 	}
 
-	// Completion
-	updated.Status = protocols.Completed
-
 	// On completion, write mirrored ledger channel state to L2 chain if bridge channel was created by me
-	if updated.C.MyIndex == 0 {
+	if updated.C.MyIndex == 0 && !updated.transactionSubmitted {
 		latestState, _ := updated.C.LatestSupportedState()
 		latestStateOutcomeBytes, _ := latestState.Outcome.Encode()
 		updateMirroredChannelStateTx := protocols.NewUpdateMirroredChannelStatusTransaction(latestState.ChannelId(), latestState.AppDefinition.Hash(), latestStateOutcomeBytes)
+
+		updated.transactionSubmitted = true
 		sideEffects.TransactionsToSubmit = append(sideEffects.TransactionsToSubmit, updateMirroredChannelStateTx)
+
+		return &updated, sideEffects, WaitingForStatusUpdate, nil
 	}
+
+	// Completion
+	updated.Status = protocols.Completed
+
 	return &updated, sideEffects, WaitingForNothing, nil
 }
 
@@ -333,6 +340,7 @@ func (o *Objective) Related() []protocols.Storable {
 func (o *Objective) clone() Objective {
 	clone := Objective{}
 	clone.Status = o.Status
+	clone.transactionSubmitted = o.transactionSubmitted
 
 	cClone := o.C.Clone()
 	clone.C = cClone

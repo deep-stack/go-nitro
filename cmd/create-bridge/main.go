@@ -2,12 +2,15 @@ package main
 
 import (
 	"context"
+	"log/slog"
+	"os"
 	"os/exec"
 
 	"github.com/ethereum/go-ethereum/common"
 	"github.com/statechannels/go-nitro/bridge"
 	"github.com/statechannels/go-nitro/cmd/utils"
 	"github.com/statechannels/go-nitro/internal/chain"
+	"github.com/statechannels/go-nitro/internal/logging"
 	"github.com/statechannels/go-nitro/internal/node"
 	"github.com/statechannels/go-nitro/node/engine/chainservice"
 	p2pms "github.com/statechannels/go-nitro/node/engine/messageservice/p2p-message-service"
@@ -81,7 +84,6 @@ func run() ([]*exec.Cmd, error) {
 		PublicIp:  "127.0.0.1",
 	}
 
-	// TODO: Discuss use of test message service between nodePrime and counterparty prime
 	messageOptsL2 := p2pms.MessageOpts{
 		PkBytes:   common.Hex2Bytes(STATE_CHANNEL_PK),
 		Port:      3006,
@@ -97,6 +99,8 @@ func run() ([]*exec.Cmd, error) {
 	if err != nil {
 		return runningCmd, err
 	}
+
+	logging.SetupDefaultLogger(os.Stdout, slog.LevelDebug)
 
 	bridge := bridge.New(nodeL1, nodeL2, storeL1, storeL2)
 	defer bridge.Close()

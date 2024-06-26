@@ -154,11 +154,11 @@ func NewUpdateMirroredChannelStatusTransaction(
 	}
 }
 
-type GetMirroredChannelStatusTransaction struct {
+type GetMirroredChannelStatusCall struct {
 	ChainTransaction
 }
 
-func NewGetMirroredChannelStatusTransaction(
+func NewGetMirroredChannelStatusCall(
 	channelId types.Destination,
 ) UpdateMirroredChannelStatusTransaction {
 	return UpdateMirroredChannelStatusTransaction{

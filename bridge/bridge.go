@@ -14,10 +14,12 @@ import (
 
 type Bridge struct {
 	nodeL1                      *node.Node
-	nodeL2                      *node.Node
 	storeL1                     store.Store
-	storeL2                     store.Store
 	completedObjectivesInNodeL1 <-chan protocols.ObjectiveId
+
+	nodeL2                      *node.Node
+	storeL2                     store.Store
+
 	cancel                      context.CancelFunc
 }
 
@@ -64,6 +66,7 @@ func (b Bridge) processObjectivesFromL1(objId protocols.ObjectiveId) error {
 		if err != nil {
 			return err
 		}
+
 		l1ledgerChannelState := l1LedgerChannel.SupportedSignedState()
 		l1ledgerChannelStateClone := l1ledgerChannelState.Clone()
 
