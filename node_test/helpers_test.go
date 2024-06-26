@@ -110,6 +110,19 @@ func setupChainService(tc TestCase, tp TestParticipant, si sharedTestInfrastruct
 			panic(err)
 		}
 		return cs
+	case AnvilChainL2:
+		ethAccountIndex := tp.Port - testactors.START_PORT
+		cs, err := chainservice.NewL2ChainService(chainservice.L2ChainOpts{
+			ChainUrl:           si.anvilChain.ChainUrl,
+			ChainStartBlockNum: 0,
+			ChainAuthToken:     si.anvilChain.ChainAuthToken,
+			ChainPk:            si.anvilChain.ChainPks[ethAccountIndex],
+			BridgeAddress:      si.anvilChain.ContractAddresses.BridgeAddress,
+		})
+		if err != nil {
+			panic(err)
+		}
+		return cs
 	default:
 		panic("Unknown chain service")
 	}
@@ -247,6 +260,12 @@ func setupSharedInfra(tc TestCase) sharedTestInfrastructure {
 		infra.ethAccounts = ethAccounts
 	case AnvilChain:
 		chain, err := chainservice.NewAnvilChain(tc.ChainPort)
+		if err != nil {
+			panic(err)
+		}
+		infra.anvilChain = chain
+	case AnvilChainL2:
+		chain, err := chainservice.NewAnvilChainL2(tc.ChainPort)
 		if err != nil {
 			panic(err)
 		}

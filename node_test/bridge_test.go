@@ -7,6 +7,7 @@ import (
 
 	"github.com/ethereum/go-ethereum/accounts/abi"
 	"github.com/ethereum/go-ethereum/common"
+	"github.com/statechannels/go-nitro/bridge"
 	"github.com/statechannels/go-nitro/channel"
 	"github.com/statechannels/go-nitro/channel/state"
 	"github.com/statechannels/go-nitro/channel/state/outcome"
@@ -670,4 +671,63 @@ func createL2VirtualChannel(t *testing.T, nodeAPrime node.Node, nodeBPrime node.
 	virtualChannel, _ := L2bridgeStore.GetChannelById(virtualResponse.ChannelId)
 
 	return virtualChannel
+}
+
+func TestBridgeFund(t *testing.T) {
+	tcL1 := TestCase{
+		Chain:             AnvilChain,
+		MessageService:    TestMessageService,
+		MessageDelay:      0,
+		LogName:           "Bridge_test",
+		ChallengeDuration: 5,
+		Participants: []TestParticipant{
+			{StoreType: MemStore, Actor: testactors.Alice},
+			{StoreType: MemStore, Actor: testactors.Bob},
+		},
+	}
+
+	tcL2 := TestCase{
+		Chain:             AnvilChainL2,
+		MessageService:    TestMessageService,
+		MessageDelay:      0,
+		LogName:           "Bridge_test",
+		ChallengeDuration: 5,
+		Participants: []TestParticipant{
+			{StoreType: MemStore, Actor: testactors.Bob},
+			{StoreType: MemStore, Actor: testactors.Alice},
+		},
+		ChainPort: "8546",
+	}
+
+	dataFolder, cleanup := testhelpers.GenerateTempStoreFolder()
+	defer cleanup()
+
+	infraL1 := setupSharedInfra(tcL1)
+	defer infraL1.Close(t)
+
+	infraL2 := setupSharedInfra(tcL2)
+	defer infraL2.Close(t)
+
+	nodeA, _, _, _, _ := setupIntegrationNode(tcL1, tcL1.Participants[0], infraL1, []string{}, dataFolder)
+	defer nodeA.Close()
+
+	nodeB, _, _, storeB, _ := setupIntegrationNode(tcL1, tcL1.Participants[1], infraL1, []string{}, dataFolder)
+	defer nodeB.Close()
+
+	nodeBPrime, _, _, storeBPrime, _ := setupIntegrationNode(tcL2, tcL2.Participants[0], infraL2, []string{}, dataFolder)
+	defer nodeBPrime.Close()
+
+	nodeAPrime, _, _, _, _ := setupIntegrationNode(tcL2, tcL2.Participants[1], infraL2, []string{}, dataFolder)
+	defer nodeAPrime.Close()
+
+	bridge := bridge.New(&nodeB, &nodeBPrime, storeB, storeBPrime)
+	defer bridge.Close()
+
+	t.Run("Create ledger channel on L1 and mirror it on L2", func(t *testing.T) {
+		l1LedgerChannelId := openLedgerChannel(t, nodeA, nodeB, types.Address{}, uint32(tcL1.ChallengeDuration))
+		t.Log("Ledger channel created", l1LedgerChannelId)
+
+		l1Info, _ := nodeB.GetLedgerChannel(l1LedgerChannelId)
+		t.Log("L1 channel info", l1Info)
+	})
 }

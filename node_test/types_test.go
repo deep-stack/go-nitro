@@ -33,6 +33,7 @@ const (
 	MockChain      ChainType = "MockChain"
 	SimulatedChain ChainType = "SimulatedChain"
 	AnvilChain     ChainType = "AnvilChain"
+	AnvilChainL2   ChainType = "AnvilChainL2"
 )
 
 type TestParticipant struct {

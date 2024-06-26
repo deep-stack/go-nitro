@@ -61,6 +61,31 @@ func NewAnvilChain(chainPort string) (*AnvilChain, error) {
 	return &anvilChain, nil
 }
 
+func NewAnvilChainL2(chainPort string) (*AnvilChain, error) {
+	if chainPort == "" {
+		chainPort = DEFAULT_CHAIN_PORT
+	}
+
+	anvilChain, err := StartAnvil(chainPort)
+	if err != nil {
+		return nil, err
+	}
+
+	ethClient, txSubmitter, err := chainutils.ConnectToChain(
+		context.Background(),
+		anvilChain.ChainUrl,
+		anvilChain.ChainAuthToken,
+		common.Hex2Bytes(ChainPks[0]),
+	)
+	if err != nil {
+		return nil, err
+	}
+	anvilChain.ethClient = ethClient
+	contractAddresses, _ := chainutils.DeployL2Contracts(context.Background(), ethClient, txSubmitter)
+	anvilChain.ContractAddresses = chainutils.ContractAddresses{BridgeAddress: contractAddresses}
+	return &anvilChain, nil
+}
+
 func (chain AnvilChain) GetAccountBalance(accountAddress common.Address) (*big.Int, error) {
 	latestBlock, _ := chain.GetLatestBlock()
 	return chain.ethClient.BalanceAt(context.Background(), accountAddress, latestBlock.Header().Number)

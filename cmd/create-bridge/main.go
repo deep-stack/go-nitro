@@ -98,7 +98,7 @@ func run() ([]*exec.Cmd, error) {
 		return runningCmd, err
 	}
 
-	bridge := bridge.New(nodeL1, nodeL2, storeL1, storeL2)
+	bridge := bridge.New(nodeL1, nodeL2, *storeL1, *storeL2)
 	defer bridge.Close()
 
 	utils.WaitForKillSignal()

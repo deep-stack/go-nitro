@@ -21,13 +21,13 @@ type Bridge struct {
 	cancel                      context.CancelFunc
 }
 
-func New(nodeL1 *node.Node, nodeL2 *node.Node, storeL1 *store.Store, storeL2 *store.Store) Bridge {
+func New(nodeL1 *node.Node, nodeL2 *node.Node, storeL1 store.Store, storeL2 store.Store) Bridge {
 	ctx, cancelFunc := context.WithCancel(context.Background())
 	bridge := Bridge{
 		nodeL1:                      nodeL1,
 		nodeL2:                      nodeL2,
-		storeL1:                     *storeL1,
-		storeL2:                     *storeL2,
+		storeL1:                     storeL1,
+		storeL2:                     storeL2,
 		completedObjectivesInNodeL1: nodeL1.CompletedObjectives(),
 		cancel:                      cancelFunc,
 	}
@@ -42,6 +42,7 @@ func (b Bridge) run(ctx context.Context) {
 		var err error
 		select {
 		case objId := <-b.completedObjectivesInNodeL1:
+			fmt.Println("IN run called completed objective", objId)
 			err = b.processObjectivesFromL1(objId)
 			b.checkError(err)
 		case <-ctx.Done():
@@ -52,6 +53,7 @@ func (b Bridge) run(ctx context.Context) {
 
 func (b Bridge) processObjectivesFromL1(objId protocols.ObjectiveId) error {
 	objIdArr := strings.Split(string(objId), "-")
+	fmt.Println("OBJ ID AND ARRAY", objId, objIdArr)
 	objectiveType := objIdArr[0]
 	channelId := objIdArr[1]
 
@@ -76,11 +78,13 @@ func (b Bridge) processObjectivesFromL1(objId protocols.ObjectiveId) error {
 		l2ChannelOutcome := l1ledgerChannelStateClone.State().Outcome
 
 		// Create mirrored ledger channel between node BPrime and APrime
-		response, err := b.nodeL2.CreateBridgeChannel(l1ledgerChannelState.State().Participants[0], uint32(10), l2ChannelOutcome)
+		l2LedgerChannelResponse, err := b.nodeL2.CreateBridgeChannel(l1ledgerChannelState.State().Participants[0], uint32(10), l2ChannelOutcome)
 		if err != nil {
 			return err
 		}
-		fmt.Println("Started creating mirror ledger channel in L2", response.ChannelId)
+		fmt.Println("Started creating mirror ledger channel in L2", l2LedgerChannelResponse.ChannelId)
+		<-b.nodeL2.ObjectiveCompleteChan(l2LedgerChannelResponse.Id)
+		fmt.Println("Created mirror ledger channel in L2", l2LedgerChannelResponse.ChannelId)
 	}
 
 	return nil
