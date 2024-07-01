@@ -21,10 +21,12 @@ docker/paymentproxy/build:
 docker/paymentproxy/push:
 	docker tag nitro-payment-proxy:latest registry.digitalocean.com/magmo/nitro-payment-proxy:latest
 	docker push registry.digitalocean.com/magmo/nitro-payment-proxy:latest
-	
+
 docker/paymentproxy/start:
 	docker remove payment-proxy || true
 	docker run -it -d --name payment-proxy -p 5511:5511 -e PROXY_PORT=5511 payment-proxy
 
 ui/build:
 	yarn workspace nitro-gui build
+
+# TODO: Add docker commands for bridge

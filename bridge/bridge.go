@@ -241,10 +241,19 @@ func (b *Bridge) CompletedMirrorChannels() <-chan types.Destination {
 	return b.completedMirrorChannels
 }
 
-func (b *Bridge) Close() {
+func (b *Bridge) Close() error {
 	b.cancel()
-	b.nodeL1.Close()
-	b.nodeL2.Close()
+	err := b.nodeL1.Close()
+	if err != nil {
+		return err
+	}
+
+	err = b.nodeL2.Close()
+	if err != nil {
+		return err
+	}
+
+	return nil
 }
 
 func (b *Bridge) checkError(err error) {
