@@ -28,5 +28,3 @@ docker/paymentproxy/start:
 
 ui/build:
 	yarn workspace nitro-gui build
-
-# TODO: Add docker commands for bridge
