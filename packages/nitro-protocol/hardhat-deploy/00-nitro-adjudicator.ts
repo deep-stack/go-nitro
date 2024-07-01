@@ -8,7 +8,6 @@ const func: DeployFunction = async function (hre: HardhatRuntimeEnvironment) {
   const {deployer} = await getNamedAccounts();
 
   console.log('Working on chain id #', await getChainId());
-  console.log('deployer', deployer);
 
   await deploy('NitroAdjudicator', {
     from: deployer,
