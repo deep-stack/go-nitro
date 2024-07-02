@@ -102,7 +102,7 @@ func main() {
 			Name:        DURABLE_STORE_DIR,
 			Usage:       "Specifies the durable store location of nodes",
 			Destination: &durableStoreDir,
-			Value:       "./data/",
+			Value:       "./data/bridge-store",
 		}),
 		altsrc.NewStringFlag(&cli.StringFlag{
 			Name:        BRIDGE_PUBLIC_IP,

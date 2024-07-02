@@ -11,21 +11,19 @@ const func: DeployFunction = async function (hre: HardhatRuntimeEnvironment) {
   const {deployer} = await getNamedAccounts();
 
   const addressesFilePath = `hardhat-deployments/${network.name}/.contracts.env`;
-  let contractAddresses = '';
 
   console.log('Working on chain id #', await getChainId());
-  console.log('deployer', deployer);
 
-  const deployResult = await deploy('Bridge', {
+  const bridgeDeployResult = await deploy('Bridge', {
     from: deployer,
     log: true,
     // TODO: Set ownership when using deterministic deployment
     deterministicDeployment: process.env.DISABLE_DETERMINISTIC_DEPLOYMENT ? false : true,
   });
 
-  contractAddresses = `${contractAddresses}export BRIDGE_ADDRESS=${deployResult.address}\n`;
+  const contractAddress = `export BRIDGE_ADDRESS=${bridgeDeployResult.address}\n`;
   const outputFilePath = path.resolve(addressesFilePath);
-  fs.writeFileSync(outputFilePath, contractAddresses);
+  fs.writeFileSync(outputFilePath, contractAddress, {flag: 'a'});
   console.log('Contracts deployed, addresses written to', outputFilePath);
 };
 export default func;

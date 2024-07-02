@@ -14,33 +14,22 @@ module.exports = async (hre: HardhatRuntimeEnvironment) => {
   let contractAddresses = '';
 
   console.log('Working on chain id #', await getChainId());
-  console.log('deployer', deployer);
 
-  try {
-    const deployResult = await deploy('ConsensusApp', {
-      from: deployer,
-      log: true,
-      // TODO: Set ownership when using deterministic deployment
-      deterministicDeployment: process.env.DISABLE_DETERMINISTIC_DEPLOYMENT ? false : true,
-    });
-    contractAddresses = `${contractAddresses}export CA_ADDRESS=${deployResult.address}\n`;
-  } catch (err) {
-    const msg = err instanceof Error ? err.message : JSON.stringify(err);
-    console.error(`Error when deploying contract: ${msg}`);
-  }
+  const caDeployResult = await deploy('ConsensusApp', {
+    from: deployer,
+    log: true,
+    // TODO: Set ownership when using deterministic deployment
+    deterministicDeployment: process.env.DISABLE_DETERMINISTIC_DEPLOYMENT ? false : true,
+  });
+  contractAddresses = `${contractAddresses}export CA_ADDRESS=${caDeployResult.address}\n`;
 
-  try {
-    const deployResult = await deploy('VirtualPaymentApp', {
-      from: deployer,
-      log: true,
-      // TODO: Set ownership when using deterministic deployment
-      deterministicDeployment: process.env.DISABLE_DETERMINISTIC_DEPLOYMENT ? false : true,
-    });
-    contractAddresses = `${contractAddresses}export VPA_ADDRESS=${deployResult.address}\n`;
-  } catch (err) {
-    const msg = err instanceof Error ? err.message : JSON.stringify(err);
-    console.error(`Error when deploying contract: ${msg}`);
-  }
+  const vpaDeployResult = await deploy('VirtualPaymentApp', {
+    from: deployer,
+    log: true,
+    // TODO: Set ownership when using deterministic deployment
+    deterministicDeployment: process.env.DISABLE_DETERMINISTIC_DEPLOYMENT ? false : true,
+  });
+  contractAddresses = `${contractAddresses}export VPA_ADDRESS=${vpaDeployResult.address}\n`;
 
   const outputFilePath = path.resolve(addressesFilePath);
   fs.writeFileSync(outputFilePath, contractAddresses);
