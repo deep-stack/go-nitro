@@ -75,12 +75,12 @@ const config: HardhatUserConfig & {watcher: any} = {
     },
     geth: {
       chainId: gethChainId,
-      url: gethURL,
+      url: gethURL ?? '',
       accounts: gethDeployerPK ? [gethDeployerPK] : [],
     },
     optimism: {
       chainId: optimismChainId,
-      url: optimismURL,
+      url: optimismURL ?? '',
       accounts: optimismDeployerPK ? [optimismDeployerPK] : [],
     },
     goerli: {

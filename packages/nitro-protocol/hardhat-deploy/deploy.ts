@@ -32,7 +32,7 @@ module.exports = async (hre: HardhatRuntimeEnvironment) => {
   contractAddresses = `${contractAddresses}export VPA_ADDRESS=${vpaDeployResult.address}\n`;
 
   const outputFilePath = path.resolve(addressesFilePath);
-  fs.writeFileSync(outputFilePath, contractAddresses);
+  fs.writeFileSync(outputFilePath, contractAddresses, {flag: 'a'});
   console.log('Contracts deployed, addresses written to', outputFilePath);
 };
 module.exports.tags = ['deploy'];
