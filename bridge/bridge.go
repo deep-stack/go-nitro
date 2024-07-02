@@ -36,9 +36,10 @@ type Bridge struct {
 	nodeL2  *node.Node
 	storeL2 store.Store
 
-	config           BridgeConfig
-	cancel           context.CancelFunc
-	mirrorChannelMap map[types.Destination]MirrorChannelDetails
+	config                  BridgeConfig
+	cancel                  context.CancelFunc
+	mirrorChannelMap        map[types.Destination]MirrorChannelDetails
+	completedMirrorChannels chan types.Destination
 }
 
 type BridgeConfig struct {
@@ -60,8 +61,9 @@ type BridgeConfig struct {
 
 func New(configOpts BridgeConfig) *Bridge {
 	bridge := Bridge{
-		config:           configOpts,
-		mirrorChannelMap: make(map[types.Destination]MirrorChannelDetails),
+		config:                  configOpts,
+		mirrorChannelMap:        make(map[types.Destination]MirrorChannelDetails),
+		completedMirrorChannels: make(chan types.Destination),
 	}
 
 	return &bridge
@@ -210,11 +212,13 @@ func (b *Bridge) processCompletedObjectivesFromL2(objId protocols.ObjectiveId) e
 		l2Info := b.mirrorChannelMap[l2channelId]
 		l2Info.isCreated = true
 		b.mirrorChannelMap[l2channelId] = l2Info
+		b.completedMirrorChannels <- l2channelId
 	}
 
 	return nil
 }
 
+// Since bridge node addresses are same
 func (b Bridge) GetBridgeAddress() common.Address {
 	return *b.nodeL1.Address
 }
@@ -226,6 +230,10 @@ func (b Bridge) GetMirrorChannel(l1ChannelId types.Destination) (l2ChannelId typ
 		}
 	}
 	return types.Destination{}, false
+}
+
+func (b *Bridge) CompletedMirrorChannels() <-chan types.Destination {
+	return b.completedMirrorChannels
 }
 
 func (b *Bridge) Close() {

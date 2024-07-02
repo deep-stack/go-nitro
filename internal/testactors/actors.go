@@ -27,6 +27,7 @@ func (a Actor) Address() types.Address {
 
 const START_PORT = 3200
 
+// Actors for L2
 // Alice has the address 0xAAA6628Ec44A8a742987EF3A114dDFE2D4F7aDCE
 // peerId: 16Uiu2HAmSjXJqsyBJgcBUU2HQmykxGseafSatbpq5471XmuaUqyv
 var Alice Actor = Actor{

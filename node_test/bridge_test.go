@@ -22,117 +22,7 @@ import (
 	"github.com/statechannels/go-nitro/types"
 )
 
-func TestExitL2WithLedgerChannelState(t *testing.T) {
-	tcL1 := TestCase{
-		Chain:             AnvilChainL1,
-		MessageService:    TestMessageService,
-		MessageDelay:      0,
-		LogName:           "Bridge_test",
-		ChallengeDuration: 5,
-		Participants: []TestParticipant{
-			{StoreType: MemStore, Actor: testactors.Alice},
-			{StoreType: MemStore, Actor: testactors.Bob},
-		},
-		deployerIndex: 1,
-	}
-
-	tcL2 := TestCase{
-		Chain:             AnvilChainL2,
-		MessageService:    TestMessageService,
-		MessageDelay:      0,
-		LogName:           "Bridge_test",
-		ChallengeDuration: 5,
-		Participants: []TestParticipant{
-			{StoreType: MemStore, Actor: testactors.Bob},
-			{StoreType: MemStore, Actor: testactors.Alice},
-		},
-		ChainPort:     "8546",
-		deployerIndex: 0,
-	}
-
-	dataFolder, cleanup := testhelpers.GenerateTempStoreFolder()
-	defer cleanup()
-
-	infraL1 := setupSharedInfra(tcL1)
-	defer infraL1.Close(t)
-
-	infraL2 := setupSharedInfra(tcL2)
-	defer infraL2.Close(t)
-
-	// Create go-nitro nodes
-	nodeA, _, _, storeA, chainServiceA := setupIntegrationNode(tcL1, tcL1.Participants[0], infraL1, []string{}, dataFolder)
-	defer nodeA.Close()
-
-	nodeB, _, _, _, chainServiceB := setupIntegrationNode(tcL1, tcL1.Participants[1], infraL1, []string{}, dataFolder)
-	defer nodeB.Close()
-
-	nodeBPrime, _, _, storeBPrime, _ := setupIntegrationNode(tcL2, tcL2.Participants[0], infraL2, []string{}, dataFolder)
-	defer nodeBPrime.Close()
-
-	nodeAPrime, _, _, _, _ := setupIntegrationNode(tcL2, tcL2.Participants[1], infraL2, []string{}, dataFolder)
-	defer nodeAPrime.Close()
-
-	// Seperate chain service to listen for events
-	testChainService := setupChainService(tcL1, tcL1.Participants[0], infraL1)
-	defer testChainService.Close()
-
-	mirroredLedgerChannelId := types.Destination{}
-	l1ChannelId := types.Destination{}
-
-	t.Run("Create ledger channel on L1 and mirror it on L2", func(t *testing.T) {
-		l1ChannelId, mirroredLedgerChannelId = createL1L2Channels(t, nodeA, nodeB, nodeAPrime, nodeBPrime, storeA, tcL1, tcL2, chainServiceB)
-		ledgerChannelInfo, err := nodeBPrime.GetLedgerChannel(mirroredLedgerChannelId)
-		if err != nil {
-			t.Error(err)
-		}
-
-		balanceNodeAPrime := ledgerChannelInfo.Balance.TheirBalance.ToInt()
-		balanceNodeBPrime := ledgerChannelInfo.Balance.MyBalance.ToInt()
-		t.Log("Balance of node BPrime", balanceNodeBPrime, "\nBalance of node APrime", balanceNodeAPrime)
-
-		// BPrime's and APrime's balance should be equal to ledgerChannelDeposit since no payments happened
-		testhelpers.Assert(t, balanceNodeBPrime.Cmp(big.NewInt(ledgerChannelDeposit)) == 0, "Balance of node BPrime (%v) should be equal to (%v)", balanceNodeBPrime, ledgerChannelDeposit)
-		testhelpers.Assert(t, balanceNodeAPrime.Cmp(big.NewInt(ledgerChannelDeposit)) == 0, "Balance of node APrime (%v) should be equal to (%v)", balanceNodeAPrime, ledgerChannelDeposit)
-	})
-
-	t.Run("Exit to L1 using L2 ledger channel state", func(t *testing.T) {
-		l2SignedState := getLatestSignedState(storeBPrime, mirroredLedgerChannelId)
-		l2StateClone := l2SignedState.State().Clone()
-
-		// Both participants on L2 ledger channel sign state where `isFinal = true` which is required for a channel to conclude and finalize
-		l2StateClone.IsFinal = true
-
-		Asig, _ := l2StateClone.Sign(tcL2.Participants[1].PrivateKey)
-		Bsig, _ := l2StateClone.Sign(tcL2.Participants[0].PrivateKey)
-
-		l2SignedStateClone := state.NewSignedState(l2StateClone)
-
-		_ = l2SignedStateClone.AddSignature(Asig)
-		_ = l2SignedStateClone.AddSignature(Bsig)
-
-		// Node A calls modified `concludeAndTransferAllAssets` method to exit to L1 using L2 ledger channel state
-		MirrorWithdrawAllTx := protocols.NewMirrorWithdrawAllTransaction(l1ChannelId, l2SignedStateClone)
-		err := chainServiceA.SendTransaction(MirrorWithdrawAllTx)
-		if err != nil {
-			t.Error(err)
-		}
-
-		// Listen for allocation updated event
-		event := waitForEvent(t, testChainService.EventFeed(), chainservice.AllocationUpdatedEvent{})
-		_, ok := event.(chainservice.AllocationUpdatedEvent)
-		testhelpers.Assert(t, ok, "Expected allocation updated event")
-
-		balanceNodeA, _ := infraL1.anvilChain.GetAccountBalance(tcL1.Participants[0].Address())
-		balanceNodeB, _ := infraL1.anvilChain.GetAccountBalance(tcL1.Participants[1].Address())
-		t.Log("Balance of node A", balanceNodeA, "\nBalance of node B", balanceNodeB)
-
-		// Node A's and node B's balance should be equal to ledgerChannelDeposit since no payments happened
-		testhelpers.Assert(t, balanceNodeA.Cmp(big.NewInt(ledgerChannelDeposit)) == 0, "Balance of node A (%v) should be equal to (%v)", balanceNodeA, ledgerChannelDeposit)
-		testhelpers.Assert(t, balanceNodeB.Cmp(big.NewInt(ledgerChannelDeposit)) == 0, "Balance of node B (%v) should be equal to (%v)", balanceNodeB, ledgerChannelDeposit)
-	})
-}
-
-func TestBridgeFund(t *testing.T) {
+func TestBridgedFund(t *testing.T) {
 	tcL1 := TestCase{
 		Chain:             AnvilChainL1,
 		MessageService:    P2PMessageService,
@@ -210,11 +100,106 @@ func TestBridgeFund(t *testing.T) {
 		<-nodeA.ObjectiveCompleteChan(l1LedgerChannelResponse.Id)
 		t.Log("L1 channel created", l1LedgerChannelResponse.Id)
 
-		// Wait for bridge funding to complete
-		time.Sleep(3 * time.Second)
+		// Wait for mirror channel to be created
+		completedMirrorChannel := <-bridge.CompletedMirrorChannels()
 		l2LedgerChannelId, _ := bridge.GetMirrorChannel(l1LedgerChannelResponse.ChannelId)
+		testhelpers.Assert(t, completedMirrorChannel == l2LedgerChannelId, "Expects mirror channel id to be %v", l2LedgerChannelId)
 		checkLedgerChannel(t, l1LedgerChannelResponse.ChannelId, initialLedgerOutcome(*nodeA.Address, bridgeAddress, types.Address{}), query.Open, nodeA)
 		checkLedgerChannel(t, l2LedgerChannelId, initialLedgerOutcome(bridgeAddress, *nodeAPrime.Address, types.Address{}), query.Open, nodeAPrime)
+	})
+}
+
+func TestExitL2WithLedgerChannelState(t *testing.T) {
+	tcL1 := TestCase{
+		Chain:             AnvilChainL1,
+		MessageService:    TestMessageService,
+		MessageDelay:      0,
+		LogName:           "Bridge_test",
+		ChallengeDuration: 5,
+		Participants: []TestParticipant{
+			{StoreType: MemStore, Actor: testactors.Alice},
+			{StoreType: MemStore, Actor: testactors.Bob},
+		},
+		deployerIndex: 1,
+	}
+
+	tcL2 := TestCase{
+		Chain:             AnvilChainL2,
+		MessageService:    TestMessageService,
+		MessageDelay:      0,
+		LogName:           "Bridge_test",
+		ChallengeDuration: 5,
+		Participants: []TestParticipant{
+			{StoreType: MemStore, Actor: testactors.Bob},
+			{StoreType: MemStore, Actor: testactors.Alice},
+		},
+		ChainPort:     "8546",
+		deployerIndex: 0,
+	}
+
+	dataFolder, cleanup := testhelpers.GenerateTempStoreFolder()
+	defer cleanup()
+
+	infraL1 := setupSharedInfra(tcL1)
+	defer infraL1.Close(t)
+
+	infraL2 := setupSharedInfra(tcL2)
+	defer infraL2.Close(t)
+
+	// Create go-nitro nodes
+	nodeA, _, _, storeA, chainServiceA := setupIntegrationNode(tcL1, tcL1.Participants[0], infraL1, []string{}, dataFolder)
+	defer nodeA.Close()
+
+	nodeB, _, _, _, chainServiceB := setupIntegrationNode(tcL1, tcL1.Participants[1], infraL1, []string{}, dataFolder)
+	defer nodeB.Close()
+
+	nodeBPrime, _, _, storeBPrime, _ := setupIntegrationNode(tcL2, tcL2.Participants[0], infraL2, []string{}, dataFolder)
+	defer nodeBPrime.Close()
+
+	nodeAPrime, _, _, _, _ := setupIntegrationNode(tcL2, tcL2.Participants[1], infraL2, []string{}, dataFolder)
+	defer nodeAPrime.Close()
+
+	// Seperate chain service to listen for events
+	testChainService := setupChainService(tcL1, tcL1.Participants[0], infraL1)
+	defer testChainService.Close()
+
+	// Create ledger channel on L1 and mirror it on L2
+	l1ChannelId, mirroredLedgerChannelId := createL1L2Channels(t, nodeA, nodeB, nodeAPrime, nodeBPrime, storeA, tcL1, tcL2, chainServiceB)
+
+	t.Run("Exit to L1 using L2 ledger channel state", func(t *testing.T) {
+		l2SignedState := getLatestSignedState(storeBPrime, mirroredLedgerChannelId)
+		l2StateClone := l2SignedState.State().Clone()
+
+		// Both participants on L2 ledger channel sign state where `isFinal = true` which is required for a channel to conclude and finalize
+		l2StateClone.IsFinal = true
+
+		Asig, _ := l2StateClone.Sign(tcL2.Participants[1].PrivateKey)
+		Bsig, _ := l2StateClone.Sign(tcL2.Participants[0].PrivateKey)
+
+		l2SignedStateClone := state.NewSignedState(l2StateClone)
+
+		_ = l2SignedStateClone.AddSignature(Asig)
+		_ = l2SignedStateClone.AddSignature(Bsig)
+
+		// Node A calls modified `concludeAndTransferAllAssets` method to exit to L1 using L2 ledger channel state
+		MirrorWithdrawAllTx := protocols.NewMirrorWithdrawAllTransaction(l1ChannelId, l2SignedStateClone)
+		err := chainServiceA.SendTransaction(MirrorWithdrawAllTx)
+		if err != nil {
+			t.Error(err)
+		}
+
+		// Listen for allocation updated event
+		event := waitForEvent(t, testChainService.EventFeed(), chainservice.AllocationUpdatedEvent{})
+		_, ok := event.(chainservice.AllocationUpdatedEvent)
+		testhelpers.Assert(t, ok, "Expected allocation updated event")
+
+		balanceNodeA, _ := infraL1.anvilChain.GetAccountBalance(tcL1.Participants[0].Address())
+		balanceNodeB, _ := infraL1.anvilChain.GetAccountBalance(tcL1.Participants[1].Address())
+		t.Log("Balance of node A", balanceNodeA, "\nBalance of node B", balanceNodeB)
+
+		// Node A's and node B's balance should be equal to ledgerChannelDeposit since no payments happened
+		testhelpers.Assert(t, balanceNodeA.Cmp(big.NewInt(ledgerChannelDeposit)) == 0, "Balance of node A (%v) should be equal to (%v)", balanceNodeA, ledgerChannelDeposit)
+		testhelpers.Assert(t, balanceNodeB.Cmp(big.NewInt(ledgerChannelDeposit)) == 0, "Balance of node B (%v) should be equal to (%v)", balanceNodeB, ledgerChannelDeposit)
 	})
 }
 
