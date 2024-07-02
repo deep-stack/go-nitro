@@ -20,7 +20,8 @@ module.exports = async (hre: HardhatRuntimeEnvironment) => {
     const deployResult = await deploy('ConsensusApp', {
       from: deployer,
       log: true,
-      deterministicDeployment: true,
+      // TODO: Set ownership when using deterministic deployment
+      deterministicDeployment: process.env.DISABLE_DETERMINISTIC_DEPLOYMENT ? false : true,
     });
     contractAddresses = `${contractAddresses}export CA_ADDRESS=${deployResult.address}\n`;
   } catch (err) {
@@ -32,7 +33,8 @@ module.exports = async (hre: HardhatRuntimeEnvironment) => {
     const deployResult = await deploy('VirtualPaymentApp', {
       from: deployer,
       log: true,
-      deterministicDeployment: true,
+      // TODO: Set ownership when using deterministic deployment
+      deterministicDeployment: process.env.DISABLE_DETERMINISTIC_DEPLOYMENT ? false : true,
     });
     contractAddresses = `${contractAddresses}export VPA_ADDRESS=${deployResult.address}\n`;
   } catch (err) {

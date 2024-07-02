@@ -19,7 +19,8 @@ const func: DeployFunction = async function (hre: HardhatRuntimeEnvironment) {
   const deployResult = await deploy('Bridge', {
     from: deployer,
     log: true,
-    deterministicDeployment: true,
+    // TODO: Set ownership when using deterministic deployment
+    deterministicDeployment: process.env.DISABLE_DETERMINISTIC_DEPLOYMENT ? false : true,
   });
 
   contractAddresses = `${contractAddresses}export BRIDGE_ADDRESS=${deployResult.address}\n`;

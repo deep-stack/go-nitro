@@ -13,7 +13,8 @@ const func: DeployFunction = async function (hre: HardhatRuntimeEnvironment) {
     from: deployer,
     log: true,
     args: [deployer],
-    deterministicDeployment: true,
+    // TODO: Set ownership when using deterministic deployment
+    deterministicDeployment: process.env.DISABLE_DETERMINISTIC_DEPLOYMENT ? false : true,
   });
 };
 export default func;

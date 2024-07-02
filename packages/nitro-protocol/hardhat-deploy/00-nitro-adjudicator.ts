@@ -12,7 +12,8 @@ const func: DeployFunction = async function (hre: HardhatRuntimeEnvironment) {
   await deploy('NitroAdjudicator', {
     from: deployer,
     log: true,
-    deterministicDeployment: true,
+    // TODO: Set ownership when using deterministic deployment
+    deterministicDeployment: process.env.DISABLE_DETERMINISTIC_DEPLOYMENT ? false : true,
   });
 };
 export default func;
