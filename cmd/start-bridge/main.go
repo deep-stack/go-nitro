@@ -62,7 +62,7 @@ func main() {
 	logging.SetupDefaultLogger(os.Stdout, slog.LevelDebug)
 	bridge := bridge.New(bridgeConfig)
 
-	err = bridge.Start()
+	_, _, err = bridge.Start()
 	if err != nil {
 		log.Fatal(err)
 	}

@@ -67,7 +67,7 @@ func New(configOpts BridgeConfig) *Bridge {
 	return &bridge
 }
 
-func (b *Bridge) Start() error {
+func (b *Bridge) Start() (nodeL1MultiAddress string, nodeL2MultiAddress string, err error) {
 	chainOptsL1 := chainservice.ChainOpts{
 		ChainUrl:           b.config.L1ChainUrl,
 		ChainStartBlockNum: b.config.L1ChainStartBlock,
@@ -113,14 +113,14 @@ func (b *Bridge) Start() error {
 	}
 
 	// Initialize nodes
-	nodeL1, storeL1, _, _, err := nodeutils.InitializeNode(chainOptsL1, storeOptsL1, messageOptsL1)
+	nodeL1, storeL1, msgServiceL1, _, err := nodeutils.InitializeNode(chainOptsL1, storeOptsL1, messageOptsL1)
 	if err != nil {
-		return err
+		return nodeL1MultiAddress, nodeL2MultiAddress, err
 	}
 
-	nodeL2, storeL2, _, _, err := nodeutils.InitializeL2Node(chainOptsL2, storeOptsL2, messageOptsL2)
+	nodeL2, storeL2, msgServiceL2, _, err := nodeutils.InitializeL2Node(chainOptsL2, storeOptsL2, messageOptsL2)
 	if err != nil {
-		return err
+		return nodeL1MultiAddress, nodeL2MultiAddress, err
 	}
 
 	b.nodeL1 = nodeL1
@@ -133,7 +133,7 @@ func (b *Bridge) Start() error {
 
 	go b.run(ctx)
 
-	return nil
+	return msgServiceL1.MultiAddr, msgServiceL2.MultiAddr, nil
 }
 
 func (b *Bridge) run(ctx context.Context) {
@@ -215,10 +215,14 @@ func (b *Bridge) processCompletedObjectivesFromL2(objId protocols.ObjectiveId) e
 	return nil
 }
 
-func (b Bridge) GetMirrorChannel(l1ChannelId types.Destination) (l2ChannelId types.Destination, ok bool) {
+func (b Bridge) GetBridgeAddress() common.Address {
+	return *b.nodeL1.Address
+}
+
+func (b Bridge) GetMirrorChannel(l1ChannelId types.Destination) (l2ChannelId types.Destination, isCreated bool) {
 	for key, value := range b.mirrorChannelMap {
 		if value.l1ChannelId == l1ChannelId {
-			return key, true
+			return key, value.isCreated
 		}
 	}
 	return types.Destination{}, false
@@ -232,6 +236,6 @@ func (b *Bridge) Close() {
 
 func (b *Bridge) checkError(err error) {
 	if err != nil {
-		slog.Error("error in run loop", err)
+		slog.Error("error in run loop", "error", err)
 	}
 }

@@ -28,6 +28,8 @@ import (
 	"github.com/tidwall/buntdb"
 )
 
+const DEFAULT_PUBLIC_IP = "127.0.0.1"
+
 // setupNode is a helper function that constructs a nitro node and returns the new node and its store.
 func setupNode(pk []byte, chain chainservice.ChainService, msgBroker messageservice.Broker, meanMessageDelay time.Duration, dataFolder string) (node.Node, store.Store) {
 	myAddress := crypto.GetAddressFromSecretKeyBytes(pk)
@@ -70,7 +72,7 @@ func setupMessageService(tc TestCase, tp TestParticipant, si sharedTestInfrastru
 
 	case P2PMessageService:
 		ms := p2pms.NewMessageService(p2pms.MessageOpts{
-			PublicIp:  "127.0.0.1",
+			PublicIp:  DEFAULT_PUBLIC_IP,
 			Port:      int(tp.Port),
 			SCAddr:    tp.Address(),
 			PkBytes:   tp.PrivateKey,
@@ -89,14 +91,12 @@ func setupChainService(tc TestCase, tp TestParticipant, si sharedTestInfrastruct
 		return chainservice.NewMockChainService(si.mockChain, tp.Address())
 	case SimulatedChain:
 
-		ethAccountIndex := tp.Port - testactors.START_PORT
-		cs, err := chainservice.NewSimulatedBackendChainService(si.simulatedChain, *si.bindings, si.ethAccounts[ethAccountIndex])
+		cs, err := chainservice.NewSimulatedBackendChainService(si.simulatedChain, *si.bindings, si.ethAccounts[tp.ChainAccountIndex])
 		if err != nil {
 			panic(err)
 		}
 		return cs
 	case AnvilChainL1:
-		ethAccountIndex := tp.Port - testactors.START_PORT
 		cs, err := chainservice.NewEthChainService(chainservice.ChainOpts{
 			ChainUrl:           si.anvilChain.ChainUrl,
 			ChainStartBlockNum: 0,
@@ -104,14 +104,13 @@ func setupChainService(tc TestCase, tp TestParticipant, si sharedTestInfrastruct
 			NaAddress:          si.anvilChain.ContractAddresses.NaAddress,
 			VpaAddress:         si.anvilChain.ContractAddresses.VpaAddress,
 			CaAddress:          si.anvilChain.ContractAddresses.CaAddress,
-			ChainPk:            si.anvilChain.ChainPks[ethAccountIndex],
+			ChainPk:            si.anvilChain.ChainPks[tp.ChainAccountIndex],
 		})
 		if err != nil {
 			panic(err)
 		}
 		return cs
 	case AnvilChainL2:
-		ethAccountIndex := tp.Port - testactors.START_PORT
 		cs, err := chainservice.NewL2ChainService(chainservice.L2ChainOpts{
 			ChainUrl:           si.anvilChain.ChainUrl,
 			ChainStartBlockNum: 0,
@@ -119,7 +118,7 @@ func setupChainService(tc TestCase, tp TestParticipant, si sharedTestInfrastruct
 			BridgeAddress:      si.anvilChain.ContractAddresses.BridgeAddress,
 			CaAddress:          si.anvilChain.ContractAddresses.CaAddress,
 			VpaAddress:         si.anvilChain.ContractAddresses.VpaAddress,
-			ChainPk:            si.anvilChain.ChainPks[ethAccountIndex],
+			ChainPk:            si.anvilChain.ChainPks[tp.ChainAccountIndex],
 		})
 		if err != nil {
 			panic(err)
@@ -261,14 +260,14 @@ func setupSharedInfra(tc TestCase) sharedTestInfrastructure {
 		infra.bindings = &bindings
 		infra.ethAccounts = ethAccounts
 	case AnvilChainL1:
-		ethAccountIndex := tc.Participants[tc.deployerIndex].Port - testactors.START_PORT
+		ethAccountIndex := tc.Participants[tc.deployerIndex].ChainAccountIndex
 		chain, err := chainservice.NewAnvilChain(tc.ChainPort, false, ethAccountIndex)
 		if err != nil {
 			panic(err)
 		}
 		infra.anvilChain = chain
 	case AnvilChainL2:
-		ethAccountIndex := tc.Participants[tc.deployerIndex].Port - testactors.START_PORT
+		ethAccountIndex := tc.Participants[tc.deployerIndex].ChainAccountIndex
 		chain, err := chainservice.NewAnvilChain(tc.ChainPort, true, ethAccountIndex)
 		if err != nil {
 			panic(err)
