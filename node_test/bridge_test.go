@@ -23,7 +23,7 @@ import (
 
 func TestExitL2WithLedgerChannelState(t *testing.T) {
 	tcL1 := TestCase{
-		Chain:             AnvilChain,
+		Chain:             AnvilChainL1,
 		MessageService:    TestMessageService,
 		MessageDelay:      0,
 		LogName:           "Bridge_test",
@@ -32,10 +32,11 @@ func TestExitL2WithLedgerChannelState(t *testing.T) {
 			{StoreType: MemStore, Actor: testactors.Alice},
 			{StoreType: MemStore, Actor: testactors.Bob},
 		},
+		deployerIndex: 1,
 	}
 
 	tcL2 := TestCase{
-		Chain:             AnvilChain,
+		Chain:             AnvilChainL2,
 		MessageService:    TestMessageService,
 		MessageDelay:      0,
 		LogName:           "Bridge_test",
@@ -44,7 +45,8 @@ func TestExitL2WithLedgerChannelState(t *testing.T) {
 			{StoreType: MemStore, Actor: testactors.Bob},
 			{StoreType: MemStore, Actor: testactors.Alice},
 		},
-		ChainPort: "8546",
+		ChainPort:     "8546",
+		deployerIndex: 0,
 	}
 
 	dataFolder, cleanup := testhelpers.GenerateTempStoreFolder()
@@ -133,7 +135,7 @@ func TestExitL2WithPayments(t *testing.T) {
 	const payAmount = 2000
 
 	tcL1 := TestCase{
-		Chain:             AnvilChain,
+		Chain:             AnvilChainL1,
 		MessageService:    TestMessageService,
 		MessageDelay:      0,
 		LogName:           "Bridge_test",
@@ -142,10 +144,11 @@ func TestExitL2WithPayments(t *testing.T) {
 			{StoreType: MemStore, Actor: testactors.Alice},
 			{StoreType: MemStore, Actor: testactors.Bob},
 		},
+		deployerIndex: 1,
 	}
 
 	tcL2 := TestCase{
-		Chain:             AnvilChain,
+		Chain:             AnvilChainL2,
 		MessageService:    TestMessageService,
 		MessageDelay:      0,
 		LogName:           "Bridge_test",
@@ -154,7 +157,8 @@ func TestExitL2WithPayments(t *testing.T) {
 			{StoreType: MemStore, Actor: testactors.Bob},
 			{StoreType: MemStore, Actor: testactors.Alice},
 		},
-		ChainPort: "8546",
+		deployerIndex: 0,
+		ChainPort:     "8546",
 	}
 
 	dataFolder, cleanup := testhelpers.GenerateTempStoreFolder()
@@ -257,7 +261,7 @@ func TestExitL2WithLedgerChannelStateUnilaterally(t *testing.T) {
 	const payAmount = 2000
 
 	tcL1 := TestCase{
-		Chain:             AnvilChain,
+		Chain:             AnvilChainL1,
 		MessageService:    TestMessageService,
 		MessageDelay:      0,
 		LogName:           "Bridge_test",
@@ -266,10 +270,11 @@ func TestExitL2WithLedgerChannelStateUnilaterally(t *testing.T) {
 			{StoreType: MemStore, Actor: testactors.Alice},
 			{StoreType: MemStore, Actor: testactors.Bob},
 		},
+		deployerIndex: 1,
 	}
 
 	tcL2 := TestCase{
-		Chain:             AnvilChain,
+		Chain:             AnvilChainL2,
 		MessageService:    TestMessageService,
 		MessageDelay:      0,
 		LogName:           "Bridge_test",
@@ -278,7 +283,8 @@ func TestExitL2WithLedgerChannelStateUnilaterally(t *testing.T) {
 			{StoreType: MemStore, Actor: testactors.Bob},
 			{StoreType: MemStore, Actor: testactors.Alice},
 		},
-		ChainPort: "8546",
+		ChainPort:     "8546",
+		deployerIndex: 0,
 	}
 
 	dataFolder, cleanup := testhelpers.GenerateTempStoreFolder()
@@ -295,6 +301,9 @@ func TestExitL2WithLedgerChannelStateUnilaterally(t *testing.T) {
 	defer nodeA.Close()
 
 	nodeB, _, _, _, chainServiceB := setupIntegrationNode(tcL1, tcL1.Participants[1], infraL1, []string{}, dataFolder)
+
+	infraL2.anvilChain.ContractAddresses.CaAddress = infraL1.anvilChain.ContractAddresses.CaAddress
+	infraL2.anvilChain.ContractAddresses.VpaAddress = infraL1.anvilChain.ContractAddresses.VpaAddress
 
 	nodeBPrime, _, _, storeBPrime, _ := setupIntegrationNode(tcL2, tcL2.Participants[0], infraL2, []string{}, dataFolder)
 
@@ -323,7 +332,7 @@ func TestExitL2WithLedgerChannelStateUnilaterally(t *testing.T) {
 	waitForObjectives(t, nodeBPrime, nodeAPrime, []node.Node{}, []protocols.ObjectiveId{virtualDefundResponse})
 
 	t.Run("Exit to L1 using L2 ledger channel state unilaterally", func(t *testing.T) {
-		l2SignedState := getLatestSignedState(storeBPrime, mirroredLedgerChannelId)
+		l2SignedState := getLatestSignedState(storeAPrime, mirroredLedgerChannelId)
 
 		// Close bridge nodes
 		nodeB.Close()
@@ -373,7 +382,7 @@ func TestExitL2WithVirtualChannelStateUnilaterally(t *testing.T) {
 	const payAmount = 2000
 
 	tcL1 := TestCase{
-		Chain:             AnvilChain,
+		Chain:             AnvilChainL1,
 		MessageService:    TestMessageService,
 		MessageDelay:      0,
 		LogName:           "Bridge_test",
@@ -382,10 +391,11 @@ func TestExitL2WithVirtualChannelStateUnilaterally(t *testing.T) {
 			{StoreType: MemStore, Actor: testactors.Alice},
 			{StoreType: MemStore, Actor: testactors.Bob},
 		},
+		deployerIndex: 1,
 	}
 
 	tcL2 := TestCase{
-		Chain:             AnvilChain,
+		Chain:             AnvilChainL2,
 		MessageService:    TestMessageService,
 		MessageDelay:      0,
 		LogName:           "Bridge_test",
@@ -394,7 +404,8 @@ func TestExitL2WithVirtualChannelStateUnilaterally(t *testing.T) {
 			{StoreType: MemStore, Actor: testactors.Bob},
 			{StoreType: MemStore, Actor: testactors.Alice},
 		},
-		ChainPort: "8546",
+		ChainPort:     "8546",
+		deployerIndex: 0,
 	}
 
 	dataFolder, cleanup := testhelpers.GenerateTempStoreFolder()
@@ -411,6 +422,9 @@ func TestExitL2WithVirtualChannelStateUnilaterally(t *testing.T) {
 	defer nodeA.Close()
 
 	nodeB, _, _, _, chainServiceB := setupIntegrationNode(tcL1, tcL1.Participants[1], infraL1, []string{}, dataFolder)
+
+	infraL2.anvilChain.ContractAddresses.CaAddress = infraL1.anvilChain.ContractAddresses.CaAddress
+	infraL2.anvilChain.ContractAddresses.VpaAddress = infraL1.anvilChain.ContractAddresses.VpaAddress
 
 	nodeBPrime, _, _, storeBPrime, _ := setupIntegrationNode(tcL2, tcL2.Participants[0], infraL2, []string{}, dataFolder)
 
@@ -624,13 +638,11 @@ func createL1L2Channels(t *testing.T, nodeA node.Node, nodeB node.Node, nodeAPri
 	l1ledgerChannelState := l1LedgerChannel.SupportedSignedState()
 	l1ledgerChannelStateClone := l1ledgerChannelState.Clone()
 
-	l1ledgerChannelStateClone.State().Outcome[0].Allocations[0].Destination = types.AddressToDestination(*nodeAPrime.Address)
-	l1ledgerChannelStateClone.State().Outcome[0].Allocations[1].Destination = types.AddressToDestination(*nodeBPrime.Address)
-
 	// Put NodeBPrime's allocation at index 0 as it creates mirrored ledger channel
-	tempAllocation := l1ledgerChannelStateClone.State().Outcome[0].Allocations[0].Destination
-	l1ledgerChannelStateClone.State().Outcome[0].Allocations[0].Destination = l1ledgerChannelStateClone.State().Outcome[0].Allocations[1].Destination
-	l1ledgerChannelStateClone.State().Outcome[0].Allocations[1].Destination = tempAllocation
+	// Swap the allocations to be set in mirrored ledger channel
+	tempAllocation := l1ledgerChannelStateClone.State().Outcome[0].Allocations[0]
+	l1ledgerChannelStateClone.State().Outcome[0].Allocations[0] = l1ledgerChannelStateClone.State().Outcome[0].Allocations[1]
+	l1ledgerChannelStateClone.State().Outcome[0].Allocations[1] = tempAllocation
 
 	// Create extended state outcome based on l1ChannelState
 	l2ChannelOutcome := l1ledgerChannelStateClone.State().Outcome
@@ -641,11 +653,11 @@ func createL1L2Channels(t *testing.T, nodeA node.Node, nodeB node.Node, nodeAPri
 		t.Error(err)
 	}
 
+	nodeBPrimeChannel := nodeBPrime.ObjectiveCompleteChan(response.Id)
+	nodeAPrimeChannel := nodeAPrime.ObjectiveCompleteChan(response.Id)
 	t.Log("Waiting for bridge-fund objective to complete...")
-
-	<-nodeBPrime.ObjectiveCompleteChan(response.Id)
-	<-nodeAPrime.ObjectiveCompleteChan(response.Id)
-
+	<-nodeBPrimeChannel
+	<-nodeAPrimeChannel
 	t.Log("Completed bridge-fund objective")
 
 	// Node B calls contract method to store L2ChannelId => L1ChannelId
