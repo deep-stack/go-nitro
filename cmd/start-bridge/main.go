@@ -62,11 +62,11 @@ func main() {
 	logging.SetupDefaultLogger(os.Stdout, slog.LevelDebug)
 	bridge := bridge.New(bridgeConfig)
 
-	err = bridge.Start()
+	bridgeNodeL1Multiaddress, bridgeNodeL2Multiaddress, err := bridge.Start()
 	if err != nil {
 		log.Fatal(err)
 	}
-
+	slog.Info("Bridge nodes multiaddresses", "l1 node multiaddress", bridgeNodeL1Multiaddress, "l2 node multiaddress", bridgeNodeL2Multiaddress)
 	defer bridge.Close()
 	utils.WaitForKillSignal()
 }

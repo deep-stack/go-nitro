@@ -10,10 +10,11 @@ import (
 type ActorName string
 
 type Actor struct {
-	PrivateKey []byte
-	Role       uint
-	Name       ActorName
-	Port       uint
+	PrivateKey        []byte
+	Role              uint
+	Name              ActorName
+	ChainAccountIndex uint
+	Port              uint
 }
 
 func (a Actor) Destination() types.Destination {
@@ -32,6 +33,7 @@ var Alice Actor = Actor{
 	common.Hex2Bytes(`2d999770f7b5d49b694080f987b82bbc9fc9ac2b4dcc10b0f8aba7d700f69c6d`),
 	0,
 	"alice",
+	0,
 	START_PORT + 0,
 }
 
@@ -41,6 +43,7 @@ var Bob Actor = Actor{
 	common.Hex2Bytes(`0279651921cd800ac560c21ceea27aab0107b67daf436cdd25ce84cad30159b4`),
 	2,
 	"bob",
+	1,
 	START_PORT + 1,
 }
 
@@ -50,6 +53,7 @@ var Ivan Actor = Actor{
 	common.Hex2Bytes("1ea91a2724b40fb8fed6a3648d49e9431996c09744fb841b718377fb0700f3e7"),
 	2,
 	"ivan",
+	2,
 	START_PORT + 2,
 }
 
@@ -59,5 +63,28 @@ var Irene Actor = Actor{
 	common.Hex2Bytes(`febb3b74b0b52d0976f6571d555f4ac8b91c308dfa25c7b58d1e6a7c3f50c781`),
 	1,
 	"irene",
+	3,
 	START_PORT + 3,
+}
+
+// Actors for L2
+
+// AlicePrime has the address 0xAAA6628Ec44A8a742987EF3A114dDFE2D4F7aDCE
+// peerId: 16Uiu2HAmSjXJqsyBJgcBUU2HQmykxGseafSatbpq5471XmuaUqyv
+var AlicePrime Actor = Actor{
+	common.Hex2Bytes(`2d999770f7b5d49b694080f987b82bbc9fc9ac2b4dcc10b0f8aba7d700f69c6d`),
+	0,
+	"alice",
+	0,
+	START_PORT + 4,
+}
+
+// BobPrime has the address 0xBBB676f9cFF8D242e9eaC39D063848807d3D1D94
+// peerId: 16Uiu2HAmJDxLM8rSybX78FH51iZq9PdrwCoCyyHRBCndNzcAYMes
+var BobPrime Actor = Actor{
+	common.Hex2Bytes(`0279651921cd800ac560c21ceea27aab0107b67daf436cdd25ce84cad30159b4`),
+	2,
+	"bob",
+	1,
+	START_PORT + 5,
 }
