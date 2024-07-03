@@ -75,6 +75,7 @@ func TestBridgedFund(t *testing.T) {
 		NodeL1MsgPort:     int(tcL1.Participants[1].Port),
 		NodeL2MsgPort:     int(tcL2.Participants[0].Port),
 	}
+
 	bridge := bridge.New(bridgeConfig)
 	bridgeMultiaddressL1, bridgeMultiaddressL2, err := bridge.Start()
 	if err != nil {

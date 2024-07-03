@@ -212,7 +212,12 @@ func (b *Bridge) processCompletedObjectivesFromL2(objId protocols.ObjectiveId) e
 		l2Info := b.mirrorChannelMap[l2channelId]
 		l2Info.isCreated = true
 		b.mirrorChannelMap[l2channelId] = l2Info
-		b.completedMirrorChannels <- l2channelId
+
+		// use a nonblocking send in case no one is listening
+		select {
+		case b.completedMirrorChannels <- l2channelId:
+		default:
+		}
 	}
 
 	return nil
