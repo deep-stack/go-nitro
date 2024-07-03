@@ -77,7 +77,7 @@ func TestBridgedFund(t *testing.T) {
 	}
 
 	bridge := bridge.New(bridgeConfig)
-	bridgeMultiaddressL1, bridgeMultiaddressL2, err := bridge.Start()
+	bridgeMultiaddressL1, bridgeMultiaddressL2, _, err := bridge.Start()
 	if err != nil {
 		t.Log("error in starting bridge", err)
 	}

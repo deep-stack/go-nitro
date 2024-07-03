@@ -1,6 +1,8 @@
 package main
 
 import (
+	"crypto/tls"
+	"fmt"
 	"log"
 	"log/slog"
 	"os"
@@ -8,6 +10,7 @@ import (
 	"github.com/statechannels/go-nitro/bridge"
 	"github.com/statechannels/go-nitro/cmd/utils"
 	"github.com/statechannels/go-nitro/internal/logging"
+	"github.com/statechannels/go-nitro/internal/rpc"
 	"github.com/urfave/cli/v2"
 	"github.com/urfave/cli/v2/altsrc"
 )
@@ -36,12 +39,19 @@ const (
 
 	NODEL1_MSG_PORT = "nodel1msgport"
 	NODEL2_MSG_PORT = "nodel2msgport"
+
+	NODEL2_RPC_PORT = "nodel2rpcport"
+
+	TLS_CERT_FILEPATH = "tlscertfilepath"
+	TLS_KEY_FILEPATH  = "tlskeyfilepath"
 )
 
 func main() {
 	var l1chainurl, l2chainurl, chainpk, statechannelpk, naaddress, vpaaddress, caaddress, bridgeaddress, durableStoreDir, bridgepublicip string
-	var nodel1msgport, nodel2msgport int
+	var nodel1msgport, nodel2msgport, nodel2rpcport int
 	var l1chainstartblock, l2chainstartblock uint64
+
+	var tlscertfilepath, tlskeyfilepath string
 
 	// urfave default precedence for flag value sources (highest to lowest):
 	// 1. Command line flag value
@@ -122,6 +132,12 @@ func main() {
 			Value:       3006,
 			Destination: &nodel2msgport,
 		}),
+		altsrc.NewIntFlag(&cli.IntFlag{
+			Name:        NODEL2_RPC_PORT,
+			Usage:       "Specifies the tcp port for the rpc server.",
+			Value:       4006,
+			Destination: &nodel2rpcport,
+		}),
 		altsrc.NewUint64Flag(&cli.Uint64Flag{
 			Name:        L1_CHAIN_START_BLOCK,
 			Usage:       "Specifies the block number to start looking for nitro adjudicator events of nodeL1",
@@ -133,6 +149,18 @@ func main() {
 			Usage:       "Specifies the block number to start looking for nitro adjudicator events of nodeL1",
 			Value:       0,
 			Destination: &l2chainstartblock,
+		}),
+		altsrc.NewStringFlag(&cli.StringFlag{
+			Name:        TLS_CERT_FILEPATH,
+			Usage:       "Filepath to the TLS certificate. If not specified, TLS will not be used with the RPC transport.",
+			Value:       "./tls/statechannels.org.pem",
+			Destination: &tlscertfilepath,
+		}),
+		altsrc.NewStringFlag(&cli.StringFlag{
+			Name:        TLS_KEY_FILEPATH,
+			Usage:       "Filepath to the TLS private key. If not specified, TLS will not be used with the RPC transport.",
+			Value:       "./tls/statechannels.org_key.pem",
+			Destination: &tlskeyfilepath,
 		}),
 	}
 
@@ -162,14 +190,32 @@ func main() {
 			logging.SetupDefaultLogger(os.Stdout, slog.LevelDebug)
 			bridge := bridge.New(bridgeConfig)
 
-			bridgeNodeL1Multiaddress, bridgeNodeL2Multiaddress, err := bridge.Start()
+			bridgeNodeL1Multiaddress, bridgeNodeL2Multiaddress, nodeL2, err := bridge.Start()
 			if err != nil {
 				log.Fatal(err)
 			}
 
+			var cert tls.Certificate
+
+			if tlscertfilepath != "" && tlskeyfilepath != "" {
+				cert, err = tls.LoadX509KeyPair(tlscertfilepath, tlskeyfilepath)
+				if err != nil {
+					panic(err)
+				}
+			}
+
+			// TODO: Add single RPC server for bridge instead of just L2 bridge node
+			rpcServer, err := rpc.InitializeRpcServer(nodeL2, nodel2rpcport, false, &cert)
+			if err != nil {
+				return err
+			}
+
 			slog.Info("Bridge nodes multiaddresses", "l1 node multiaddress", bridgeNodeL1Multiaddress, "l2 node multiaddress", bridgeNodeL2Multiaddress)
 			utils.WaitForKillSignal()
-			return bridge.Close()
+
+			errBridge := bridge.Close()
+			errRpc := rpcServer.Close()
+			return fmt.Errorf(errBridge.Error() + errRpc.Error())
 		},
 	}
 
