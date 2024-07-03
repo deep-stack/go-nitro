@@ -154,8 +154,8 @@ func setupIntegrationNode(tc TestCase, tp TestParticipant, si sharedTestInfrastr
 	return n, messageService, multiAddr, store, cs
 }
 
-func initialLedgerOutcome(alpha, beta, asset types.Address) outcome.Exit {
-	return testdata.Outcomes.Create(alpha, beta, ledgerChannelDeposit, ledgerChannelDeposit, asset)
+func initialLedgerOutcome(alpha, beta types.Address, ledgerDepositAlpha, ledgerDepositBeta uint64, asset types.Address) outcome.Exit {
+	return testdata.Outcomes.Create(alpha, beta, ledgerDepositAlpha, ledgerDepositBeta, asset)
 }
 
 func finalAliceLedger(intermediary, asset types.Address, numPayments, paymentAmount, numChannels uint) outcome.Exit {
@@ -191,7 +191,7 @@ func finalPaymentOutcome(alpha, beta, asset types.Address, numPayments, paymentA
 
 func openLedgerChannel(t *testing.T, alpha node.Node, beta node.Node, asset common.Address, challengeDuration uint32) types.Destination {
 	// Set up an outcome that requires both participants to deposit
-	outcome := initialLedgerOutcome(*alpha.Address, *beta.Address, asset)
+	outcome := initialLedgerOutcome(*alpha.Address, *beta.Address, ledgerChannelDeposit, ledgerChannelDeposit, asset)
 
 	response, err := alpha.CreateLedgerChannel(*beta.Address, challengeDuration, outcome)
 	if err != nil {

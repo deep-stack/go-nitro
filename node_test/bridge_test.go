@@ -96,7 +96,7 @@ func TestBridgedFund(t *testing.T) {
 
 	t.Run("Create ledger channel on L1 and mirror it on L2", func(t *testing.T) {
 		// Alice create ledger channel with bridge
-		outcome := initialLedgerOutcome(*nodeA.Address, bridgeAddress, types.Address{})
+		outcome := initialLedgerOutcome(*nodeA.Address, bridgeAddress, ledgerChannelDeposit, 0, types.Address{})
 		l1LedgerChannelResponse, err := nodeA.CreateLedgerChannel(bridgeAddress, uint32(tcL1.ChallengeDuration), outcome)
 		if err != nil {
 			t.Fatal(err)
@@ -109,8 +109,8 @@ func TestBridgedFund(t *testing.T) {
 		completedMirrorChannel := <-bridge.CompletedMirrorChannels()
 		l2LedgerChannelId, _ = bridge.GetMirrorChannel(l1LedgerChannelResponse.ChannelId)
 		testhelpers.Assert(t, completedMirrorChannel == l2LedgerChannelId, "Expects mirror channel id to be %v", l2LedgerChannelId)
-		checkLedgerChannel(t, l1LedgerChannelResponse.ChannelId, initialLedgerOutcome(*nodeA.Address, bridgeAddress, types.Address{}), query.Open, nodeA)
-		checkLedgerChannel(t, l2LedgerChannelId, initialLedgerOutcome(bridgeAddress, *nodeAPrime.Address, types.Address{}), query.Open, nodeAPrime)
+		checkLedgerChannel(t, l1LedgerChannelResponse.ChannelId, initialLedgerOutcome(*nodeA.Address, bridgeAddress, ledgerChannelDeposit, 0, types.Address{}), query.Open, nodeA)
+		checkLedgerChannel(t, l2LedgerChannelId, initialLedgerOutcome(bridgeAddress, *nodeAPrime.Address, 0, ledgerChannelDeposit, types.Address{}), query.Open, nodeAPrime)
 	})
 
 	t.Run("Create virtual channel on mirrored ledger channel and make payments", func(t *testing.T) {
@@ -132,8 +132,8 @@ func TestBridgedFund(t *testing.T) {
 		balanceNodeAPrime := ledgerChannelInfo.Balance.MyBalance.ToInt()
 		t.Log("Balance of node BPrime", balanceNodeBPrime, "\nBalance of node APrime", balanceNodeAPrime)
 
-		// APrime's balance is determined by subtracting amount paid from it's ledger deposit, while BPrime's balance is calculated by adding it's ledger deposit to the amount received
-		testhelpers.Assert(t, balanceNodeBPrime.Cmp(big.NewInt(ledgerChannelDeposit+payAmount)) == 0, "Balance of node BPrime (%v) should be equal to (%v)", balanceNodeBPrime, ledgerChannelDeposit+payAmount)
+		// APrime's balance is determined by subtracting amount paid from it's ledger deposit, while BPrime's balance is calculated by adding the amount received
+		testhelpers.Assert(t, balanceNodeBPrime.Cmp(big.NewInt(payAmount)) == 0, "Balance of node BPrime (%v) should be equal to (%v)", balanceNodeBPrime, ledgerChannelDeposit+payAmount)
 		testhelpers.Assert(t, balanceNodeAPrime.Cmp(big.NewInt(ledgerChannelDeposit-payAmount)) == 0, "Balance of node APrime (%v) should be equal to (%v)", balanceNodeAPrime, ledgerChannelDeposit-payAmount)
 	})
 }
