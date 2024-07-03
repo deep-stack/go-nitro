@@ -9,6 +9,7 @@ import (
 	"math/big"
 	"strings"
 
+	"github.com/ethereum/go-ethereum/common"
 	"github.com/statechannels/go-nitro/channel"
 	"github.com/statechannels/go-nitro/channel/consensus_channel"
 	"github.com/statechannels/go-nitro/channel/state"
@@ -136,16 +137,19 @@ type Objective struct {
 func NewObjective(request ObjectiveRequest, preApprove bool, myAddress types.Address, chainId *big.Int, getTwoPartyConsensusLedger GetTwoPartyConsensusLedgerFunction) (Objective, error) {
 	var rightCC *consensus_channel.ConsensusChannel
 	ok := false
+	var counterParty common.Address
 
 	if len(request.Intermediaries) > 0 {
-		rightCC, ok = getTwoPartyConsensusLedger(request.Intermediaries[0])
+		counterParty = request.Intermediaries[0]
 	} else {
-		rightCC, ok = getTwoPartyConsensusLedger(request.CounterParty)
+		counterParty = request.CounterParty
 	}
 
+	rightCC, ok = getTwoPartyConsensusLedger(counterParty)
 	if !ok {
-		return Objective{}, fmt.Errorf("could not find ledger for %s and %s", myAddress, request.Intermediaries[0])
+		return Objective{}, fmt.Errorf("could not find ledger for %s and %s", myAddress, counterParty)
 	}
+
 	var leftCC *consensus_channel.ConsensusChannel
 
 	participants := []types.Address{myAddress}

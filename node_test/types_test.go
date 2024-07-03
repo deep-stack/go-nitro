@@ -14,10 +14,12 @@ import (
 
 const (
 	MAX_PARTICIPANTS      = 4
+	DEFAULT_PUBLIC_IP     = "127.0.0.1"
+	DURABLE_STORE_FOLDER  = "../data/node_test"
 	ledgerChannelDeposit  = 5_000_000
 	defaultTimeout        = 10 * time.Second
 	virtualChannelDeposit = 5000
-	DURABLE_STORE_FOLDER  = "../data/node_test"
+	payAmount             = 2000
 )
 
 type StoreType string

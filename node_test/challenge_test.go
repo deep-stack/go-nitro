@@ -90,8 +90,6 @@ func TestChallenge(t *testing.T) {
 }
 
 func TestCheckpoint(t *testing.T) {
-	const payAmount = 2000
-
 	testCase := TestCase{
 		Description:       "Check point test",
 		Chain:             AnvilChainL1,
@@ -198,8 +196,6 @@ func TestCheckpoint(t *testing.T) {
 }
 
 func TestCounterChallenge(t *testing.T) {
-	const payAmount = 2000
-
 	testCase := TestCase{
 		Description:       "Counter challenge test",
 		Chain:             AnvilChainL1,
@@ -287,8 +283,6 @@ func TestCounterChallenge(t *testing.T) {
 }
 
 func TestVirtualPaymentChannel(t *testing.T) {
-	const payAmount = 2000
-
 	tc := TestCase{
 		Description:       "Virtual channel test",
 		Chain:             AnvilChainL1,

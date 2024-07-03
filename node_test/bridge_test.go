@@ -90,9 +90,11 @@ func TestBridgedFund(t *testing.T) {
 	nodeAPrime, _, _, _, _ := setupIntegrationNode(tcL2, tcL2.Participants[1], infraL2, []string{bridgeMultiaddressL2}, dataFolder)
 	defer nodeAPrime.Close()
 
+	var l2LedgerChannelId types.Destination
+
 	t.Run("Create ledger channel on L1 and mirror it on L2", func(t *testing.T) {
 		// Alice create ledger channel with bridge
-		outcome := initialLedgerOutcome(*nodeA.Address, bridgeAddress, types.Address{})
+		outcome := initialLedgerOutcome(*nodeA.Address, bridgeAddress, ledgerChannelDeposit, 0, types.Address{})
 		l1LedgerChannelResponse, err := nodeA.CreateLedgerChannel(bridgeAddress, uint32(tcL1.ChallengeDuration), outcome)
 		if err != nil {
 			t.Fatal(err)
@@ -103,10 +105,34 @@ func TestBridgedFund(t *testing.T) {
 
 		// Wait for mirror channel to be created
 		completedMirrorChannel := <-bridge.CompletedMirrorChannels()
-		l2LedgerChannelId, _ := bridge.GetMirrorChannel(l1LedgerChannelResponse.ChannelId)
+		l2LedgerChannelId, _ = bridge.GetMirrorChannel(l1LedgerChannelResponse.ChannelId)
 		testhelpers.Assert(t, completedMirrorChannel == l2LedgerChannelId, "Expects mirror channel id to be %v", l2LedgerChannelId)
-		checkLedgerChannel(t, l1LedgerChannelResponse.ChannelId, initialLedgerOutcome(*nodeA.Address, bridgeAddress, types.Address{}), query.Open, nodeA)
-		checkLedgerChannel(t, l2LedgerChannelId, initialLedgerOutcome(bridgeAddress, *nodeAPrime.Address, types.Address{}), query.Open, nodeAPrime)
+		checkLedgerChannel(t, l1LedgerChannelResponse.ChannelId, initialLedgerOutcome(*nodeA.Address, bridgeAddress, ledgerChannelDeposit, 0, types.Address{}), query.Open, nodeA)
+		checkLedgerChannel(t, l2LedgerChannelId, initialLedgerOutcome(bridgeAddress, *nodeAPrime.Address, 0, ledgerChannelDeposit, types.Address{}), query.Open, nodeAPrime)
+	})
+
+	t.Run("Create virtual channel on mirrored ledger channel and make payments", func(t *testing.T) {
+		// Create virtual channel on mirrored ledger channel on L2
+		virtualOutcome := initialPaymentOutcome(*nodeAPrime.Address, bridgeAddress, types.Address{})
+		virtualResponse, _ := nodeAPrime.CreatePaymentChannel([]types.Address{}, bridgeAddress, uint32(tcL2.ChallengeDuration), virtualOutcome)
+		<-nodeAPrime.ObjectiveCompleteChan(virtualResponse.Id)
+		checkPaymentChannel(t, virtualResponse.ChannelId, virtualOutcome, query.Open, nodeAPrime)
+
+		// APrime pays BPrime
+		nodeAPrime.Pay(virtualResponse.ChannelId, big.NewInt(payAmount))
+
+		// Virtual defund
+		virtualDefundResponse, _ := nodeAPrime.ClosePaymentChannel(virtualResponse.ChannelId)
+		<-nodeAPrime.ObjectiveCompleteChan(virtualDefundResponse)
+
+		ledgerChannelInfo, _ := nodeAPrime.GetLedgerChannel(l2LedgerChannelId)
+		balanceNodeBPrime := ledgerChannelInfo.Balance.TheirBalance.ToInt()
+		balanceNodeAPrime := ledgerChannelInfo.Balance.MyBalance.ToInt()
+		t.Log("Balance of node BPrime", balanceNodeBPrime, "\nBalance of node APrime", balanceNodeAPrime)
+
+		// APrime's balance is determined by subtracting amount paid from it's ledger deposit, while BPrime's balance is calculated by adding the amount received
+		testhelpers.Assert(t, balanceNodeBPrime.Cmp(big.NewInt(payAmount)) == 0, "Balance of node BPrime (%v) should be equal to (%v)", balanceNodeBPrime, ledgerChannelDeposit+payAmount)
+		testhelpers.Assert(t, balanceNodeAPrime.Cmp(big.NewInt(ledgerChannelDeposit-payAmount)) == 0, "Balance of node APrime (%v) should be equal to (%v)", balanceNodeAPrime, ledgerChannelDeposit-payAmount)
 	})
 }
 
@@ -205,8 +231,6 @@ func TestExitL2WithLedgerChannelState(t *testing.T) {
 }
 
 func TestExitL2WithPayments(t *testing.T) {
-	const payAmount = 2000
-
 	tcL1 := TestCase{
 		Chain:             AnvilChainL1,
 		MessageService:    TestMessageService,
@@ -331,8 +355,6 @@ func TestExitL2WithPayments(t *testing.T) {
 }
 
 func TestExitL2WithLedgerChannelStateUnilaterally(t *testing.T) {
-	const payAmount = 2000
-
 	tcL1 := TestCase{
 		Chain:             AnvilChainL1,
 		MessageService:    TestMessageService,
@@ -452,8 +474,6 @@ func TestExitL2WithLedgerChannelStateUnilaterally(t *testing.T) {
 }
 
 func TestExitL2WithVirtualChannelStateUnilaterally(t *testing.T) {
-	const payAmount = 2000
-
 	tcL1 := TestCase{
 		Chain:             AnvilChainL1,
 		MessageService:    TestMessageService,
