@@ -23,8 +23,6 @@ import (
 )
 
 func TestBridgedFund(t *testing.T) {
-	const payAmount = 2000
-
 	tcL1 := TestCase{
 		Chain:             AnvilChainL1,
 		MessageService:    P2PMessageService,
@@ -233,8 +231,6 @@ func TestExitL2WithLedgerChannelState(t *testing.T) {
 }
 
 func TestExitL2WithPayments(t *testing.T) {
-	const payAmount = 2000
-
 	tcL1 := TestCase{
 		Chain:             AnvilChainL1,
 		MessageService:    TestMessageService,
@@ -359,8 +355,6 @@ func TestExitL2WithPayments(t *testing.T) {
 }
 
 func TestExitL2WithLedgerChannelStateUnilaterally(t *testing.T) {
-	const payAmount = 2000
-
 	tcL1 := TestCase{
 		Chain:             AnvilChainL1,
 		MessageService:    TestMessageService,
@@ -480,8 +474,6 @@ func TestExitL2WithLedgerChannelStateUnilaterally(t *testing.T) {
 }
 
 func TestExitL2WithVirtualChannelStateUnilaterally(t *testing.T) {
-	const payAmount = 2000
-
 	tcL1 := TestCase{
 		Chain:             AnvilChainL1,
 		MessageService:    TestMessageService,

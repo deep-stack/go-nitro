@@ -28,8 +28,6 @@ import (
 	"github.com/tidwall/buntdb"
 )
 
-const DEFAULT_PUBLIC_IP = "127.0.0.1"
-
 // setupNode is a helper function that constructs a nitro node and returns the new node and its store.
 func setupNode(pk []byte, chain chainservice.ChainService, msgBroker messageservice.Broker, meanMessageDelay time.Duration, dataFolder string) (node.Node, store.Store) {
 	myAddress := crypto.GetAddressFromSecretKeyBytes(pk)
