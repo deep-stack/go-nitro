@@ -9,6 +9,7 @@ module.exports = async (hre: HardhatRuntimeEnvironment) => {
   const {deployer} = await getNamedAccounts();
 
   console.log('Working on chain id #', await getChainId());
+  console.log('deployer', deployer);
 
   try {
     await deploy('NitroAdjudicator', {

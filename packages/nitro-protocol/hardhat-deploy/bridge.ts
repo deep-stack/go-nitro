@@ -24,7 +24,7 @@ const func: DeployFunction = async function (hre: HardhatRuntimeEnvironment) {
   const contractAddress = `export BRIDGE_ADDRESS=${bridgeDeployResult.address}\n`;
   const outputFilePath = path.resolve(addressesFilePath);
   fs.writeFileSync(outputFilePath, contractAddress, {flag: 'a'});
-  console.log('Contracts deployed, addresses written to', outputFilePath);
+  console.log('Bridge contract deployed, addresses written to', outputFilePath);
 };
 export default func;
 func.tags = ['bridge'];

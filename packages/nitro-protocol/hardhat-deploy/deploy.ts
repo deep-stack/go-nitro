@@ -33,7 +33,10 @@ module.exports = async (hre: HardhatRuntimeEnvironment) => {
 
   const outputFilePath = path.resolve(addressesFilePath);
   fs.writeFileSync(outputFilePath, contractAddresses, {flag: 'a'});
-  console.log('Contracts deployed, addresses written to', outputFilePath);
+  console.log(
+    'Consesus app and virtual payment app contracts deployed, addresses written to',
+    outputFilePath
+  );
 };
 module.exports.tags = ['deploy'];
 module.exports.dependencies = ['NitroAdjudicator'];
