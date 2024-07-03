@@ -4,8 +4,9 @@ import fs from 'fs';
 import path from 'path';
 
 import {HardhatRuntimeEnvironment} from 'hardhat/types';
+import {DeployFunction} from 'hardhat-deploy/types';
 
-module.exports = async (hre: HardhatRuntimeEnvironment) => {
+const func: DeployFunction = async function (hre: HardhatRuntimeEnvironment) {
   const {deployments, getNamedAccounts, getChainId, network} = hre;
   const {deploy} = deployments;
   const {deployer} = await getNamedAccounts();
@@ -31,6 +32,7 @@ module.exports = async (hre: HardhatRuntimeEnvironment) => {
   });
   contractAddresses = `${contractAddresses}export VPA_ADDRESS=${vpaDeployResult.address}\n`;
 
+  // TODO: Write to output file in post deploy script
   const outputFilePath = path.resolve(addressesFilePath);
   fs.writeFileSync(outputFilePath, contractAddresses, {flag: 'a'});
   console.log(
@@ -38,5 +40,5 @@ module.exports = async (hre: HardhatRuntimeEnvironment) => {
     outputFilePath
   );
 };
-module.exports.tags = ['deploy'];
-module.exports.dependencies = ['NitroAdjudicator'];
+export default func;
+func.tags = ['deploy'];

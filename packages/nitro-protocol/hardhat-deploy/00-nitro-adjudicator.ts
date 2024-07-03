@@ -21,10 +21,11 @@ const func: DeployFunction = async function (hre: HardhatRuntimeEnvironment) {
     deterministicDeployment: process.env.DISABLE_DETERMINISTIC_DEPLOYMENT ? false : true,
   });
 
+  // TODO: Write to output file in post deploy script
   const contractAddress = `export NA_ADDRESS=${naDeployResult.address}\n`;
   const outputFilePath = path.resolve(addressesFilePath);
   fs.writeFileSync(outputFilePath, contractAddress, {flag: 'a'});
-  console.log('Nitro adjudicator contract deployed, addresses written to', outputFilePath);
+  console.log('Nitro adjudicator contract deployed, address written to', outputFilePath);
 };
 export default func;
-func.tags = ['NitroAdjudicator'];
+func.tags = ['NitroAdjudicator', 'deploy'];
