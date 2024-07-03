@@ -108,8 +108,13 @@ yargs(hideBin(process.argv))
           type: "string",
           demandOption: true,
         })
-        .option("amount", {
-          describe: "The amount to fund the channel with",
+        .option("alphaAmount", {
+          describe: "The amount to be funded by alpha node",
+          type: "number",
+          default: 1_000_000,
+        })
+        .option("betaAmount", {
+          describe: "The amount to be funded by beta node",
           type: "number",
           default: 1_000_000,
         });
@@ -124,7 +129,8 @@ yargs(hideBin(process.argv))
 
       const dfObjective = await rpcClient.CreateLedgerChannel(
         yargs.counterparty,
-        yargs.amount
+        yargs.alphaAmount,
+        yargs.betaAmount
       );
       const { Id, ChannelId } = dfObjective;
 

@@ -22,7 +22,8 @@ export function createOutcome(
   asset: string,
   alpha: string,
   beta: string,
-  amount: number
+  alphaAmount: number,
+  betaAmount: number
 ): Outcome {
   return [
     {
@@ -35,13 +36,13 @@ export function createOutcome(
       Allocations: [
         {
           Destination: convertAddressToBytes32(alpha),
-          Amount: amount,
+          Amount: alphaAmount,
           AllocationType: 0,
           Metadata: null,
         },
         {
           Destination: convertAddressToBytes32(beta),
-          Amount: amount,
+          Amount: betaAmount,
           AllocationType: 0,
           Metadata: null,
         },
