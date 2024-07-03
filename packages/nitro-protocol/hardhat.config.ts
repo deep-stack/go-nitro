@@ -12,10 +12,19 @@ import 'hardhat-watcher';
 
 dotenv.config();
 
+const DEFAULT_GETH_CHAIN_ID = '1337';
+const DEFAULT_OPTIMISM_CHAIN_ID = '42069';
 const infuraToken = process.env.INFURA_TOKEN;
 const goerliDeployerPK = process.env.GOERLI_DEPLOYER_PK;
 const wallabyDeployerPk = process.env.WALLABY_DEPLOYER_PK;
 const calibrationDeployerPk = process.env.CALIBRATION_DEPLOYER_PK;
+const gethChainId = parseInt(process.env.GETH_CHAIN_ID ?? DEFAULT_GETH_CHAIN_ID);
+const gethURL = process.env.GETH_URL;
+const gethDeployerPK = process.env.GETH_DEPLOYER_PK;
+const optimismChainId = parseInt(process.env.OPTIMISM_CHAIN_ID ?? DEFAULT_OPTIMISM_CHAIN_ID);
+const optimismURL = process.env.OPTIMISM_URL;
+const optimismDeployerPK = process.env.OPTIMISM_DEPLOYER_PK;
+
 // This is a sample Hardhat task. To learn how to create your own go to
 // https://hardhat.org/guides/create-task.html
 task('accounts', 'Prints the list of accounts', async (taskArgs, hre) => {
@@ -63,6 +72,16 @@ const config: HardhatUserConfig & {watcher: any} = {
   networks: {
     hardhat: {
       chainId: 1337,
+    },
+    geth: {
+      chainId: gethChainId,
+      url: gethURL ?? '',
+      accounts: gethDeployerPK ? [gethDeployerPK] : [],
+    },
+    optimism: {
+      chainId: optimismChainId,
+      url: optimismURL ?? '',
+      accounts: optimismDeployerPK ? [optimismDeployerPK] : [],
     },
     goerli: {
       url: infuraToken ? 'https://goerli.infura.io/v3/' + infuraToken : '',

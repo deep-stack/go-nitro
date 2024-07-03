@@ -14,7 +14,7 @@ const func: DeployFunction = async function (hre: HardhatRuntimeEnvironment) {
 
   console.log('Working on chain id #', await getChainId());
 
-  const naDeployResult = await deploy('NitroAdjudicator', {
+  const bridgeDeployResult = await deploy('Bridge', {
     from: deployer,
     log: true,
     // TODO: Set ownership when using deterministic deployment
@@ -22,10 +22,10 @@ const func: DeployFunction = async function (hre: HardhatRuntimeEnvironment) {
   });
 
   // TODO: Write to output file in post deploy script
-  const contractAddress = `export NA_ADDRESS=${naDeployResult.address}\n`;
+  const contractAddress = `export BRIDGE_ADDRESS=${bridgeDeployResult.address}\n`;
   const outputFilePath = path.resolve(addressesFilePath);
   fs.writeFileSync(outputFilePath, contractAddress, {flag: 'a'});
-  console.log('Nitro adjudicator contract deployed, address written to', outputFilePath);
+  console.log('Bridge contract deployed, address written to', outputFilePath);
 };
 export default func;
-func.tags = ['NitroAdjudicator', 'deploy'];
+func.tags = ['bridge'];

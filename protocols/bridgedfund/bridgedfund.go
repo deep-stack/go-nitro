@@ -317,12 +317,12 @@ func (o *Objective) Crank(secretKey *[]byte) (protocols.Objective, protocols.Sid
 		latestState, _ := updated.C.LatestSupportedState()
 		stateHash, err := latestState.Hash()
 		if err != nil {
-			return &updated, protocols.SideEffects{}, WaitingForCompletePostFund, fmt.Errorf("could get state hash %w", err)
+			return &updated, protocols.SideEffects{}, WaitingForCompletePostFund, fmt.Errorf("could not get state hash %w", err)
 		}
 
 		latestStateOutcomeBytes, err := latestState.Outcome.Encode()
 		if err != nil {
-			return &updated, protocols.SideEffects{}, WaitingForCompletePostFund, fmt.Errorf("could get outcome bytes %w", err)
+			return &updated, protocols.SideEffects{}, WaitingForCompletePostFund, fmt.Errorf("could not get outcome bytes %w", err)
 		}
 
 		updateMirroredChannelStateTx := protocols.NewUpdateMirroredChannelStatusTransaction(latestState.ChannelId(), stateHash, latestStateOutcomeBytes)

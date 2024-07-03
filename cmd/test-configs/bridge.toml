@@ -1,0 +1,6 @@
+chainpk            = "5de4111afa1a4b94908f83103eb1f1706367c2e68ca870fc3fb9a804cdab365a"
+statechannelpk     = "0279651921cd800ac560c21ceea27aab0107b67daf436cdd25ce84cad30159b4"
+l1chainurl         = "ws://127.0.0.1:8545"
+l2chainurl         = "ws://127.0.0.1:8546"
+nodel1msgport      = 3005
+nodel2msgport      = 3006
