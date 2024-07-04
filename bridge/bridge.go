@@ -69,7 +69,7 @@ func New(configOpts BridgeConfig) *Bridge {
 	return &bridge
 }
 
-func (b *Bridge) Start() (nodeL1MultiAddress string, nodeL2MultiAddress string, err error) {
+func (b *Bridge) Start() (nodeL1MultiAddress string, nodeL2MultiAddress string, l2Node *node.Node, err error) {
 	chainOptsL1 := chainservice.ChainOpts{
 		ChainUrl:           b.config.L1ChainUrl,
 		ChainStartBlockNum: b.config.L1ChainStartBlock,
@@ -117,12 +117,12 @@ func (b *Bridge) Start() (nodeL1MultiAddress string, nodeL2MultiAddress string, 
 	// Initialize nodes
 	nodeL1, storeL1, msgServiceL1, _, err := nodeutils.InitializeNode(chainOptsL1, storeOptsL1, messageOptsL1)
 	if err != nil {
-		return nodeL1MultiAddress, nodeL2MultiAddress, err
+		return nodeL1MultiAddress, nodeL2MultiAddress, l2Node, err
 	}
 
 	nodeL2, storeL2, msgServiceL2, _, err := nodeutils.InitializeL2Node(chainOptsL2, storeOptsL2, messageOptsL2)
 	if err != nil {
-		return nodeL1MultiAddress, nodeL2MultiAddress, err
+		return nodeL1MultiAddress, nodeL2MultiAddress, l2Node, err
 	}
 
 	b.nodeL1 = nodeL1
@@ -135,7 +135,7 @@ func (b *Bridge) Start() (nodeL1MultiAddress string, nodeL2MultiAddress string, 
 
 	go b.run(ctx)
 
-	return msgServiceL1.MultiAddr, msgServiceL2.MultiAddr, nil
+	return msgServiceL1.MultiAddr, msgServiceL2.MultiAddr, nodeL2, nil
 }
 
 func (b *Bridge) run(ctx context.Context) {
@@ -248,10 +248,11 @@ func (b *Bridge) Close() error {
 		return err
 	}
 
-	err = b.nodeL2.Close()
-	if err != nil {
-		return err
-	}
+	// TODO: Create separate RPC server for bridge to handle bridge nodes closing and uncomment following code
+	// err = b.nodeL2.Close()
+	// if err != nil {
+	// 	return err
+	// }
 
 	return nil
 }

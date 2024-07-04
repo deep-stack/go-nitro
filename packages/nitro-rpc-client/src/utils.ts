@@ -1,3 +1,5 @@
+import JSONbig from "json-bigint";
+
 import { NitroRpcClient } from "./rpc-client";
 import {
   LedgerChannelInfo,
@@ -22,7 +24,8 @@ export function createOutcome(
   asset: string,
   alpha: string,
   beta: string,
-  amount: number
+  alphaAmount: number,
+  betaAmount: number
 ): Outcome {
   return [
     {
@@ -35,13 +38,13 @@ export function createOutcome(
       Allocations: [
         {
           Destination: convertAddressToBytes32(alpha),
-          Amount: amount,
+          Amount: alphaAmount,
           AllocationType: 0,
           Metadata: null,
         },
         {
           Destination: convertAddressToBytes32(beta),
-          Amount: amount,
+          Amount: betaAmount,
           AllocationType: 0,
           Metadata: null,
         },
@@ -113,5 +116,5 @@ function prettyJson(obj: unknown): string {
   return JSON.stringify(obj, null, 2);
 }
 export function compactJson(obj: unknown): string {
-  return JSON.stringify(obj, null, 0);
+  return JSONbig.stringify(obj, null, 0);
 }

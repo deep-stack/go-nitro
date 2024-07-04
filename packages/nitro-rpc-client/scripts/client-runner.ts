@@ -170,10 +170,12 @@ yargs(hideBin(process.argv))
         console.log("Constructing ledger channels");
         const aliceLedger = await aliceClient.CreateLedgerChannel(
           ireneAddress,
+          yargs.ledgerdeposit,
           yargs.ledgerdeposit
         );
         const bobLedger = await ireneClient.CreateLedgerChannel(
           bobAddress,
+          yargs.ledgerdeposit,
           yargs.ledgerdeposit
         );
 
@@ -266,6 +268,7 @@ yargs(hideBin(process.argv))
       console.log("Constructing ledger channels");
       const ledger = await leftClient.CreateLedgerChannel(
         rightAddress,
+        1_000_000,
         1_000_000
       );
       await leftClient.WaitForLedgerChannelStatus(ledger.ChannelId, "Open");

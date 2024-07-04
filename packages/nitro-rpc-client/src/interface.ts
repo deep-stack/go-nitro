@@ -17,7 +17,8 @@ interface ledgerChannelApi {
    */
   CreateLedgerChannel(
     counterParty: string,
-    amount: number
+    aplhaAmount: number,
+    betaAmount: number
   ): Promise<ObjectiveResponse>;
   /**
    * CloseLedgerChannel defunds a directly funded ledger channel.

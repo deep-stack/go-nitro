@@ -137,7 +137,8 @@ export class NitroRpcClient implements RpcClientApi {
 
   public async CreateLedgerChannel(
     counterParty: string,
-    amount: number
+    alphaAmount: number,
+    betaAmount: number
   ): Promise<ObjectiveResponse> {
     const asset = `0x${"00".repeat(20)}`;
     const payload: DirectFundPayload = {
@@ -147,7 +148,8 @@ export class NitroRpcClient implements RpcClientApi {
         asset,
         await this.GetAddress(),
         counterParty,
-        amount
+        alphaAmount,
+        betaAmount
       ),
       AppDefinition: asset,
       AppData: "0x00",
@@ -170,7 +172,9 @@ export class NitroRpcClient implements RpcClientApi {
         asset,
         await this.GetAddress(),
         counterParty,
-        amount
+        amount,
+        // As payment channel is simplex, only alpha node can pay beta node and not vice-versa hence beta node's allocation amount is 0
+        0
       ),
       AppDefinition: asset,
       Nonce: Date.now(),
