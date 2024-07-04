@@ -5,6 +5,7 @@ import (
 	"errors"
 	"math/big"
 
+	"github.com/ethereum/go-ethereum/common"
 	"github.com/statechannels/go-nitro/channel/consensus_channel"
 	"github.com/statechannels/go-nitro/channel/state"
 	"github.com/statechannels/go-nitro/crypto"
@@ -136,29 +137,27 @@ func NewSetL2ToL1Transaction(
 	}
 }
 
-type UpdateMirroredChannelStatusTransaction struct {
+type UpdateMirroredChannelStatesTransaction struct {
 	ChainTransaction
 	StateHash    types.Bytes32
 	OutcomeBytes types.Bytes
+	Amount       *big.Int
+	Asset        common.Address
 }
 
-func NewUpdateMirroredChannelStatusTransaction(
+func NewUpdateMirroredChannelStatesTransaction(
 	channelId types.Destination,
 	stateHash types.Bytes32,
 	outcomeBytes types.Bytes,
-) UpdateMirroredChannelStatusTransaction {
-	return UpdateMirroredChannelStatusTransaction{
+	asset common.Address,
+	amount *big.Int,
+) UpdateMirroredChannelStatesTransaction {
+	return UpdateMirroredChannelStatesTransaction{
 		ChainTransaction: ChainTransactionBase{channelId: channelId},
 		StateHash:        stateHash,
 		OutcomeBytes:     outcomeBytes,
-	}
-}
-
-func NewGetMirroredChannelStatusCall(
-	channelId types.Destination,
-) UpdateMirroredChannelStatusTransaction {
-	return UpdateMirroredChannelStatusTransaction{
-		ChainTransaction: ChainTransactionBase{channelId: channelId},
+		Asset:            asset,
+		Amount:           amount,
 	}
 }
 

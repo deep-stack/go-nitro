@@ -325,7 +325,13 @@ func (o *Objective) Crank(secretKey *[]byte) (protocols.Objective, protocols.Sid
 			return &updated, protocols.SideEffects{}, WaitingForCompletePostFund, fmt.Errorf("could not get outcome bytes %w", err)
 		}
 
-		updateMirroredChannelStateTx := protocols.NewUpdateMirroredChannelStatusTransaction(latestState.ChannelId(), stateHash, latestStateOutcomeBytes)
+		asset := latestState.Outcome[0].Asset
+		holdingAmount := new(big.Int)
+		for _, allocation := range latestState.Outcome[0].Allocations {
+			holdingAmount.Add(holdingAmount, allocation.Amount)
+		}
+
+		updateMirroredChannelStateTx := protocols.NewUpdateMirroredChannelStatesTransaction(latestState.ChannelId(), stateHash, latestStateOutcomeBytes, asset, holdingAmount)
 
 		updated.transactionSubmitted = true
 		sideEffects.TransactionsToSubmit = append(sideEffects.TransactionsToSubmit, updateMirroredChannelStateTx)
