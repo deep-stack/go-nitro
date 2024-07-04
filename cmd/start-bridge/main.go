@@ -2,7 +2,6 @@ package main
 
 import (
 	"crypto/tls"
-	"fmt"
 	"log"
 	"log/slog"
 	"os"
@@ -213,21 +212,16 @@ func main() {
 			slog.Info("Bridge nodes multiaddresses", "l1 node multiaddress", bridgeNodeL1Multiaddress, "l2 node multiaddress", bridgeNodeL2Multiaddress)
 			utils.WaitForKillSignal()
 
-			errBridge := bridge.Close()
-			errRpc := rpcServer.Close()
-
-			var errors string
-
-			if errBridge != nil {
-				errors = errors + errBridge.Error()
-			}
-			if errRpc != nil {
-				errors = errors + errRpc.Error()
+			err = bridge.Close()
+			if err != nil {
+				return err
 			}
 
-			if errors != "" {
-				return fmt.Errorf(errors)
+			err = rpcServer.Close()
+			if err != nil {
+				return err
 			}
+
 			return nil
 		},
 	}

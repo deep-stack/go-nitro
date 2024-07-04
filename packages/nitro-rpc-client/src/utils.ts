@@ -1,3 +1,5 @@
+import JSONbig from "json-bigint";
+
 import { NitroRpcClient } from "./rpc-client";
 import {
   LedgerChannelInfo,
@@ -114,9 +116,5 @@ function prettyJson(obj: unknown): string {
   return JSON.stringify(obj, null, 2);
 }
 export function compactJson(obj: unknown): string {
-  return JSON.stringify(
-    obj,
-    (_, v) => (typeof v === "bigint" ? v.toString() : v),
-    0
-  );
+  return JSONbig.stringify(obj, null, 0);
 }
