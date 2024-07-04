@@ -114,5 +114,9 @@ function prettyJson(obj: unknown): string {
   return JSON.stringify(obj, null, 2);
 }
 export function compactJson(obj: unknown): string {
-  return JSON.stringify(obj, (_, v) => typeof v === 'bigint' ? v.toString() : v, 0);
+  return JSON.stringify(
+    obj,
+    (_, v) => (typeof v === "bigint" ? v.toString() : v),
+    0
+  );
 }
