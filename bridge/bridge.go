@@ -248,10 +248,11 @@ func (b *Bridge) Close() error {
 		return err
 	}
 
-	err = b.nodeL2.Close()
-	if err != nil {
-		return err
-	}
+	// TODO: Create separate RPC server for bridge to handle bridge nodes closing and uncomment following code
+	// err = b.nodeL2.Close()
+	// if err != nil {
+	// 	return err
+	// }
 
 	return nil
 }

@@ -215,7 +215,20 @@ func main() {
 
 			errBridge := bridge.Close()
 			errRpc := rpcServer.Close()
-			return fmt.Errorf(errBridge.Error() + errRpc.Error())
+
+			var errors string
+
+			if errBridge != nil {
+				errors = errors + errBridge.Error()
+			}
+			if errRpc != nil {
+				errors = errors + errRpc.Error()
+			}
+
+			if errors != "" {
+				return fmt.Errorf(errors)
+			}
+			return nil
 		},
 	}
 
