@@ -6,11 +6,13 @@ import (
 	"math/big"
 
 	"github.com/ethereum/go-ethereum/accounts/abi/bind"
-	"github.com/ethereum/go-ethereum/accounts/abi/bind/backends"
 	"github.com/ethereum/go-ethereum/common"
 	"github.com/ethereum/go-ethereum/core"
 	ethTypes "github.com/ethereum/go-ethereum/core/types"
 	"github.com/ethereum/go-ethereum/crypto"
+	"github.com/ethereum/go-ethereum/eth/ethconfig"
+	"github.com/ethereum/go-ethereum/ethclient/simulated"
+	"github.com/ethereum/go-ethereum/node"
 
 	NitroAdjudicator "github.com/statechannels/go-nitro/node/engine/chainservice/adjudicator"
 	ConsensusApp "github.com/statechannels/go-nitro/node/engine/chainservice/consensusapp"
@@ -50,7 +52,8 @@ type SimulatedChain interface {
 
 // This is used to wrap the simulated backend so that we can provide a ChainID function like a real eth client
 type BackendWrapper struct {
-	*backends.SimulatedBackend
+	*simulated.Backend
+	simulated.Client
 }
 
 func (b *BackendWrapper) ChainID(ctx context.Context) (*big.Int, error) {
@@ -122,28 +125,30 @@ func SetupSimulatedBackend(numAccounts uint64) (SimulatedChain, Bindings, []*bin
 
 	// Setup "blockchain"
 	blockGasLimit := uint64(15_000_000)
-	sim := backends.NewSimulatedBackend(genesisAlloc, blockGasLimit)
-
+	sim := simulated.NewBackend(genesisAlloc, func(nodeConf *node.Config, ethConf *ethconfig.Config) {
+		ethConf.Genesis.GasLimit = blockGasLimit
+	})
+	simulatedClient := sim.Client()
 	// Deploy Adjudicator
-	naAddress, _, na, err := NitroAdjudicator.DeployNitroAdjudicator(accounts[0], sim)
+	naAddress, _, na, err := NitroAdjudicator.DeployNitroAdjudicator(accounts[0], simulatedClient)
 	if err != nil {
 		return nil, contractBindings, accounts, err
 	}
 
 	// Deploy ConsensusApp
-	consensusAppAddress, _, ca, err := ConsensusApp.DeployConsensusApp(accounts[0], sim)
+	consensusAppAddress, _, ca, err := ConsensusApp.DeployConsensusApp(accounts[0], simulatedClient)
 	if err != nil {
 		return nil, contractBindings, accounts, err
 	}
 
 	// Deploy VirtualPaymentChannelApp
-	virtualPaymentAppAddress, _, vpa, err := VirtualPaymentApp.DeployVirtualPaymentApp(accounts[0], sim)
+	virtualPaymentAppAddress, _, vpa, err := VirtualPaymentApp.DeployVirtualPaymentApp(accounts[0], simulatedClient)
 	if err != nil {
 		return nil, contractBindings, accounts, err
 	}
 
 	// Deploy a test ERC20 Token Contract
-	tokenAddress, _, tokenBinding, err := Token.DeployToken(accounts[0], sim, TEST_TOKEN_NAME, TEST_TOKEN_SYMBOL, accounts[0].From, big.NewInt(TEST_INITIAL_SUPPLY))
+	tokenAddress, _, tokenBinding, err := Token.DeployToken(accounts[0], simulatedClient, TEST_TOKEN_NAME, TEST_TOKEN_SYMBOL, accounts[0].From, big.NewInt(TEST_INITIAL_SUPPLY))
 	if err != nil {
 		return nil, contractBindings, accounts, err
 	}
@@ -166,7 +171,7 @@ func SetupSimulatedBackend(numAccounts uint64) (SimulatedChain, Bindings, []*bin
 	}
 	sim.Commit()
 
-	return &BackendWrapper{sim}, contractBindings, accounts, nil
+	return &BackendWrapper{sim, simulatedClient}, contractBindings, accounts, nil
 }
 
 func (sbcs *SimulatedBackendChainService) GetConsensusAppAddress() types.Address {
