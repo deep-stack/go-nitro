@@ -2,12 +2,10 @@
 pragma solidity 0.8.17;
 
 import {Ownable} from '@openzeppelin/contracts/access/Ownable.sol';
-import {StatusManager} from './StatusManager.sol';
 import {IBridge} from './interfaces/IBridge.sol';
 import {MultiAssetHolder} from './MultiAssetHolder.sol';
 
 contract Bridge is MultiAssetHolder, IBridge, Ownable {
-
     // Updates the holdings and mirrored ledger channel state
     function updateMirroredChannelStates(
         bytes32 channelId,

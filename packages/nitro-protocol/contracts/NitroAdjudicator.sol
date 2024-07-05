@@ -13,7 +13,6 @@ import {MultiAssetHolder} from './MultiAssetHolder.sol';
  * @dev The NitroAdjudicator contract extends MultiAssetHolder and ForceMove
  */
 contract NitroAdjudicator is INitroAdjudicator, ForceMove, MultiAssetHolder, Ownable {
-
     mapping(bytes32 => bytes32) public l2Tol1;
 
     // Function to set map from l2ChannelId to l1ChannelId
