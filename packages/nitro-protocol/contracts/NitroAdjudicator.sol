@@ -1,6 +1,7 @@
 // SPDX-License-Identifier: MIT
 pragma solidity 0.8.17;
 
+import {Ownable} from '@openzeppelin/contracts/access/Ownable.sol';
 import {ExitFormat as Outcome} from '@statechannels/exit-format/contracts/ExitFormat.sol';
 import {NitroUtils} from './libraries/NitroUtils.sol';
 import {INitroAdjudicator} from './interfaces/INitroAdjudicator.sol';
@@ -11,7 +12,19 @@ import {MultiAssetHolder} from './MultiAssetHolder.sol';
 /**
  * @dev The NitroAdjudicator contract extends MultiAssetHolder and ForceMove
  */
-contract NitroAdjudicator is INitroAdjudicator, ForceMove, MultiAssetHolder {
+contract NitroAdjudicator is INitroAdjudicator, ForceMove, MultiAssetHolder, Ownable {
+    mapping(bytes32 => bytes32) public l2Tol1;
+
+    // Function to set map from l2ChannelId to l1ChannelId
+    function setL2ToL1(bytes32 l1ChannelId, bytes32 l2ChannelId) public onlyOwner {
+        l2Tol1[l2ChannelId] = l1ChannelId;
+    }
+
+    // Function to retrieve the mapped value of l2ChannelId
+    function getL2ToL1(bytes32 l2ChannelId) public view returns (bytes32) {
+        return l2Tol1[l2ChannelId];
+    }
+
     /**
      * @notice Finalizes a channel according to the given candidate, and liquidates all assets for the channel.
      * @dev Finalizes a channel according to the given candidate, and liquidates all assets for the channel.

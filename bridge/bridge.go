@@ -30,8 +30,9 @@ type MirrorChannelDetails struct {
 }
 
 type Bridge struct {
-	nodeL1  *node.Node
-	storeL1 store.Store
+	nodeL1         *node.Node
+	storeL1        store.Store
+	chainServiceL1 chainservice.ChainService
 
 	nodeL2  *node.Node
 	storeL2 store.Store
@@ -115,7 +116,7 @@ func (b *Bridge) Start() (nodeL1MultiAddress string, nodeL2MultiAddress string, 
 	}
 
 	// Initialize nodes
-	nodeL1, storeL1, msgServiceL1, _, err := nodeutils.InitializeNode(chainOptsL1, storeOptsL1, messageOptsL1)
+	nodeL1, storeL1, msgServiceL1, chainServiceL1, err := nodeutils.InitializeNode(chainOptsL1, storeOptsL1, messageOptsL1)
 	if err != nil {
 		return nodeL1MultiAddress, nodeL2MultiAddress, l2Node, err
 	}
@@ -127,6 +128,7 @@ func (b *Bridge) Start() (nodeL1MultiAddress string, nodeL2MultiAddress string, 
 
 	b.nodeL1 = nodeL1
 	b.storeL1 = *storeL1
+	b.chainServiceL1 = chainServiceL1
 	b.nodeL2 = nodeL2
 	b.storeL2 = *storeL2
 
@@ -212,6 +214,13 @@ func (b *Bridge) processCompletedObjectivesFromL2(objId protocols.ObjectiveId) e
 		l2Info := b.mirrorChannelMap[l2channelId]
 		l2Info.isCreated = true
 		b.mirrorChannelMap[l2channelId] = l2Info
+
+		// Node B calls contract method to store L2ChannelId => L1ChannelId
+		setL2ToL1Tx := protocols.NewSetL2ToL1Transaction(l2Info.l1ChannelId, l2channelId)
+		err = b.chainServiceL1.SendTransaction(setL2ToL1Tx)
+		if err != nil {
+			return fmt.Errorf("error in send transaction %w", err)
+		}
 
 		// use a nonblocking send in case no one is listening
 		select {
