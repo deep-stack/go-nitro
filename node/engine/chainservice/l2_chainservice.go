@@ -195,49 +195,55 @@ func (l2cs *L2ChainService) listenForEventLogs(errorChan chan<- error, eventChan
 			return
 
 		case err := <-l2cs.eventSub.Err():
-			// Use helper function block to ensure "defer" statement is called for all exit paths
-			func() {
-				latestBlockNum := l2cs.GetLastConfirmedBlockNum()
+			latestBlockNum := l2cs.GetLastConfirmedBlockNum()
 
-				l2cs.eventTracker.mu.Lock()
-				defer l2cs.eventTracker.mu.Unlock()
+			if err != nil {
+				l2cs.logger.Warn("error in chain event subscription: " + err.Error())
+				l2cs.eventSub.Unsubscribe()
+			} else {
+				l2cs.logger.Warn("chain event subscription closed")
+			}
 
-				if err != nil {
-					l2cs.logger.Warn("error in chain event subscription: " + err.Error())
-					l2cs.eventSub.Unsubscribe()
-				} else {
-					l2cs.logger.Warn("chain event subscription closed")
-				}
+			resubscribed := false // Flag to indicate whether resubscription was successful
 
-				resubscribed := false // Flag to indicate whether resubscription was successful
-
-				// Use exponential backoff loop to attempt to re-establish subscription
-				for backoffTime := MIN_BACKOFF_TIME; backoffTime < MAX_BACKOFF_TIME; backoffTime *= 2 {
+			// Use exponential backoff loop to attempt to re-establish subscription
+		resubscriptionLoop:
+			for backoffTime := MIN_BACKOFF_TIME; backoffTime < MAX_BACKOFF_TIME; backoffTime *= 2 {
+				select {
+				case <-time.After(backoffTime):
 					eventSub, err := l2cs.chain.SubscribeFilterLogs(l2cs.ctx, eventQuery, eventChan)
 					if err != nil {
 						l2cs.logger.Warn("failed to resubscribe to chain events, retrying", "backoffTime", backoffTime)
-						time.Sleep(backoffTime)
 						continue
 					}
 
 					l2cs.eventSub = eventSub
 					l2cs.logger.Debug("resubscribed to chain events")
+
+					l2cs.eventTracker.mu.Lock()
 					err = l2cs.checkForMissedEvents(latestBlockNum)
+					l2cs.eventTracker.mu.Unlock()
+
 					if err != nil {
 						errorChan <- fmt.Errorf("subscribeFilterLogs failed during checkForMissedEvents: " + err.Error())
 						return
 					}
 
 					resubscribed = true
-					break
-				}
+					break resubscriptionLoop
 
-				if !resubscribed {
-					l2cs.logger.Error("subscribeFilterLogs failed to resubscribe")
-					errorChan <- fmt.Errorf("subscribeFilterLogs failed to resubscribe")
+				case <-l2cs.ctx.Done():
+					l2cs.wg.Done()
+					l2cs.eventSub.Unsubscribe()
 					return
 				}
-			}()
+			}
+
+			if !resubscribed {
+				l2cs.logger.Error("subscribeFilterLogs failed to resubscribe")
+				errorChan <- fmt.Errorf("subscribeFilterLogs failed to resubscribe")
+				return
+			}
 
 		case <-time.After(RESUB_INTERVAL):
 			// Due to https://github.com/ethereum/go-ethereum/issues/23845 we can't rely on a long running subscription.
@@ -268,22 +274,31 @@ func (l2cs *L2ChainService) listenForNewBlocks(errorChan chan<- error, newBlockC
 			}
 
 			// Use exponential backoff loop to attempt to re-establish subscription
-			retryFailed := true
-			for backoffTime := MIN_BACKOFF_TIME; backoffTime < MAX_BACKOFF_TIME; backoffTime *= 2 {
-				newBlockSub, err := l2cs.chain.SubscribeNewHead(l2cs.ctx, newBlockChan)
-				if err != nil {
-					l2cs.logger.Warn("subscribeNewHead failed to resubscribe: " + err.Error())
-					time.Sleep(backoffTime)
-					continue
-				}
+			resubscribed := false // Flag to indicate whether resubscription was successful
 
-				l2cs.newBlockSub = newBlockSub
-				l2cs.logger.Debug("resubscribed to chain new blocks")
-				retryFailed = false
-				break
+		resubscriptionLoop:
+			for backoffTime := MIN_BACKOFF_TIME; backoffTime < MAX_BACKOFF_TIME; backoffTime *= 2 {
+				select {
+				case <-time.After(backoffTime):
+					newBlockSub, err := l2cs.chain.SubscribeNewHead(l2cs.ctx, newBlockChan)
+					if err != nil {
+						l2cs.logger.Warn("subscribeNewHead failed to resubscribe: " + err.Error())
+						continue
+					}
+
+					l2cs.newBlockSub = newBlockSub
+					l2cs.logger.Debug("resubscribed to chain new blocks")
+					resubscribed = true
+					break resubscriptionLoop
+
+				case <-l2cs.ctx.Done():
+					l2cs.newBlockSub.Unsubscribe()
+					l2cs.wg.Done()
+					return
+				}
 			}
 
-			if retryFailed {
+			if !resubscribed {
 				errorChan <- fmt.Errorf("subscribeNewHead failed to resubscribe")
 				return
 			}

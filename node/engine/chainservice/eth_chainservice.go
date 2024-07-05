@@ -480,49 +480,55 @@ func (ecs *EthChainService) listenForEventLogs(errorChan chan<- error, eventChan
 			return
 
 		case err := <-ecs.eventSub.Err():
-			// Use helper function block to ensure "defer" statement is called for all exit paths
-			func() {
-				latestBlockNum := ecs.GetLastConfirmedBlockNum()
+			latestBlockNum := ecs.GetLastConfirmedBlockNum()
 
-				ecs.eventTracker.mu.Lock()
-				defer ecs.eventTracker.mu.Unlock()
+			if err != nil {
+				ecs.logger.Warn("error in chain event subscription: " + err.Error())
+				ecs.eventSub.Unsubscribe()
+			} else {
+				ecs.logger.Warn("chain event subscription closed")
+			}
 
-				if err != nil {
-					ecs.logger.Warn("error in chain event subscription: " + err.Error())
-					ecs.eventSub.Unsubscribe()
-				} else {
-					ecs.logger.Warn("chain event subscription closed")
-				}
+			resubscribed := false // Flag to indicate whether resubscription was successful
 
-				resubscribed := false // Flag to indicate whether resubscription was successful
-
-				// Use exponential backoff loop to attempt to re-establish subscription
-				for backoffTime := MIN_BACKOFF_TIME; backoffTime < MAX_BACKOFF_TIME; backoffTime *= 2 {
+			// Use exponential backoff loop to attempt to re-establish subscription
+		resubscriptionLoop:
+			for backoffTime := MIN_BACKOFF_TIME; backoffTime < MAX_BACKOFF_TIME; backoffTime *= 2 {
+				select {
+				case <-time.After(backoffTime):
 					eventSub, err := ecs.chain.SubscribeFilterLogs(ecs.ctx, eventQuery, eventChan)
 					if err != nil {
 						ecs.logger.Warn("failed to resubscribe to chain events, retrying", "backoffTime", backoffTime)
-						time.Sleep(backoffTime)
 						continue
 					}
 
 					ecs.eventSub = eventSub
 					ecs.logger.Debug("resubscribed to chain events")
+
+					ecs.eventTracker.mu.Lock()
 					err = ecs.checkForMissedEvents(latestBlockNum)
+					ecs.eventTracker.mu.Unlock()
+
 					if err != nil {
 						errorChan <- fmt.Errorf("subscribeFilterLogs failed during checkForMissedEvents: " + err.Error())
 						return
 					}
 
 					resubscribed = true
-					break
-				}
+					break resubscriptionLoop
 
-				if !resubscribed {
-					ecs.logger.Error("subscribeFilterLogs failed to resubscribe")
-					errorChan <- fmt.Errorf("subscribeFilterLogs failed to resubscribe")
+				case <-ecs.ctx.Done():
+					ecs.wg.Done()
+					ecs.eventSub.Unsubscribe()
 					return
 				}
-			}()
+			}
+
+			if !resubscribed {
+				ecs.logger.Error("subscribeFilterLogs failed to resubscribe")
+				errorChan <- fmt.Errorf("subscribeFilterLogs failed to resubscribe")
+				return
+			}
 
 		case <-time.After(RESUB_INTERVAL):
 			// Due to https://github.com/ethereum/go-ethereum/issues/23845 we can't rely on a long running subscription.
@@ -553,22 +559,31 @@ func (ecs *EthChainService) listenForNewBlocks(errorChan chan<- error, newBlockC
 			}
 
 			// Use exponential backoff loop to attempt to re-establish subscription
-			retryFailed := true
-			for backoffTime := MIN_BACKOFF_TIME; backoffTime < MAX_BACKOFF_TIME; backoffTime *= 2 {
-				newBlockSub, err := ecs.chain.SubscribeNewHead(ecs.ctx, newBlockChan)
-				if err != nil {
-					ecs.logger.Warn("subscribeNewHead failed to resubscribe: " + err.Error())
-					time.Sleep(backoffTime)
-					continue
-				}
+			resubscribed := false // Flag to indicate whether resubscription was successful
 
-				ecs.newBlockSub = newBlockSub
-				ecs.logger.Debug("resubscribed to chain new blocks")
-				retryFailed = false
-				break
+		resubscriptionLoop:
+			for backoffTime := MIN_BACKOFF_TIME; backoffTime < MAX_BACKOFF_TIME; backoffTime *= 2 {
+				select {
+				case <-time.After(backoffTime):
+					newBlockSub, err := ecs.chain.SubscribeNewHead(ecs.ctx, newBlockChan)
+					if err != nil {
+						ecs.logger.Warn("subscribeNewHead failed to resubscribe: " + err.Error())
+						continue
+					}
+
+					ecs.newBlockSub = newBlockSub
+					ecs.logger.Debug("resubscribed to chain new blocks")
+					resubscribed = true
+					break resubscriptionLoop
+
+				case <-ecs.ctx.Done():
+					ecs.newBlockSub.Unsubscribe()
+					ecs.wg.Done()
+					return
+				}
 			}
 
-			if retryFailed {
+			if !resubscribed {
 				errorChan <- fmt.Errorf("subscribeNewHead failed to resubscribe")
 				return
 			}
