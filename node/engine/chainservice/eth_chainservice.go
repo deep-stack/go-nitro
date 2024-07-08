@@ -495,6 +495,8 @@ func (ecs *EthChainService) listenForEventLogs(errorChan chan<- error, eventChan
 		resubscriptionLoop:
 			for backoffTime := MIN_BACKOFF_TIME; backoffTime < MAX_BACKOFF_TIME; backoffTime *= 2 {
 				select {
+				// Exit from resubscription loop on closing chain service (cancelling context)
+				// https://github.com/golang/go/issues/39483
 				case <-time.After(backoffTime):
 					eventSub, err := ecs.chain.SubscribeFilterLogs(ecs.ctx, eventQuery, eventChan)
 					if err != nil {
@@ -564,6 +566,8 @@ func (ecs *EthChainService) listenForNewBlocks(errorChan chan<- error, newBlockC
 		resubscriptionLoop:
 			for backoffTime := MIN_BACKOFF_TIME; backoffTime < MAX_BACKOFF_TIME; backoffTime *= 2 {
 				select {
+				// Exit from resubscription loop on closing chain service (cancelling context)
+				// https://github.com/golang/go/issues/39483
 				case <-time.After(backoffTime):
 					newBlockSub, err := ecs.chain.SubscribeNewHead(ecs.ctx, newBlockChan)
 					if err != nil {

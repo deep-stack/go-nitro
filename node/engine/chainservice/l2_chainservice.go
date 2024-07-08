@@ -210,6 +210,8 @@ func (l2cs *L2ChainService) listenForEventLogs(errorChan chan<- error, eventChan
 		resubscriptionLoop:
 			for backoffTime := MIN_BACKOFF_TIME; backoffTime < MAX_BACKOFF_TIME; backoffTime *= 2 {
 				select {
+				// Exit from resubscription loop on closing chain service (cancelling context)
+				// https://github.com/golang/go/issues/39483
 				case <-time.After(backoffTime):
 					eventSub, err := l2cs.chain.SubscribeFilterLogs(l2cs.ctx, eventQuery, eventChan)
 					if err != nil {
@@ -279,6 +281,8 @@ func (l2cs *L2ChainService) listenForNewBlocks(errorChan chan<- error, newBlockC
 		resubscriptionLoop:
 			for backoffTime := MIN_BACKOFF_TIME; backoffTime < MAX_BACKOFF_TIME; backoffTime *= 2 {
 				select {
+				// Exit from resubscription loop on closing chain service (cancelling context)
+				// https://github.com/golang/go/issues/39483
 				case <-time.After(backoffTime):
 					newBlockSub, err := l2cs.chain.SubscribeNewHead(l2cs.ctx, newBlockChan)
 					if err != nil {
