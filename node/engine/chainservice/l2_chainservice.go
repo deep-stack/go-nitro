@@ -207,7 +207,6 @@ func (l2cs *L2ChainService) listenForEventLogs(errorChan chan<- error, eventChan
 			resubscribed := false // Flag to indicate whether resubscription was successful
 
 			// Use exponential backoff loop to attempt to re-establish subscription
-		resubscriptionLoop:
 			for backoffTime := MIN_BACKOFF_TIME; backoffTime < MAX_BACKOFF_TIME; backoffTime *= 2 {
 				select {
 				// Exit from resubscription loop on closing chain service (cancelling context)
@@ -232,12 +231,15 @@ func (l2cs *L2ChainService) listenForEventLogs(errorChan chan<- error, eventChan
 					}
 
 					resubscribed = true
-					break resubscriptionLoop
 
 				case <-l2cs.ctx.Done():
 					l2cs.wg.Done()
 					l2cs.eventSub.Unsubscribe()
 					return
+				}
+
+				if resubscribed {
+					break
 				}
 			}
 
@@ -278,7 +280,6 @@ func (l2cs *L2ChainService) listenForNewBlocks(errorChan chan<- error, newBlockC
 			// Use exponential backoff loop to attempt to re-establish subscription
 			resubscribed := false // Flag to indicate whether resubscription was successful
 
-		resubscriptionLoop:
 			for backoffTime := MIN_BACKOFF_TIME; backoffTime < MAX_BACKOFF_TIME; backoffTime *= 2 {
 				select {
 				// Exit from resubscription loop on closing chain service (cancelling context)
@@ -293,12 +294,15 @@ func (l2cs *L2ChainService) listenForNewBlocks(errorChan chan<- error, newBlockC
 					l2cs.newBlockSub = newBlockSub
 					l2cs.logger.Debug("resubscribed to chain new blocks")
 					resubscribed = true
-					break resubscriptionLoop
 
 				case <-l2cs.ctx.Done():
 					l2cs.newBlockSub.Unsubscribe()
 					l2cs.wg.Done()
 					return
+				}
+
+				if resubscribed {
+					break
 				}
 			}
 

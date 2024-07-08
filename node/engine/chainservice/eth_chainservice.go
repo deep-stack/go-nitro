@@ -492,7 +492,6 @@ func (ecs *EthChainService) listenForEventLogs(errorChan chan<- error, eventChan
 			resubscribed := false // Flag to indicate whether resubscription was successful
 
 			// Use exponential backoff loop to attempt to re-establish subscription
-		resubscriptionLoop:
 			for backoffTime := MIN_BACKOFF_TIME; backoffTime < MAX_BACKOFF_TIME; backoffTime *= 2 {
 				select {
 				// Exit from resubscription loop on closing chain service (cancelling context)
@@ -517,12 +516,15 @@ func (ecs *EthChainService) listenForEventLogs(errorChan chan<- error, eventChan
 					}
 
 					resubscribed = true
-					break resubscriptionLoop
 
 				case <-ecs.ctx.Done():
 					ecs.wg.Done()
 					ecs.eventSub.Unsubscribe()
 					return
+				}
+
+				if resubscribed {
+					break
 				}
 			}
 
@@ -563,7 +565,6 @@ func (ecs *EthChainService) listenForNewBlocks(errorChan chan<- error, newBlockC
 			// Use exponential backoff loop to attempt to re-establish subscription
 			resubscribed := false // Flag to indicate whether resubscription was successful
 
-		resubscriptionLoop:
 			for backoffTime := MIN_BACKOFF_TIME; backoffTime < MAX_BACKOFF_TIME; backoffTime *= 2 {
 				select {
 				// Exit from resubscription loop on closing chain service (cancelling context)
@@ -578,12 +579,15 @@ func (ecs *EthChainService) listenForNewBlocks(errorChan chan<- error, newBlockC
 					ecs.newBlockSub = newBlockSub
 					ecs.logger.Debug("resubscribed to chain new blocks")
 					resubscribed = true
-					break resubscriptionLoop
 
 				case <-ecs.ctx.Done():
 					ecs.newBlockSub.Unsubscribe()
 					ecs.wg.Done()
 					return
+				}
+
+				if resubscribed {
+					break
 				}
 			}
 
