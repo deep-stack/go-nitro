@@ -14,6 +14,7 @@ import (
 	"github.com/statechannels/go-nitro/node/query"
 	"github.com/statechannels/go-nitro/protocols/bridgedfund"
 	"github.com/statechannels/go-nitro/protocols/directfund"
+	"github.com/tidwall/buntdb"
 
 	"github.com/statechannels/go-nitro/node/engine/chainservice"
 	"github.com/statechannels/go-nitro/node/engine/store"
@@ -41,6 +42,8 @@ type L1ToL2AssetConfig struct {
 }
 
 type Bridge struct {
+	bridgeStore *DurableStore
+
 	nodeL1         *node.Node
 	storeL1        store.Store
 	chainServiceL1 chainservice.ChainService
@@ -151,6 +154,13 @@ func (b *Bridge) Start(configOpts BridgeConfig) (nodeL1MultiAddress string, node
 
 	ctx, cancelFunc := context.WithCancel(context.Background())
 	b.cancel = cancelFunc
+
+	ds, err := NewDurableStore(b.config.DurableStoreDir, buntdb.Config{})
+	if err != nil {
+		return nodeL1MultiAddress, nodeL2MultiAddress, l2Node, err
+	}
+
+	b.bridgeStore = ds
 
 	go b.run(ctx)
 
@@ -299,7 +309,7 @@ func (b *Bridge) Close() error {
 		return err
 	}
 
-	return nil
+	return b.bridgeStore.Close()
 }
 
 func (b *Bridge) checkError(err error) {
