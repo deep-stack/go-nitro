@@ -93,16 +93,16 @@ func (ds *DurableStore) GetMirrorChannelDetailsByL1Channel(l1ChannelId types.Des
 			var mirrorChannelDetails MirrorChannelDetails
 			err := json.Unmarshal([]byte(chJSON), &mirrorChannelDetails)
 			if err != nil {
-				return true // not found, continue looking
+				return true // target not found, continue looking
 			}
 
 			if mirrorChannelDetails.L1ChannelId == l1ChannelId {
 				l2ChannelId = types.Destination(common.HexToHash(key))
 				isCreated = mirrorChannelDetails.IsCreated
-				return false // we have found the target: break the Range loop
+				return false // we have found the target, break the Range loop
 			}
 
-			return true // not found: continue looking
+			return true // target not found, continue looking
 		})
 	})
 	if err != nil {
