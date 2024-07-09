@@ -54,6 +54,7 @@ type BridgeConfig struct {
 	VpaAddress        string
 	CaAddress         string
 	BridgeAddress     string
+	L1Tol2AssetAddress map[common.Address]common.Address
 	DurableStoreDir   string
 	BridgePublicIp    string
 	NodeL1MsgPort     int
@@ -188,6 +189,10 @@ func (b *Bridge) processCompletedObjectivesFromL1(objId protocols.ObjectiveId) e
 
 		// Create extended state outcome based on l1ChannelState
 		l2ChannelOutcome := l1ledgerChannelStateClone.State().Outcome
+
+		for _, outcome := range l2ChannelOutcome {
+			outcome.Asset = b.config.L1Tol2AssetAddress[outcome.Asset]
+		}
 
 		// Create mirrored ledger channel between node BPrime and APrime
 		l2LedgerChannelResponse, err := b.nodeL2.CreateBridgeChannel(l1ledgerChannelStateClone.State().Participants[0], uint32(10), l2ChannelOutcome)

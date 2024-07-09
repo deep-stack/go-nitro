@@ -17,6 +17,7 @@ interface ledgerChannelApi {
    */
   CreateLedgerChannel(
     counterParty: string,
+    assetAddress: string,
     aplhaAmount: number,
     betaAmount: number
   ): Promise<ObjectiveResponse>;

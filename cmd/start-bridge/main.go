@@ -2,10 +2,13 @@ package main
 
 import (
 	"crypto/tls"
+	"encoding/json"
+	"io"
 	"log"
 	"log/slog"
 	"os"
 
+	"github.com/ethereum/go-ethereum/common"
 	"github.com/statechannels/go-nitro/bridge"
 	"github.com/statechannels/go-nitro/cmd/utils"
 	"github.com/statechannels/go-nitro/internal/logging"
@@ -30,6 +33,7 @@ const (
 	VPA_ADDRESS    = "vpaaddress"
 	CA_ADDRESS     = "caaddress"
 	BRIDGE_ADDRESS = "bridgeaddress"
+	ASSET_MAP_FILEPATH = "assetmapfilepath"
 
 	DURABLE_STORE_DIR           = "nodel1durablestorefolder"
 	NODEL2_DURABLE_STORE_FOLDER = "nodel2durablestorefolder"
@@ -45,6 +49,11 @@ const (
 	TLS_KEY_FILEPATH  = "tlskeyfilepath"
 )
 
+type Asset struct {
+	L1AssetAddress string `json:"l1AssetAddress"`
+	L2AssetAddress string `json:"l2AssetAddress"`
+}
+
 func main() {
 	var l1chainurl, l2chainurl, chainpk, statechannelpk, naaddress, vpaaddress, caaddress, bridgeaddress, durableStoreDir, bridgepublicip string
 	var nodel1msgport, nodel2msgport, nodel2rpcport int
@@ -52,6 +61,7 @@ func main() {
 
 	var tlscertfilepath, tlskeyfilepath string
 
+	var assetmapfilepath string
 	// urfave default precedence for flag value sources (highest to lowest):
 	// 1. Command line flag value
 	// 2. Environment variable (if specified)
@@ -106,6 +116,11 @@ func main() {
 			Usage:       "Specifies the bridge contract address",
 			Destination: &bridgeaddress,
 			EnvVars:     []string{"BRIDGE_ADDRESS"},
+		}),
+		altsrc.NewPathFlag(&cli.PathFlag{
+			Name:        ASSET_MAP_FILEPATH,
+			Usage:       "Filepath to the map of asset address on L1 to asset address of L2",
+			Destination: &assetmapfilepath,
 		}),
 		altsrc.NewStringFlag(&cli.StringFlag{
 			Name:        DURABLE_STORE_DIR,
@@ -169,6 +184,33 @@ func main() {
 		Flags:  flags,
 		Before: altsrc.InitInputSourceWithContext(flags, altsrc.NewTomlSourceFromFlagFunc(CONFIG)),
 		Action: func(cCtx *cli.Context) error {
+
+			jsonFile, err := os.Open("path_to_your_file.json")
+			if err != nil {
+				return err
+			}
+			defer jsonFile.Close()
+
+			byteValue, err := io.ReadAll(jsonFile)
+			if err != nil {
+				return err
+			}
+
+			// Variable to hold the deserialized data
+			var assets []Asset
+
+			// Deserialize JSON into the struct
+			err = json.Unmarshal(byteValue, &assets)
+			if err != nil {
+				return err
+			}
+
+			addressMap := make(map[common.Address]common.Address)
+
+			for _, asset := range assets {
+				addressMap[common.HexToAddress(asset.L1AssetAddress)] = common.HexToAddress(asset.L2AssetAddress)
+			}
+
 			bridgeConfig := bridge.BridgeConfig{
 				L1ChainUrl:        l1chainurl,
 				L2ChainUrl:        l2chainurl,
@@ -184,6 +226,7 @@ func main() {
 				BridgePublicIp:    bridgepublicip,
 				NodeL1MsgPort:     nodel1msgport,
 				NodeL2MsgPort:     nodel2msgport,
+				L1Tol2AssetAddress: addressMap,
 			}
 
 			logging.SetupDefaultLogger(os.Stdout, slog.LevelDebug)

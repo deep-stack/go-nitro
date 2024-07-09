@@ -108,6 +108,11 @@ yargs(hideBin(process.argv))
           type: "string",
           demandOption: true,
         })
+        .option("assetAddress", {
+          describe: "Address of the token to be used",
+          type: "string",
+          default: `0x${"00".repeat(20)}`,
+        })
         .option("alphaAmount", {
           describe: "The amount to be funded by alpha node",
           type: "number",
@@ -129,6 +134,7 @@ yargs(hideBin(process.argv))
 
       const dfObjective = await rpcClient.CreateLedgerChannel(
         yargs.counterparty,
+        yargs.assetAddress,
         yargs.alphaAmount,
         yargs.betaAmount
       );
