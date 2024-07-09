@@ -179,6 +179,9 @@ func main() {
 		Flags:  flags,
 		Before: altsrc.InitInputSourceWithContext(flags, altsrc.NewTomlSourceFromFlagFunc(CONFIG)),
 		Action: func(cCtx *cli.Context) error {
+			chainpk = utils.TrimHexPrefix(chainpk)
+			statechannelpk = utils.TrimHexPrefix(statechannelpk)
+
 			// Variable to hold the deserialized data
 			var assets bridge.L1ToL2AssetConfig
 

@@ -7,6 +7,7 @@ import (
 	"os"
 	"os/exec"
 	"os/signal"
+	"strings"
 	"syscall"
 	"time"
 
@@ -81,4 +82,13 @@ func WaitForRpcClient(rpcClientUrl string, interval, timeout time.Duration) erro
 			}
 		}
 	}
+}
+
+// TrimHexPrefix removes the '0x' prefix from a hexadecimal string if it exists.
+// If the string does not start with '0x', it returns the original string.
+func TrimHexPrefix(hex string) string {
+	if strings.HasPrefix(hex, "0x") {
+		return strings.TrimPrefix(hex, "0x")
+	}
+	return hex
 }
