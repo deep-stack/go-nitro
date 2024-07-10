@@ -42,7 +42,7 @@ const (
 	NODEL1_MSG_PORT = "nodel1msgport"
 	NODEL2_MSG_PORT = "nodel2msgport"
 
-	NODEL2_RPC_PORT = "nodel2rpcport"
+	RPC_PORT = "rpcport"
 
 	TLS_CERT_FILEPATH = "tlscertfilepath"
 	TLS_KEY_FILEPATH  = "tlskeyfilepath"
@@ -50,7 +50,7 @@ const (
 
 func main() {
 	var l1chainurl, l2chainurl, chainpk, statechannelpk, naaddress, vpaaddress, caaddress, bridgeaddress, durableStoreDir, bridgepublicip string
-	var nodel1msgport, nodel2msgport, nodel2rpcport int
+	var nodel1msgport, nodel2msgport, rpcport int
 	var l1chainstartblock, l2chainstartblock uint64
 
 	var tlscertfilepath, tlskeyfilepath string
@@ -142,10 +142,10 @@ func main() {
 			Destination: &nodel2msgport,
 		}),
 		altsrc.NewIntFlag(&cli.IntFlag{
-			Name:        NODEL2_RPC_PORT,
+			Name:        RPC_PORT,
 			Usage:       "Specifies the tcp port for the rpc server.",
 			Value:       4006,
-			Destination: &nodel2rpcport,
+			Destination: &rpcport,
 		}),
 		altsrc.NewUint64Flag(&cli.Uint64Flag{
 			Name:        L1_CHAIN_START_BLOCK,
@@ -222,7 +222,7 @@ func main() {
 			logging.SetupDefaultLogger(os.Stdout, slog.LevelDebug)
 			bridge := bridge.New()
 
-			bridgeNodeL1Multiaddress, bridgeNodeL2Multiaddress, nodeL2, err := bridge.Start(bridgeConfig)
+			bridgeNodeL1Multiaddress, bridgeNodeL2Multiaddress, err := bridge.Start(bridgeConfig)
 			if err != nil {
 				log.Fatal(err)
 			}
@@ -236,19 +236,13 @@ func main() {
 				}
 			}
 
-			// TODO: Add single RPC server for bridge instead of just L2 bridge node
-			rpcServer, err := rpc.InitializeRpcServer(nodeL2, nodel2rpcport, false, &cert)
+			rpcServer, err := rpc.InitializeBridgeRpcServer(bridge, rpcport, false, &cert)
 			if err != nil {
 				return err
 			}
 
 			slog.Info("Bridge nodes multiaddresses", "l1 node multiaddress", bridgeNodeL1Multiaddress, "l2 node multiaddress", bridgeNodeL2Multiaddress)
 			utils.WaitForKillSignal()
-
-			err = bridge.Close()
-			if err != nil {
-				return err
-			}
 
 			err = rpcServer.Close()
 			if err != nil {

@@ -11,6 +11,7 @@ import (
 	nodeutils "github.com/statechannels/go-nitro/internal/node"
 	"github.com/statechannels/go-nitro/node"
 	p2pms "github.com/statechannels/go-nitro/node/engine/messageservice/p2p-message-service"
+	"github.com/statechannels/go-nitro/node/query"
 	"github.com/statechannels/go-nitro/protocols/bridgedfund"
 	"github.com/statechannels/go-nitro/protocols/directfund"
 
@@ -81,7 +82,7 @@ func New() *Bridge {
 	return &bridge
 }
 
-func (b *Bridge) Start(configOpts BridgeConfig) (nodeL1MultiAddress string, nodeL2MultiAddress string, l2Node *node.Node, err error) {
+func (b *Bridge) Start(configOpts BridgeConfig) (nodeL1MultiAddress string, nodeL2MultiAddress string, err error) {
 	chainOptsL1 := chainservice.ChainOpts{
 		ChainUrl:           configOpts.L1ChainUrl,
 		ChainStartBlockNum: configOpts.L1ChainStartBlock,
@@ -129,12 +130,12 @@ func (b *Bridge) Start(configOpts BridgeConfig) (nodeL1MultiAddress string, node
 	// Initialize nodes
 	nodeL1, storeL1, msgServiceL1, chainServiceL1, err := nodeutils.InitializeNode(chainOptsL1, storeOptsL1, messageOptsL1)
 	if err != nil {
-		return nodeL1MultiAddress, nodeL2MultiAddress, l2Node, err
+		return nodeL1MultiAddress, nodeL2MultiAddress, err
 	}
 
 	nodeL2, storeL2, msgServiceL2, _, err := nodeutils.InitializeL2Node(chainOptsL2, storeOptsL2, messageOptsL2)
 	if err != nil {
-		return nodeL1MultiAddress, nodeL2MultiAddress, l2Node, err
+		return nodeL1MultiAddress, nodeL2MultiAddress, err
 	}
 
 	// Process Assets array to convert it to map of L1 asset address to L2 asset address
@@ -153,7 +154,7 @@ func (b *Bridge) Start(configOpts BridgeConfig) (nodeL1MultiAddress string, node
 
 	go b.run(ctx)
 
-	return msgServiceL1.MultiAddr, msgServiceL2.MultiAddr, nodeL2, nil
+	return msgServiceL1.MultiAddr, msgServiceL2.MultiAddr, nil
 }
 
 func (b *Bridge) run(ctx context.Context) {
@@ -278,6 +279,10 @@ func (b Bridge) GetMirrorChannel(l1ChannelId types.Destination) (l2ChannelId typ
 	return types.Destination{}, false
 }
 
+func (b Bridge) GetAllL2Channels() ([]query.LedgerChannelInfo, error) {
+	return b.nodeL2.GetAllLedgerChannels()
+}
+
 func (b *Bridge) CompletedMirrorChannels() <-chan types.Destination {
 	return b.completedMirrorChannels
 }
@@ -289,11 +294,10 @@ func (b *Bridge) Close() error {
 		return err
 	}
 
-	// TODO: Create separate RPC server for bridge to handle bridge nodes closing and uncomment following code
-	// err = b.nodeL2.Close()
-	// if err != nil {
-	// 	return err
-	// }
+	err = b.nodeL2.Close()
+	if err != nil {
+		return err
+	}
 
 	return nil
 }

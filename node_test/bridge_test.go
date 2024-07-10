@@ -77,12 +77,11 @@ func TestBridgedFund(t *testing.T) {
 	}
 
 	bridge := bridge.New()
-	bridgeMultiaddressL1, bridgeMultiaddressL2, nodeBPrime, err := bridge.Start(bridgeConfig)
+	bridgeMultiaddressL1, bridgeMultiaddressL2, err := bridge.Start(bridgeConfig)
 	if err != nil {
 		t.Log("error in starting bridge", err)
 	}
 	defer bridge.Close()
-	defer nodeBPrime.Close()
 	bridgeAddress := bridge.GetBridgeAddress()
 
 	nodeA, _, _, _, _ := setupIntegrationNode(tcL1, tcL1.Participants[0], infraL1, []string{bridgeMultiaddressL1}, dataFolder)
