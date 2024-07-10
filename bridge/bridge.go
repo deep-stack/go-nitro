@@ -191,7 +191,11 @@ func (b *Bridge) processCompletedObjectivesFromL1(objId protocols.ObjectiveId) e
 		l2ChannelOutcome := l1ledgerChannelStateClone.State().Outcome
 
 		for i, outcome := range l2ChannelOutcome {
-			l2ChannelOutcome[i].Asset = b.config.L1Tol2AssetAddress[outcome.Asset]
+			if value, ok := b.config.L1Tol2AssetAddress[outcome.Asset]; ok {
+				l2ChannelOutcome[i].Asset = value
+			} else {
+				return fmt.Errorf("Could not find corresponding L2 asset address for given L1 asset address")
+			}
 		}
 
 		// Create mirrored ledger channel between node BPrime and APrime

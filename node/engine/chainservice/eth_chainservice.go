@@ -34,14 +34,12 @@ type ChainOpts struct {
 
 var (
 	naAbi, _                 = NitroAdjudicator.NitroAdjudicatorMetaData.GetAbi()
-	tokenAbi, _              = Token.TokenMetaData.GetAbi()
 	concludedTopic           = naAbi.Events["Concluded"].ID
 	allocationUpdatedTopic   = naAbi.Events["AllocationUpdated"].ID
 	depositedTopic           = naAbi.Events["Deposited"].ID
 	challengeRegisteredTopic = naAbi.Events["ChallengeRegistered"].ID
 	challengeClearedTopic    = naAbi.Events["ChallengeCleared"].ID
 	reclaimedTopic           = naAbi.Events["Reclaimed"].ID
-	approvalTopic            = tokenAbi.Events["Approval"].ID
 )
 
 var topicsToWatch = []common.Hash{
@@ -278,6 +276,7 @@ func (ecs *EthChainService) SendTransaction(tx protocols.ChainTransaction) error
 					return err
 				}
 
+				// Wait for the Approve tx to be mined before continuing
 			approvalEventListenerLoop:
 				for {
 					select {
@@ -294,6 +293,7 @@ func (ecs *EthChainService) SendTransaction(tx protocols.ChainTransaction) error
 
 			holdings, err := ecs.na.Holdings(&bind.CallOpts{}, tokenAddress, tx.ChannelId())
 			ecs.logger.Debug("existing holdings", "holdings", holdings)
+
 			if err != nil {
 				return err
 			}
@@ -302,7 +302,6 @@ func (ecs *EthChainService) SendTransaction(tx protocols.ChainTransaction) error
 			if err != nil {
 				return err
 			}
-
 		}
 		return nil
 	case protocols.WithdrawAllTransaction:
