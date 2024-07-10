@@ -2,8 +2,10 @@ package rpc
 
 import (
 	"encoding/json"
+	"log/slog"
 
 	"github.com/statechannels/go-nitro/bridge"
+	"github.com/statechannels/go-nitro/internal/logging"
 	"github.com/statechannels/go-nitro/node/query"
 	"github.com/statechannels/go-nitro/rpc/serde"
 	"github.com/statechannels/go-nitro/rpc/transport"
@@ -17,17 +19,19 @@ type BridgeRpcServer struct {
 func NewBridgeRpcServer(bridge *bridge.Bridge, trans transport.Responder) (*BridgeRpcServer, error) {
 	baseRpcServer := NewBaseRpcServer(trans)
 
-	bridgeRpcServer := &BridgeRpcServer{
+	brs := &BridgeRpcServer{
 		baseRpcServer,
 		bridge,
 	}
 
-	err := bridgeRpcServer.registerHandlers()
+	brs.logger = logging.LoggerWithAddress(slog.Default(), bridge.GetBridgeAddress())
+
+	err := brs.registerHandlers()
 	if err != nil {
 		return nil, err
 	}
 
-	return bridgeRpcServer, nil
+	return brs, nil
 }
 
 func (brs *BridgeRpcServer) Close() error {
@@ -57,11 +61,11 @@ func (brs *BridgeRpcServer) registerHandlers() (err error) {
 
 		switch serde.RequestMethod(jsonrpcReq.Method) {
 		case serde.GetAuthTokenMethod:
-			return baseProcessRequest(brs.BaseRpcServer, permNone, requestData, func(req serde.AuthRequest) (string, error) {
+			return processRequest(brs.BaseRpcServer, permNone, requestData, func(req serde.AuthRequest) (string, error) {
 				return generateAuthToken(req.Id, allPermissions)
 			})
 		case serde.GetAllL2ChannelsRequestMethod:
-			return baseProcessRequest(brs.BaseRpcServer, permSign, requestData, func(req serde.NoPayloadRequest) ([]query.LedgerChannelInfo, error) {
+			return processRequest(brs.BaseRpcServer, permSign, requestData, func(req serde.NoPayloadRequest) ([]query.LedgerChannelInfo, error) {
 				return brs.bridge.GetAllL2Channels()
 			})
 		default:

@@ -13,8 +13,7 @@ import (
 	"github.com/statechannels/go-nitro/rpc/transport/nats"
 )
 
-// TODO: Rename to node
-func InitializeRpcServer(node *node.Node, rpcPort int, useNats bool, cert *tls.Certificate) (*rpc.RpcServer, error) {
+func InitializeNodeRpcServer(node *node.Node, rpcPort int, useNats bool, cert *tls.Certificate) (*rpc.NodeRpcServer, error) {
 	var transport transport.Responder
 	var err error
 
@@ -29,7 +28,7 @@ func InitializeRpcServer(node *node.Node, rpcPort int, useNats bool, cert *tls.C
 		return nil, err
 	}
 
-	rpcServer, err := rpc.NewRpcServer(node, transport)
+	rpcServer, err := rpc.NewNodeRpcServer(node, transport)
 	if err != nil {
 		return nil, err
 	}

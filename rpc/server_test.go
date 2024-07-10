@@ -37,7 +37,7 @@ func sendRequestAndExpectError(t *testing.T, request []byte, expectedError serde
 	mockResponder := &mockResponder{}
 	// Since we're using an empty node we want to disable notifications
 	// otherwise the server will try to send notifications to the node and fail
-	_, err := newRpcServerWithoutNotifications(mockNode, mockResponder)
+	_, err := newNodeRpcServerWithoutNotifications(mockNode, mockResponder)
 	if err != nil {
 		t.Error(err)
 	}
@@ -63,7 +63,7 @@ func getAuthToken(t *testing.T) string {
 	mockResponder := &mockResponder{}
 	// Since we're using an empty node we want to disable notifications
 	// otherwise the server will try to send notifications to the node and fail
-	_, err = newRpcServerWithoutNotifications(mockNode, mockResponder)
+	_, err = newNodeRpcServerWithoutNotifications(mockNode, mockResponder)
 	if err != nil {
 		t.Error(err)
 	}

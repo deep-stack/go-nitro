@@ -438,7 +438,7 @@ func setupNitroNodeWithRPCClient(
 		panic(err)
 	}
 
-	rpcServer, err := interRpc.InitializeRpcServer(&node, rpcPort, useNats, &cert)
+	rpcServer, err := interRpc.InitializeNodeRpcServer(&node, rpcPort, useNats, &cert)
 	if err != nil {
 		t.Fatal(err)
 	}
