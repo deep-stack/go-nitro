@@ -3,6 +3,7 @@ package chainservice
 import (
 	"context"
 	"fmt"
+	"log"
 	"log/slog"
 	"math/big"
 	"sync"
@@ -12,6 +13,7 @@ import (
 	"github.com/ethereum/go-ethereum/accounts/abi/bind"
 	"github.com/ethereum/go-ethereum/common"
 	ethTypes "github.com/ethereum/go-ethereum/core/types"
+	"github.com/ethereum/go-ethereum/ethclient"
 
 	"github.com/statechannels/go-nitro/channel/state"
 	"github.com/statechannels/go-nitro/internal/logging"
@@ -34,12 +36,14 @@ type ChainOpts struct {
 
 var (
 	naAbi, _                 = NitroAdjudicator.NitroAdjudicatorMetaData.GetAbi()
+	tokenAbi, _              = Token.TokenMetaData.GetAbi()
 	concludedTopic           = naAbi.Events["Concluded"].ID
 	allocationUpdatedTopic   = naAbi.Events["AllocationUpdated"].ID
 	depositedTopic           = naAbi.Events["Deposited"].ID
 	challengeRegisteredTopic = naAbi.Events["ChallengeRegistered"].ID
 	challengeClearedTopic    = naAbi.Events["ChallengeCleared"].ID
 	reclaimedTopic           = naAbi.Events["Reclaimed"].ID
+	approvalTopic            = tokenAbi.Events["Approval"].ID
 )
 
 var topicsToWatch = []common.Hash{
@@ -103,6 +107,8 @@ const REQUIRED_BLOCK_CONFIRMATIONS = 2
 // This is a restriction enforced by the rpc provider
 const MAX_EPOCHS = 60480
 
+var ethereumClient *ethclient.Client
+
 // NewEthChainService is a convenient wrapper around newEthChainService, which provides a simpler API
 func NewEthChainService(chainOpts ChainOpts) (ChainService, error) {
 	if chainOpts.ChainPk == "" {
@@ -118,6 +124,9 @@ func NewEthChainService(chainOpts ChainOpts) (ChainService, error) {
 		chainOpts.ChainAuthToken,
 		common.Hex2Bytes(chainOpts.ChainPk),
 	)
+
+	ethereumClient = ethClient
+
 	if err != nil {
 		panic(err)
 	}
@@ -263,22 +272,63 @@ func (ecs *EthChainService) SendTransaction(tx protocols.ChainTransaction) error
 				if err != nil {
 					return err
 				}
+
+				testToken, err := Token.NewToken(tokenAddress, ethereumClient)
+
 				_, err = tokenTransactor.Approve(ecs.defaultTxOpts(), ecs.naAddress, amount)
 				if err != nil {
 					return err
 				}
-				// TODO: wait for the Approve tx to be mined before continuing
-			}
-			holdings, err := ecs.na.Holdings(&bind.CallOpts{}, tokenAddress, tx.ChannelId())
-			ecs.logger.Debug("existing holdings", "holdings", holdings)
+				// TODO: wait for the Approve tx to be mined before continuing (Check for proper way in go-ethereum see watchApproval)
+				query := ethereum.FilterQuery{
+					Addresses: []common.Address{tokenAddress},
+					Topics:    [][]common.Hash{{approvalTopic}},
+				}
 
-			if err != nil {
-				return err
-			}
+				logs := make(chan ethTypes.Log)
+				sub, err := ecs.chain.SubscribeFilterLogs(context.Background(), query, logs)
+				if err != nil {
+					log.Fatalf("Failed to subscribe to logs: %v", err)
+				}
 
-			_, err = ecs.na.Deposit(txOpts, tokenAddress, tx.ChannelId(), holdings, amount)
-			if err != nil {
-				return err
+				for {
+					select {
+					case err := <-sub.Err():
+						log.Fatalf("Error: %v", err)
+					case vLog := <-logs:
+						// Handle the event here
+						tokenAprroved, err := testToken.ParseApproval(vLog)
+
+						fmt.Println("tokenapproved log: owner, spender", tokenAprroved.Owner, tokenAprroved.Spender)
+						fmt.Println("in case logs")
+						fmt.Println(vLog.Topics)
+						fmt.Println("vlog.blocknumber", vLog.BlockNumber)
+						fmt.Println("approval topic", approvalTopic)
+
+						allowance, err := testToken.Allowance(&bind.CallOpts{}, tokenAprroved.Owner, tokenAprroved.Spender)
+
+						fmt.Println("allowance of alice owner, na address spender before holdings", allowance)
+						holdings, err := ecs.na.Holdings(&bind.CallOpts{}, tokenAddress, tx.ChannelId())
+						ecs.logger.Debug("existing holdings", "holdings", holdings)
+						if err != nil {
+							return err
+						}
+						fmt.Println("allowance of alice owner, na address spender after holdings", allowance)
+
+						if types.Gt(allowance, common.Big0) {
+							fmt.Println("allowance of alice owner, na address spender before deposit", allowance)
+							_, err = ecs.na.Deposit(txOpts, tokenAddress, tx.ChannelId(), holdings, amount)
+							if err != nil {
+								return err
+							}
+
+							fmt.Println("allowance of alice owner, na address spender after deposit", allowance)
+							fmt.Println("deposit sucessful")
+							return nil
+						}
+					}
+				}
+
 			}
 		}
 		return nil

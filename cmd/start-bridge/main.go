@@ -185,7 +185,7 @@ func main() {
 		Before: altsrc.InitInputSourceWithContext(flags, altsrc.NewTomlSourceFromFlagFunc(CONFIG)),
 		Action: func(cCtx *cli.Context) error {
 
-			jsonFile, err := os.Open("path_to_your_file.json")
+			jsonFile, err := os.Open(assetmapfilepath)
 			if err != nil {
 				return err
 			}
