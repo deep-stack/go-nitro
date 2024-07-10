@@ -190,8 +190,8 @@ func (b *Bridge) processCompletedObjectivesFromL1(objId protocols.ObjectiveId) e
 		// Create extended state outcome based on l1ChannelState
 		l2ChannelOutcome := l1ledgerChannelStateClone.State().Outcome
 
-		for _, outcome := range l2ChannelOutcome {
-			outcome.Asset = b.config.L1Tol2AssetAddress[outcome.Asset]
+		for i, outcome := range l2ChannelOutcome {
+			l2ChannelOutcome[i].Asset = b.config.L1Tol2AssetAddress[outcome.Asset]
 		}
 
 		// Create mirrored ledger channel between node BPrime and APrime
