@@ -44,21 +44,21 @@ type Bridge struct {
 }
 
 type BridgeConfig struct {
-	L1ChainUrl        string
-	L2ChainUrl        string
-	L1ChainStartBlock uint64
-	L2ChainStartBlock uint64
-	ChainPK           string
-	StateChannelPK    string
-	NaAddress         string
-	VpaAddress        string
-	CaAddress         string
-	BridgeAddress     string
+	L1ChainUrl         string
+	L2ChainUrl         string
+	L1ChainStartBlock  uint64
+	L2ChainStartBlock  uint64
+	ChainPK            string
+	StateChannelPK     string
+	NaAddress          string
+	VpaAddress         string
+	CaAddress          string
+	BridgeAddress      string
 	L1Tol2AssetAddress map[common.Address]common.Address
-	DurableStoreDir   string
-	BridgePublicIp    string
-	NodeL1MsgPort     int
-	NodeL2MsgPort     int
+	DurableStoreDir    string
+	BridgePublicIp     string
+	NodeL1MsgPort      int
+	NodeL2MsgPort      int
 }
 
 func New(configOpts BridgeConfig) *Bridge {

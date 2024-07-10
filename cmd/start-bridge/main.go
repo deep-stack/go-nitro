@@ -29,10 +29,10 @@ const (
 	CHAIN_PK         = "chainpk"
 	STATE_CHANNEL_PK = "statechannelpk"
 
-	NA_ADDRESS     = "naaddress"
-	VPA_ADDRESS    = "vpaaddress"
-	CA_ADDRESS     = "caaddress"
-	BRIDGE_ADDRESS = "bridgeaddress"
+	NA_ADDRESS         = "naaddress"
+	VPA_ADDRESS        = "vpaaddress"
+	CA_ADDRESS         = "caaddress"
+	BRIDGE_ADDRESS     = "bridgeaddress"
 	ASSET_MAP_FILEPATH = "assetmapfilepath"
 
 	DURABLE_STORE_DIR           = "nodel1durablestorefolder"
@@ -184,7 +184,6 @@ func main() {
 		Flags:  flags,
 		Before: altsrc.InitInputSourceWithContext(flags, altsrc.NewTomlSourceFromFlagFunc(CONFIG)),
 		Action: func(cCtx *cli.Context) error {
-
 			jsonFile, err := os.Open(assetmapfilepath)
 			if err != nil {
 				return err
@@ -212,20 +211,20 @@ func main() {
 			}
 
 			bridgeConfig := bridge.BridgeConfig{
-				L1ChainUrl:        l1chainurl,
-				L2ChainUrl:        l2chainurl,
-				L1ChainStartBlock: l1chainstartblock,
-				L2ChainStartBlock: l2chainstartblock,
-				ChainPK:           chainpk,
-				StateChannelPK:    statechannelpk,
-				NaAddress:         naaddress,
-				VpaAddress:        vpaaddress,
-				CaAddress:         caaddress,
-				BridgeAddress:     bridgeaddress,
-				DurableStoreDir:   durableStoreDir,
-				BridgePublicIp:    bridgepublicip,
-				NodeL1MsgPort:     nodel1msgport,
-				NodeL2MsgPort:     nodel2msgport,
+				L1ChainUrl:         l1chainurl,
+				L2ChainUrl:         l2chainurl,
+				L1ChainStartBlock:  l1chainstartblock,
+				L2ChainStartBlock:  l2chainstartblock,
+				ChainPK:            chainpk,
+				StateChannelPK:     statechannelpk,
+				NaAddress:          naaddress,
+				VpaAddress:         vpaaddress,
+				CaAddress:          caaddress,
+				BridgeAddress:      bridgeaddress,
+				DurableStoreDir:    durableStoreDir,
+				BridgePublicIp:     bridgepublicip,
+				NodeL1MsgPort:      nodel1msgport,
+				NodeL2MsgPort:      nodel2msgport,
 				L1Tol2AssetAddress: addressMap,
 			}
 

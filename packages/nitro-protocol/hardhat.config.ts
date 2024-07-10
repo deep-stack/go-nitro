@@ -35,7 +35,6 @@ task('accounts', 'Prints the list of accounts', async (taskArgs, hre) => {
   }
 });
 
-// TODO: Send tx to chain
 task('transfer', 'Transfers ERC20 tokens')
   .addParam('contract', 'The contract address')
   .addParam('to', 'The recipient address')
@@ -54,13 +53,9 @@ task('transfer', 'Transfers ERC20 tokens')
     // Parse the amount to transfer
     const parsedAmount = hre.ethers.utils.parseUnits(amount, 18);
 
-    console.log('parsedAmount', parsedAmount);
-
     // Perform the transfer
     const tx = await token.transfer(recipient, parsedAmount);
     await tx.wait();
-
-    console.log(tx);
 
     console.log(`Transferred ${amount} tokens to ${recipient} from ${sender.address}`);
   });
