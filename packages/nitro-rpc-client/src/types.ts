@@ -195,6 +195,10 @@ export type RPCRequestAndResponses = {
     GetAllLedgerChannelsRequest,
     GetAllLedgerChannelsResponse
   ];
+  get_all_l2_channels: [
+    GetAllLedgerChannelsRequest,
+    GetAllLedgerChannelsResponse
+  ];
   get_payment_channels_by_ledger: [
     GetPaymentChannelsByLedgerRequest,
     GetPaymentChannelsByLedgerResponse

@@ -241,6 +241,10 @@ export class NitroRpcClient implements RpcClientApi {
     return this.sendRequest("get_all_ledger_channels", {});
   }
 
+  public async GetAllL2Channels(): Promise<LedgerChannelInfo[]> {
+    return this.sendRequest("get_all_l2_channels", {});
+  }
+
   public async GetPaymentChannel(
     channelId: string
   ): Promise<PaymentChannelInfo> {
