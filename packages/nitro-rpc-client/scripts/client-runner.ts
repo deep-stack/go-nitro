@@ -12,6 +12,8 @@ import {
   logOutChannelUpdates,
 } from "../src/utils";
 
+const ETHEREUM_ADDRESS = `0x${"00".repeat(20)}`;
+
 const clientNames = ["alice", "irene", "bob", "ivan"] as const;
 const clientPortMap: Record<ClientNames, number> = {
   alice: 4005,
@@ -170,11 +172,13 @@ yargs(hideBin(process.argv))
         console.log("Constructing ledger channels");
         const aliceLedger = await aliceClient.CreateLedgerChannel(
           ireneAddress,
+          ETHEREUM_ADDRESS,
           yargs.ledgerdeposit,
           yargs.ledgerdeposit
         );
         const bobLedger = await ireneClient.CreateLedgerChannel(
           bobAddress,
+          ETHEREUM_ADDRESS,
           yargs.ledgerdeposit,
           yargs.ledgerdeposit
         );
@@ -268,6 +272,7 @@ yargs(hideBin(process.argv))
       console.log("Constructing ledger channels");
       const ledger = await leftClient.CreateLedgerChannel(
         rightAddress,
+        ETHEREUM_ADDRESS,
         1_000_000,
         1_000_000
       );

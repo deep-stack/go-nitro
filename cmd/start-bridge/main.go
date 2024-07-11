@@ -184,24 +184,26 @@ func main() {
 		Flags:  flags,
 		Before: altsrc.InitInputSourceWithContext(flags, altsrc.NewTomlSourceFromFlagFunc(CONFIG)),
 		Action: func(cCtx *cli.Context) error {
-			jsonFile, err := os.Open(assetmapfilepath)
-			if err != nil {
-				return err
-			}
-			defer jsonFile.Close()
-
-			byteValue, err := io.ReadAll(jsonFile)
-			if err != nil {
-				return err
-			}
-
 			// Variable to hold the deserialized data
 			var assets []Asset
 
-			// Deserialize JSON into the struct
-			err = json.Unmarshal(byteValue, &assets)
-			if err != nil {
-				return err
+			if assetmapfilepath != "" {
+				jsonFile, err := os.Open(assetmapfilepath)
+				if err != nil {
+					return err
+				}
+				defer jsonFile.Close()
+
+				byteValue, err := io.ReadAll(jsonFile)
+				if err != nil {
+					return err
+				}
+
+				// Deserialize JSON into the struct
+				err = json.Unmarshal(byteValue, &assets)
+				if err != nil {
+					return err
+				}
 			}
 
 			addressMap := make(map[common.Address]common.Address)
@@ -225,7 +227,7 @@ func main() {
 				BridgePublicIp:     bridgepublicip,
 				NodeL1MsgPort:      nodel1msgport,
 				NodeL2MsgPort:      nodel2msgport,
-				L1Tol2AssetAddress: addressMap,
+				L1ToL2AssetAddress: addressMap,
 			}
 
 			logging.SetupDefaultLogger(os.Stdout, slog.LevelDebug)

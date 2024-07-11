@@ -54,7 +54,7 @@ type BridgeConfig struct {
 	VpaAddress         string
 	CaAddress          string
 	BridgeAddress      string
-	L1Tol2AssetAddress map[common.Address]common.Address
+	L1ToL2AssetAddress map[common.Address]common.Address
 	DurableStoreDir    string
 	BridgePublicIp     string
 	NodeL1MsgPort      int
@@ -190,11 +190,19 @@ func (b *Bridge) processCompletedObjectivesFromL1(objId protocols.ObjectiveId) e
 		// Create extended state outcome based on l1ChannelState
 		l2ChannelOutcome := l1ledgerChannelStateClone.State().Outcome
 
-		for i, outcome := range l2ChannelOutcome {
-			if value, ok := b.config.L1Tol2AssetAddress[outcome.Asset]; ok {
-				l2ChannelOutcome[i].Asset = value
-			} else {
-				return fmt.Errorf("Could not find corresponding L2 asset address for given L1 asset address")
+		if len(b.config.L1ToL2AssetAddress) != 0 {
+			for i, outcome := range l2ChannelOutcome {
+				if value, ok := b.config.L1ToL2AssetAddress[outcome.Asset]; ok {
+					l2ChannelOutcome[i].Asset = value
+				} else {
+					return fmt.Errorf("Could not find corresponding L2 asset address for given L1 asset address")
+				}
+			}
+		} else {
+			for _, outcome := range l2ChannelOutcome {
+				if (outcome.Asset != common.Address{}) {
+					return fmt.Errorf("Custom token asset was found for L1 but corresponding L2 asset address was not provided")
+				}
 			}
 		}
 
