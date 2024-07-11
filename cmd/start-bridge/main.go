@@ -55,7 +55,7 @@ func main() {
 
 	var tlscertfilepath, tlskeyfilepath string
 
-	var assetmapfilepath string
+	var assetsmapfilepath string
 
 	// urfave default precedence for flag value sources (highest to lowest):
 	// 1. Command line flag value
@@ -115,7 +115,7 @@ func main() {
 		altsrc.NewPathFlag(&cli.PathFlag{
 			Name:        ASSET_MAP_FILEPATH,
 			Usage:       "Filepath to the map of asset address on L1 to asset address of L2",
-			Destination: &assetmapfilepath,
+			Destination: &assetsmapfilepath,
 		}),
 		altsrc.NewStringFlag(&cli.StringFlag{
 			Name:        DURABLE_STORE_DIR,
@@ -182,8 +182,8 @@ func main() {
 			// Variable to hold the deserialized data
 			var assets bridge.L1ToL2AssetConfig
 
-			if assetmapfilepath != "" {
-				tomlFile, err := os.Open(assetmapfilepath)
+			if assetsmapfilepath != "" {
+				tomlFile, err := os.Open(assetsmapfilepath)
 				if err != nil {
 					return err
 				}
