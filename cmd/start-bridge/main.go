@@ -8,7 +8,6 @@ import (
 	"log/slog"
 	"os"
 
-	"github.com/ethereum/go-ethereum/common"
 	"github.com/statechannels/go-nitro/bridge"
 	"github.com/statechannels/go-nitro/cmd/utils"
 	"github.com/statechannels/go-nitro/internal/logging"
@@ -48,11 +47,6 @@ const (
 	TLS_CERT_FILEPATH = "tlscertfilepath"
 	TLS_KEY_FILEPATH  = "tlskeyfilepath"
 )
-
-type Asset struct {
-	L1AssetAddress string `json:"l1AssetAddress"`
-	L2AssetAddress string `json:"l2AssetAddress"`
-}
 
 func main() {
 	var l1chainurl, l2chainurl, chainpk, statechannelpk, naaddress, vpaaddress, caaddress, bridgeaddress, durableStoreDir, bridgepublicip string
@@ -185,7 +179,7 @@ func main() {
 		Before: altsrc.InitInputSourceWithContext(flags, altsrc.NewTomlSourceFromFlagFunc(CONFIG)),
 		Action: func(cCtx *cli.Context) error {
 			// Variable to hold the deserialized data
-			var assets []Asset
+			var assets []bridge.Asset
 
 			if assetmapfilepath != "" {
 				jsonFile, err := os.Open(assetmapfilepath)
@@ -206,34 +200,28 @@ func main() {
 				}
 			}
 
-			addressMap := make(map[common.Address]common.Address)
-
-			for _, asset := range assets {
-				addressMap[common.HexToAddress(asset.L1AssetAddress)] = common.HexToAddress(asset.L2AssetAddress)
-			}
-
 			bridgeConfig := bridge.BridgeConfig{
-				L1ChainUrl:         l1chainurl,
-				L2ChainUrl:         l2chainurl,
-				L1ChainStartBlock:  l1chainstartblock,
-				L2ChainStartBlock:  l2chainstartblock,
-				ChainPK:            chainpk,
-				StateChannelPK:     statechannelpk,
-				NaAddress:          naaddress,
-				VpaAddress:         vpaaddress,
-				CaAddress:          caaddress,
-				BridgeAddress:      bridgeaddress,
-				DurableStoreDir:    durableStoreDir,
-				BridgePublicIp:     bridgepublicip,
-				NodeL1MsgPort:      nodel1msgport,
-				NodeL2MsgPort:      nodel2msgport,
-				L1ToL2AssetAddress: addressMap,
+				L1ChainUrl:        l1chainurl,
+				L2ChainUrl:        l2chainurl,
+				L1ChainStartBlock: l1chainstartblock,
+				L2ChainStartBlock: l2chainstartblock,
+				ChainPK:           chainpk,
+				StateChannelPK:    statechannelpk,
+				NaAddress:         naaddress,
+				VpaAddress:        vpaaddress,
+				CaAddress:         caaddress,
+				BridgeAddress:     bridgeaddress,
+				DurableStoreDir:   durableStoreDir,
+				BridgePublicIp:    bridgepublicip,
+				NodeL1MsgPort:     nodel1msgport,
+				NodeL2MsgPort:     nodel2msgport,
+				Assets:            assets,
 			}
 
 			logging.SetupDefaultLogger(os.Stdout, slog.LevelDebug)
-			bridge := bridge.New(bridgeConfig)
+			bridge := bridge.New()
 
-			bridgeNodeL1Multiaddress, bridgeNodeL2Multiaddress, nodeL2, err := bridge.Start()
+			bridgeNodeL1Multiaddress, bridgeNodeL2Multiaddress, nodeL2, err := bridge.Start(bridgeConfig)
 			if err != nil {
 				log.Fatal(err)
 			}

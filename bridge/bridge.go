@@ -29,6 +29,11 @@ type MirrorChannelDetails struct {
 	isCreated   bool
 }
 
+type Asset struct {
+	L1AssetAddress string `json:"l1AssetAddress"`
+	L2AssetAddress string `json:"l2AssetAddress"`
+}
+
 type Bridge struct {
 	nodeL1         *node.Node
 	storeL1        store.Store
@@ -37,83 +42,83 @@ type Bridge struct {
 	nodeL2  *node.Node
 	storeL2 store.Store
 
-	config                  BridgeConfig
 	cancel                  context.CancelFunc
+	L1ToL2AssetAddressMap   map[common.Address]common.Address
 	mirrorChannelMap        map[types.Destination]MirrorChannelDetails
 	completedMirrorChannels chan types.Destination
 }
 
 type BridgeConfig struct {
-	L1ChainUrl         string
-	L2ChainUrl         string
-	L1ChainStartBlock  uint64
-	L2ChainStartBlock  uint64
-	ChainPK            string
-	StateChannelPK     string
-	NaAddress          string
-	VpaAddress         string
-	CaAddress          string
-	BridgeAddress      string
-	L1ToL2AssetAddress map[common.Address]common.Address
-	DurableStoreDir    string
-	BridgePublicIp     string
-	NodeL1MsgPort      int
-	NodeL2MsgPort      int
+	L1ChainUrl        string
+	L2ChainUrl        string
+	L1ChainStartBlock uint64
+	L2ChainStartBlock uint64
+	ChainPK           string
+	StateChannelPK    string
+	NaAddress         string
+	VpaAddress        string
+	CaAddress         string
+	BridgeAddress     string
+	Assets            []Asset
+	DurableStoreDir   string
+	BridgePublicIp    string
+	NodeL1MsgPort     int
+	NodeL2MsgPort     int
 }
 
-func New(configOpts BridgeConfig) *Bridge {
+func New() *Bridge {
 	bridge := Bridge{
-		config:                  configOpts,
 		mirrorChannelMap:        make(map[types.Destination]MirrorChannelDetails),
+		L1ToL2AssetAddressMap:   make(map[common.Address]common.Address),
 		completedMirrorChannels: make(chan types.Destination),
 	}
 
 	return &bridge
 }
 
-func (b *Bridge) Start() (nodeL1MultiAddress string, nodeL2MultiAddress string, l2Node *node.Node, err error) {
+func (b *Bridge) Start(configOpts BridgeConfig) (nodeL1MultiAddress string, nodeL2MultiAddress string, l2Node *node.Node, err error) {
 	chainOptsL1 := chainservice.ChainOpts{
-		ChainUrl:           b.config.L1ChainUrl,
-		ChainStartBlockNum: b.config.L1ChainStartBlock,
-		ChainPk:            b.config.ChainPK,
-		NaAddress:          common.HexToAddress(b.config.NaAddress),
-		VpaAddress:         common.HexToAddress(b.config.VpaAddress),
-		CaAddress:          common.HexToAddress(b.config.CaAddress),
+		ChainUrl:           configOpts.L1ChainUrl,
+		ChainStartBlockNum: configOpts.L1ChainStartBlock,
+		ChainPk:            configOpts.ChainPK,
+		NaAddress:          common.HexToAddress(configOpts.NaAddress),
+		VpaAddress:         common.HexToAddress(configOpts.VpaAddress),
+		CaAddress:          common.HexToAddress(configOpts.CaAddress),
 	}
 
 	chainOptsL2 := chainservice.L2ChainOpts{
-		ChainUrl:           b.config.L2ChainUrl,
-		ChainStartBlockNum: b.config.L2ChainStartBlock,
-		ChainPk:            b.config.ChainPK,
-		BridgeAddress:      common.HexToAddress(b.config.BridgeAddress),
-		VpaAddress:         common.HexToAddress(b.config.VpaAddress),
-		CaAddress:          common.HexToAddress(b.config.CaAddress),
+		ChainUrl:           configOpts.L2ChainUrl,
+		ChainStartBlockNum: configOpts.L2ChainStartBlock,
+		ChainPk:            configOpts.ChainPK,
+		BridgeAddress:      common.HexToAddress(configOpts.BridgeAddress),
+		VpaAddress:         common.HexToAddress(configOpts.VpaAddress),
+		CaAddress:          common.HexToAddress(configOpts.CaAddress),
 	}
 
 	storeOptsL1 := store.StoreOpts{
-		PkBytes:            common.Hex2Bytes(b.config.StateChannelPK),
+		PkBytes:            common.Hex2Bytes(configOpts.StateChannelPK),
 		UseDurableStore:    true,
-		DurableStoreFolder: filepath.Join(b.config.DurableStoreDir, L1_DURABLE_STORE_SUB_DIR),
+		DurableStoreFolder: filepath.Join(configOpts.DurableStoreDir, L1_DURABLE_STORE_SUB_DIR),
 	}
 
 	storeOptsL2 := store.StoreOpts{
-		PkBytes:            common.Hex2Bytes(b.config.StateChannelPK),
+		PkBytes:            common.Hex2Bytes(configOpts.StateChannelPK),
 		UseDurableStore:    true,
-		DurableStoreFolder: filepath.Join(b.config.DurableStoreDir, L2_DURABLE_STORE_SUB_DIR),
+		DurableStoreFolder: filepath.Join(configOpts.DurableStoreDir, L2_DURABLE_STORE_SUB_DIR),
 	}
 
 	messageOptsL1 := p2pms.MessageOpts{
-		PkBytes:   common.Hex2Bytes(b.config.StateChannelPK),
-		Port:      b.config.NodeL1MsgPort,
+		PkBytes:   common.Hex2Bytes(configOpts.StateChannelPK),
+		Port:      configOpts.NodeL1MsgPort,
 		BootPeers: nil,
-		PublicIp:  b.config.BridgePublicIp,
+		PublicIp:  configOpts.BridgePublicIp,
 	}
 
 	messageOptsL2 := p2pms.MessageOpts{
-		PkBytes:   common.Hex2Bytes(b.config.StateChannelPK),
-		Port:      b.config.NodeL2MsgPort,
+		PkBytes:   common.Hex2Bytes(configOpts.StateChannelPK),
+		Port:      configOpts.NodeL2MsgPort,
 		BootPeers: nil,
-		PublicIp:  b.config.BridgePublicIp,
+		PublicIp:  configOpts.BridgePublicIp,
 	}
 
 	// Initialize nodes
@@ -125,6 +130,11 @@ func (b *Bridge) Start() (nodeL1MultiAddress string, nodeL2MultiAddress string, 
 	nodeL2, storeL2, msgServiceL2, _, err := nodeutils.InitializeL2Node(chainOptsL2, storeOptsL2, messageOptsL2)
 	if err != nil {
 		return nodeL1MultiAddress, nodeL2MultiAddress, l2Node, err
+	}
+
+	// Process Assets array to convert it to map of L1 asset address to L2 asset address
+	for _, asset := range configOpts.Assets {
+		b.L1ToL2AssetAddressMap[common.HexToAddress(asset.L1AssetAddress)] = common.HexToAddress(asset.L2AssetAddress)
 	}
 
 	b.nodeL1 = nodeL1
@@ -190,9 +200,9 @@ func (b *Bridge) processCompletedObjectivesFromL1(objId protocols.ObjectiveId) e
 		// Create extended state outcome based on l1ChannelState
 		l2ChannelOutcome := l1ledgerChannelStateClone.State().Outcome
 
-		if len(b.config.L1ToL2AssetAddress) != 0 {
+		if len(b.L1ToL2AssetAddressMap) != 0 {
 			for i, outcome := range l2ChannelOutcome {
-				if value, ok := b.config.L1ToL2AssetAddress[outcome.Asset]; ok {
+				if value, ok := b.L1ToL2AssetAddressMap[outcome.Asset]; ok {
 					l2ChannelOutcome[i].Asset = value
 				} else {
 					return fmt.Errorf("Could not find corresponding L2 asset address for given L1 asset address")
