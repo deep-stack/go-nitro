@@ -8,6 +8,7 @@ import { hideBin } from "yargs/helpers";
 import { NitroRpcClient } from "./rpc-client";
 import { compactJson, getLocalRPCUrl, logOutChannelUpdates } from "./utils";
 import { CounterChallengeAction } from "./types";
+import { ZERO_ETHEREUM_ADDRESS } from "./constants";
 
 yargs(hideBin(process.argv))
   .scriptName("nitro-rpc-client")
@@ -111,7 +112,7 @@ yargs(hideBin(process.argv))
         .option("assetAddress", {
           describe: "Address of the token to be used",
           type: "string",
-          default: `0x${"00".repeat(20)}`,
+          default: ZERO_ETHEREUM_ADDRESS,
         })
         .option("alphaAmount", {
           describe: "The amount to be funded by alpha node",

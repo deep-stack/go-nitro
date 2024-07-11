@@ -7,6 +7,7 @@ import (
 	"path/filepath"
 
 	"github.com/ethereum/go-ethereum/common"
+	"github.com/statechannels/go-nitro/channel/state/outcome"
 	nodeutils "github.com/statechannels/go-nitro/internal/node"
 	"github.com/statechannels/go-nitro/node"
 	p2pms "github.com/statechannels/go-nitro/node/engine/messageservice/p2p-message-service"
@@ -198,21 +199,17 @@ func (b *Bridge) processCompletedObjectivesFromL1(objId protocols.ObjectiveId) e
 		l1ledgerChannelStateClone.State().Outcome[0].Allocations[1] = tempAllocation
 
 		// Create extended state outcome based on l1ChannelState
-		l2ChannelOutcome := l1ledgerChannelStateClone.State().Outcome
+		l1ChannelCloneOutcome := l1ledgerChannelStateClone.State().Outcome
+		var l2ChannelOutcome outcome.Exit
 
-		if len(b.L1ToL2AssetAddressMap) != 0 {
-			for i, outcome := range l2ChannelOutcome {
-				if value, ok := b.L1ToL2AssetAddressMap[outcome.Asset]; ok {
-					l2ChannelOutcome[i].Asset = value
-				} else {
-					return fmt.Errorf("Could not find corresponding L2 asset address for given L1 asset address")
-				}
-			}
-		} else {
-			for _, outcome := range l2ChannelOutcome {
-				if (outcome.Asset != common.Address{}) {
-					return fmt.Errorf("Custom token asset was found for L1 but corresponding L2 asset address was not provided")
-				}
+		for _, l1Outcome := range l1ChannelCloneOutcome {
+			if (l1Outcome.Asset == common.Address{}) {
+				l2ChannelOutcome = append(l2ChannelOutcome, l1Outcome)
+			} else if value, ok := b.L1ToL2AssetAddressMap[l1Outcome.Asset]; ok {
+				l1Outcome.Asset = value
+				l2ChannelOutcome = append(l2ChannelOutcome, l1Outcome)
+			} else {
+				return fmt.Errorf("Could not find corresponding L2 asset address for given L1 asset address")
 			}
 		}
 

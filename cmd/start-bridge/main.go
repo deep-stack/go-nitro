@@ -56,6 +56,7 @@ func main() {
 	var tlscertfilepath, tlskeyfilepath string
 
 	var assetmapfilepath string
+
 	// urfave default precedence for flag value sources (highest to lowest):
 	// 1. Command line flag value
 	// 2. Environment variable (if specified)
