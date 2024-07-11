@@ -6,6 +6,7 @@
   "license": "MIT",
   "author": "Alex Gap",
   "main": "dist/src/index.js",
+  "bin": "./bin/nitro-rpc-client",
   "scripts": {
     "build": "tsc -b .",
     "lint": "yarn lint:eslint && yarn lint:misc --check",
@@ -49,10 +50,9 @@
     "prettier-plugin-packagejson": "^2.2.18",
     "ts-jest": "29.1.0",
     "ts-node": "^10.9.1",
-    "typescript": "^5.0.2"
+    "typescript": "^4.6.3"
   },
   "engines": {
     "node": ">=18.5.0"
-  },
-  "bin": "./bin/nitro-rpc-client"
+  }
 }
