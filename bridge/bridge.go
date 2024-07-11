@@ -143,6 +143,8 @@ func (b *Bridge) Start() (nodeL1MultiAddress string, nodeL2MultiAddress string, 
 func (b *Bridge) run(ctx context.Context) {
 	completedObjectivesInNodeL1 := b.nodeL1.CompletedObjectives()
 	completedObjectivesInNodeL2 := b.nodeL2.CompletedObjectives()
+	errorChanNodeL1 := b.nodeL1.ListenErrors()
+	errorChanNodeL2 := b.nodeL2.ListenErrors()
 
 	for {
 		var err error
@@ -153,6 +155,12 @@ func (b *Bridge) run(ctx context.Context) {
 		case objId := <-completedObjectivesInNodeL2:
 			err = b.processCompletedObjectivesFromL2(objId)
 			b.checkError(err)
+		case <-errorChanNodeL1:
+			// TODO: Handle L1 node error
+			// Stop the node and instantiate node again
+		case <-errorChanNodeL2:
+			// TODO: Handle L2 node error
+			// Stop the node and instantiate node again
 		case <-ctx.Done():
 			return
 		}

@@ -40,6 +40,9 @@ type Node struct {
 	chainId                   *big.Int
 	store                     store.Store
 	vm                        *payments.VoucherManager
+
+	// TODO: Create error channel to listen for bridge
+	// TODO: Create error channel to push child panics
 }
 
 // New is the constructor for a Node. It accepts a messaging service, a chain service, and a store as injected dependencies.
@@ -64,6 +67,8 @@ func New(messageService messageservice.MessageService, chainservice chainservice
 	n.receivedVouchers = make(chan payments.Voucher, 1000)
 
 	n.channelNotifier = notifier.NewChannelNotifier(store, n.vm)
+
+	// TODO: Pass error channel to childs to push child panics
 
 	return n
 }
@@ -358,4 +363,13 @@ func (n *Node) handleError(err error) {
 
 func (n *Node) CounterChallenge(id types.Destination, action types.CounterChallengeAction) {
 	n.engine.CounterChallengeRequestsFromAPI <- types.CounterChallengeRequest{ChannelId: id, Action: action}
+}
+
+func (n *Node) ListenErrors() <-chan error {
+	// TODO: Listen for error channel where child panics are pushed
+
+	// TODO: If bridge is listening then push it to error chan where bridge is listening
+	// else panic (if no one is listening)
+
+	return make(<-chan error)
 }
