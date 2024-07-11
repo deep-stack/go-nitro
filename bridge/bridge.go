@@ -31,8 +31,12 @@ type MirrorChannelDetails struct {
 }
 
 type Asset struct {
-	L1AssetAddress string `json:"l1AssetAddress"`
-	L2AssetAddress string `json:"l2AssetAddress"`
+	L1AssetAddress string `toml:"l1AssetAddress"`
+	L2AssetAddress string `toml:"l2AssetAddress"`
+}
+
+type L1ToL2AssetConfig struct {
+	Assets []Asset `toml:"assets"`
 }
 
 type Bridge struct {
@@ -209,7 +213,7 @@ func (b *Bridge) processCompletedObjectivesFromL1(objId protocols.ObjectiveId) e
 				l1Outcome.Asset = value
 				l2ChannelOutcome = append(l2ChannelOutcome, l1Outcome)
 			} else {
-				return fmt.Errorf("Could not find corresponding L2 asset address for given L1 asset address")
+				return fmt.Errorf("Could not find corresponding L2 asset address for L1 asset address %s", l1Outcome.Asset.String())
 			}
 		}
 

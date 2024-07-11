@@ -2,12 +2,12 @@ package main
 
 import (
 	"crypto/tls"
-	"encoding/json"
 	"io"
 	"log"
 	"log/slog"
 	"os"
 
+	"github.com/BurntSushi/toml"
 	"github.com/statechannels/go-nitro/bridge"
 	"github.com/statechannels/go-nitro/cmd/utils"
 	"github.com/statechannels/go-nitro/internal/logging"
@@ -180,22 +180,22 @@ func main() {
 		Before: altsrc.InitInputSourceWithContext(flags, altsrc.NewTomlSourceFromFlagFunc(CONFIG)),
 		Action: func(cCtx *cli.Context) error {
 			// Variable to hold the deserialized data
-			var assets []bridge.Asset
+			var assets bridge.L1ToL2AssetConfig
 
 			if assetmapfilepath != "" {
-				jsonFile, err := os.Open(assetmapfilepath)
+				tomlFile, err := os.Open(assetmapfilepath)
 				if err != nil {
 					return err
 				}
-				defer jsonFile.Close()
+				defer tomlFile.Close()
 
-				byteValue, err := io.ReadAll(jsonFile)
+				byteValue, err := io.ReadAll(tomlFile)
 				if err != nil {
 					return err
 				}
 
-				// Deserialize JSON into the struct
-				err = json.Unmarshal(byteValue, &assets)
+				// Deserialize toml file data into the struct
+				err = toml.Unmarshal(byteValue, &assets)
 				if err != nil {
 					return err
 				}
@@ -216,7 +216,7 @@ func main() {
 				BridgePublicIp:    bridgepublicip,
 				NodeL1MsgPort:     nodel1msgport,
 				NodeL2MsgPort:     nodel2msgport,
-				Assets:            assets,
+				Assets:            assets.Assets,
 			}
 
 			logging.SetupDefaultLogger(os.Stdout, slog.LevelDebug)
