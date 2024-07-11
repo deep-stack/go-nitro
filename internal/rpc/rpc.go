@@ -14,16 +14,7 @@ import (
 )
 
 func InitializeNodeRpcServer(node *node.Node, rpcPort int, useNats bool, cert *tls.Certificate) (*rpc.NodeRpcServer, error) {
-	var transport transport.Responder
-	var err error
-
-	if useNats {
-		slog.Info("Initializing NATS RPC transport...")
-		transport, err = nats.NewNatsTransportAsServer(rpcPort)
-	} else {
-		slog.Info("Initializing Http RPC transport...")
-		transport, err = httpTransport.NewHttpTransportAsServer(fmt.Sprint(rpcPort), cert)
-	}
+	transport, err := initializeTransport(rpcPort, useNats, cert)
 	if err != nil {
 		return nil, err
 	}
@@ -38,6 +29,21 @@ func InitializeNodeRpcServer(node *node.Node, rpcPort int, useNats bool, cert *t
 }
 
 func InitializeBridgeRpcServer(bridge *bridge.Bridge, rpcPort int, useNats bool, cert *tls.Certificate) (*rpc.BridgeRpcServer, error) {
+	transport, err := initializeTransport(rpcPort, useNats, cert)
+	if err != nil {
+		return nil, err
+	}
+
+	rpcServer, err := rpc.NewBridgeRpcServer(bridge, transport)
+	if err != nil {
+		return nil, err
+	}
+
+	slog.Info("Completed RPC server initialization")
+	return rpcServer, nil
+}
+
+func initializeTransport(rpcPort int, useNats bool, cert *tls.Certificate) (transport.Responder, error) {
 	var transport transport.Responder
 	var err error
 
@@ -52,11 +58,5 @@ func InitializeBridgeRpcServer(bridge *bridge.Bridge, rpcPort int, useNats bool,
 		return nil, err
 	}
 
-	rpcServer, err := rpc.NewBridgeRpcServer(bridge, transport)
-	if err != nil {
-		return nil, err
-	}
-
-	slog.Info("Completed RPC server initialization")
-	return rpcServer, nil
+	return transport, nil
 }

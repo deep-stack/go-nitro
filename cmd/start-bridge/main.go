@@ -144,7 +144,7 @@ func main() {
 		altsrc.NewIntFlag(&cli.IntFlag{
 			Name:        RPC_PORT,
 			Usage:       "Specifies the tcp port for the rpc server.",
-			Value:       4006,
+			Value:       4007,
 			Destination: &rpcport,
 		}),
 		altsrc.NewUint64Flag(&cli.Uint64Flag{
