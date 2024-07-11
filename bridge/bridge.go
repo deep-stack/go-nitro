@@ -209,11 +209,15 @@ func (b *Bridge) processCompletedObjectivesFromL1(objId protocols.ObjectiveId) e
 		for _, l1Outcome := range l1ChannelCloneOutcome {
 			if (l1Outcome.Asset == common.Address{}) {
 				l2ChannelOutcome = append(l2ChannelOutcome, l1Outcome)
-			} else if value, ok := b.L1ToL2AssetAddressMap[l1Outcome.Asset]; ok {
+			} else {
+				value, ok := b.L1ToL2AssetAddressMap[l1Outcome.Asset]
+
+				if !ok {
+					return fmt.Errorf("Could not find corresponding L2 asset address for L1 asset address %s", l1Outcome.Asset.String())
+				}
+
 				l1Outcome.Asset = value
 				l2ChannelOutcome = append(l2ChannelOutcome, l1Outcome)
-			} else {
-				return fmt.Errorf("Could not find corresponding L2 asset address for L1 asset address %s", l1Outcome.Asset.String())
 			}
 		}
 
