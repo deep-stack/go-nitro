@@ -11,6 +11,6 @@ contract Token is ERC20 {
      * @param owner Tokens are minted to the owner address
      */
     constructor(address owner) ERC20('TestToken', 'TEST') {
-        _mint(owner, 10_000_000_000 * 10**18);
+        _mint(owner, 10_000_000_000 * 10 ** 18);
     }
 }

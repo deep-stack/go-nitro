@@ -213,7 +213,7 @@ func (b *Bridge) processCompletedObjectivesFromL1(objId protocols.ObjectiveId) e
 				value, ok := b.L1ToL2AssetAddressMap[l1Outcome.Asset]
 
 				if !ok {
-					return fmt.Errorf("Could not find corresponding L2 asset address for L1 asset address %s", l1Outcome.Asset.String())
+					return fmt.Errorf("could not find corresponding L2 asset address for L1 asset address %s", l1Outcome.Asset.String())
 				}
 
 				l1Outcome.Asset = value
