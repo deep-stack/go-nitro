@@ -13,6 +13,7 @@ import (
 	"github.com/statechannels/go-nitro/node/engine"
 	"github.com/statechannels/go-nitro/node/engine/chainservice"
 	"github.com/statechannels/go-nitro/node/engine/messageservice"
+	p2pms "github.com/statechannels/go-nitro/node/engine/messageservice/p2p-message-service"
 	"github.com/statechannels/go-nitro/node/engine/store"
 	"github.com/statechannels/go-nitro/node/notifier"
 	"github.com/statechannels/go-nitro/node/query"
@@ -42,7 +43,9 @@ type Node struct {
 	vm                        *payments.VoucherManager
 
 	// TODO: Create error channel to listen for bridge
+	ErrListener chan error
 	// TODO: Create error channel to push child panics
+	errChan chan error
 }
 
 // New is the constructor for a Node. It accepts a messaging service, a chain service, and a store as injected dependencies.
@@ -66,10 +69,17 @@ func New(messageService messageservice.MessageService, chainservice chainservice
 	// Using a larger buffer since payments can be sent frequently.
 	n.receivedVouchers = make(chan payments.Voucher, 1000)
 
+	n.errChan = make(chan error)
+
+	n.ErrListener = make(chan error)
+
 	n.channelNotifier = notifier.NewChannelNotifier(store, n.vm)
 
 	// TODO: Pass error channel to childs to push child panics
+	p2pMs, _ := messageService.(*p2pms.P2PMessageService)
 
+	// TODO: Panic for all new methods and listen for errors in other cases
+	go n.listenErrors(&p2pMs.ErrChan)
 	return n
 }
 
@@ -365,11 +375,22 @@ func (n *Node) CounterChallenge(id types.Destination, action types.CounterChalle
 	n.engine.CounterChallengeRequestsFromAPI <- types.CounterChallengeRequest{ChannelId: id, Action: action}
 }
 
-func (n *Node) ListenErrors() <-chan error {
+func (n *Node) listenErrors(msgServiceErrChan *chan error) {
 	// TODO: Listen for error channel where child panics are pushed
+	var err error
+
+	select {
+	case err = <-(*msgServiceErrChan):
+		fmt.Println("Message chan service received")
+	}
+
+	select {
+	case n.ErrListener <- err:
+		break
+	default:
+		panic(err)
+	}
 
 	// TODO: If bridge is listening then push it to error chan where bridge is listening
 	// else panic (if no one is listening)
-
-	return make(<-chan error)
 }
