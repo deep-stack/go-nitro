@@ -80,7 +80,7 @@ func New(messageService messageservice.MessageService, chainservice chainservice
 	chainErrChan := chainservice.GetErrorChan()
 
 	// TODO: Panic for all new methods and listen for errors in other cases
-	go n.listenForErrors(&p2pMs.ErrChan, &chainErrChan)
+	go n.listenForErrors(&p2pMs.ErrChan, &chainErrChan, &n.engine.ErrChan)
 	return n
 }
 
@@ -376,15 +376,14 @@ func (n *Node) CounterChallenge(id types.Destination, action types.CounterChalle
 	n.engine.CounterChallengeRequestsFromAPI <- types.CounterChallengeRequest{ChannelId: id, Action: action}
 }
 
-func (n *Node) listenForErrors(msgServiceErrChan *chan error, chainServiceErrChan *chan error) {
+func (n *Node) listenForErrors(msgServiceErrChan *chan error, chainServiceErrChan *chan error, engineErrChan *chan error) {
 	// Listen for error channel where errors from child functions are pushed
 	var err error
 
 	select {
 	case err = <-(*msgServiceErrChan):
-		fmt.Println("Message chan service received")
 	case err = <-(*chainServiceErrChan):
-		fmt.Println("chain service received")
+	case err = <-(*engineErrChan):
 	}
 
 	// If bridge is listening then push it to error chan where bridge is listening

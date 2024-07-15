@@ -85,6 +85,8 @@ type Engine struct {
 
 	wg     *sync.WaitGroup
 	cancel context.CancelFunc
+
+	ErrChan chan error
 }
 
 // PaymentRequest represents a request from the API to make a payment using a channel
@@ -164,6 +166,8 @@ func New(vm *payments.VoucherManager, msg messageservice.MessageService, chain c
 	ctx, cancel := context.WithCancel(context.Background())
 	e.cancel = cancel
 
+	e.ErrChan = make(chan error)
+
 	e.wg.Add(1)
 	go e.run(ctx)
 
@@ -235,7 +239,11 @@ func (e *Engine) run(ctx context.Context) {
 // a running ledger channel by pulling its corresponding objective
 // from the store and attempting progress.
 func (e *Engine) handleProposal(proposal consensus_channel.Proposal) (EngineEvent, error) {
-	id := getProposalObjectiveId(proposal)
+	id, err := getProposalObjectiveId(proposal)
+	if err != nil {
+		e.ErrChan <- err
+		return EngineEvent{}, err
+	}
 
 	obj, err := e.store.GetObjectiveById(id)
 	if err != nil {
@@ -341,7 +349,11 @@ func (e *Engine) handleMessage(message protocols.Message) (EngineEvent, error) {
 
 	for _, entry := range message.LedgerProposals { // The ledger protocol requires us to process these proposals in turnNum order.
 		// Here we rely on the sender having packed them into the message in that order, and do not apply any checks or sorting of our own.
-		id := getProposalObjectiveId(entry.Proposal)
+		id, err := getProposalObjectiveId(entry.Proposal)
+		if err != nil {
+			e.ErrChan <- err
+			return EngineEvent{}, err
+		}
 
 		o, err := e.store.GetObjectiveById(id)
 		if err != nil {
@@ -657,23 +669,17 @@ func (e *Engine) handleCounterChallengeRequest(request types.CounterChallengeReq
 
 // sendMessages sends out the messages and records the metrics.
 func (e *Engine) sendMessages(msgs []protocols.Message) {
+	defer e.wg.Done()
 	for _, message := range msgs {
 		message.From = *e.store.GetAddress()
 		err := e.msg.Send(message)
 		if err != nil {
 			e.logger.Error(err.Error())
-			p2pMs, _ := e.msg.(*p2pms.P2PMessageService)
-
-			select {
-			case p2pMs.ErrChan <- err:
-				e.wg.Done()
-				return
-			default:
-			}
+			e.ErrChan <- err
+			return
 		}
 		e.logMessage(message, Outgoing)
 	}
-	e.wg.Done()
 }
 
 // executeSideEffects executes the SideEffects declared by cranking an Objective or handling a payment request.
@@ -964,25 +970,25 @@ func fromMsgErr(id protocols.ObjectiveId, err error) error {
 }
 
 // getProposalObjectiveId returns the objectiveId for a proposal.
-func getProposalObjectiveId(p consensus_channel.Proposal) protocols.ObjectiveId {
+func getProposalObjectiveId(p consensus_channel.Proposal) (protocols.ObjectiveId, error) {
 	switch p.Type() {
 	case consensus_channel.AddProposal:
 		{
 			const prefix = virtualfund.ObjectivePrefix
 			channelId := p.ToAdd.Guarantee.Target().String()
-			return protocols.ObjectiveId(prefix + channelId)
+			return protocols.ObjectiveId(prefix + channelId), nil
 
 		}
 	case consensus_channel.RemoveProposal:
 		{
 			const prefix = virtualdefund.ObjectivePrefix
 			channelId := p.ToRemove.Target.String()
-			return protocols.ObjectiveId(prefix + channelId)
+			return protocols.ObjectiveId(prefix + channelId), nil
 
 		}
 	default:
 		{
-			panic("invalid proposal type")
+			return "", fmt.Errorf("invalid proposal type")
 		}
 	}
 }
@@ -1057,6 +1063,6 @@ func (e *Engine) checkError(err error) {
 			}
 		}
 
-		panic(err)
+		e.ErrChan <- err
 	}
 }
