@@ -6,6 +6,8 @@ config.reporters = ['default'];
 config.globalSetup = '<rootDir>/jest/contract-test-setup.ts';
 config.globalTeardown = '<rootDir>/jest/contract-test-teardown.ts';
 config.testTimeout = 90_000;
-
+config.resetModules=true;
+config.resetMocks=true;
+config.clearMocks=true;
 // eslint-disable-next-line no-undef
 module.exports = config;
