@@ -662,7 +662,14 @@ func (e *Engine) sendMessages(msgs []protocols.Message) {
 		err := e.msg.Send(message)
 		if err != nil {
 			e.logger.Error(err.Error())
-			panic(err)
+			p2pMs, _ := e.msg.(*p2pms.P2PMessageService)
+
+			select {
+			case p2pMs.ErrChan <- err:
+				e.wg.Done()
+				return
+			default:
+			}
 		}
 		e.logMessage(message, Outgoing)
 	}

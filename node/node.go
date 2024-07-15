@@ -42,9 +42,9 @@ type Node struct {
 	store                     store.Store
 	vm                        *payments.VoucherManager
 
-	// TODO: Create error channel to listen for bridge
+	// Create error channel to listen for bridge
 	ErrListener chan error
-	// TODO: Create error channel to push child panics
+	// Create error channel to push errors from child components instead of panicking
 	errChan chan error
 }
 
@@ -80,7 +80,7 @@ func New(messageService messageservice.MessageService, chainservice chainservice
 	chainErrChan := chainservice.GetErrorChan()
 
 	// TODO: Panic for all new methods and listen for errors in other cases
-	go n.listenErrors(&p2pMs.ErrChan, &chainErrChan)
+	go n.listenForErrors(&p2pMs.ErrChan, &chainErrChan)
 	return n
 }
 
@@ -376,8 +376,8 @@ func (n *Node) CounterChallenge(id types.Destination, action types.CounterChalle
 	n.engine.CounterChallengeRequestsFromAPI <- types.CounterChallengeRequest{ChannelId: id, Action: action}
 }
 
-func (n *Node) listenErrors(msgServiceErrChan *chan error, chainServiceErrChan *chan error) {
-	// TODO: Listen for error channel where child panics are pushed
+func (n *Node) listenForErrors(msgServiceErrChan *chan error, chainServiceErrChan *chan error) {
+	// Listen for error channel where errors from child functions are pushed
 	var err error
 
 	select {
@@ -387,13 +387,12 @@ func (n *Node) listenErrors(msgServiceErrChan *chan error, chainServiceErrChan *
 		fmt.Println("chain service received")
 	}
 
+	// If bridge is listening then push it to error chan where bridge is listening
+	// else panic (if no one is listening)
 	select {
 	case n.ErrListener <- err:
 		break
 	default:
 		panic(err)
 	}
-
-	// TODO: If bridge is listening then push it to error chan where bridge is listening
-	// else panic (if no one is listening)
 }

@@ -164,6 +164,7 @@ func (b *Bridge) run(ctx context.Context) {
 				err = b.processCompletedObjectivesFromL2(objId)
 				b.checkError(err)
 			}
+		// TODO: Handle ledger channel already exists error after bridge is restarted while creating ledger channel
 		case nodeL1Err := <-b.nodeL1.ErrListener:
 			// Stop the node and instantiate node again
 			slog.Error(nodeL1Err.Error())
