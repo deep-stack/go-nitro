@@ -24,6 +24,13 @@ const (
 	L2_DURABLE_STORE_SUB_DIR = "l2-nitro-store"
 )
 
+var (
+	chainOptsL1                  chainservice.ChainOpts
+	chainOptsL2                  chainservice.L2ChainOpts
+	storeOptsL1, storeOptsL2     store.StoreOpts
+	messageOptsL1, messageOptsL2 p2pms.MessageOpts
+)
+
 type MirrorChannelDetails struct {
 	l1ChannelId types.Destination
 	isCreated   bool
@@ -71,7 +78,7 @@ func New(configOpts BridgeConfig) *Bridge {
 }
 
 func (b *Bridge) Start() (nodeL1MultiAddress string, nodeL2MultiAddress string, l2Node *node.Node, err error) {
-	chainOptsL1 := chainservice.ChainOpts{
+	chainOptsL1 = chainservice.ChainOpts{
 		ChainUrl:           b.config.L1ChainUrl,
 		ChainStartBlockNum: b.config.L1ChainStartBlock,
 		ChainPk:            b.config.ChainPK,
@@ -80,7 +87,7 @@ func (b *Bridge) Start() (nodeL1MultiAddress string, nodeL2MultiAddress string, 
 		CaAddress:          common.HexToAddress(b.config.CaAddress),
 	}
 
-	chainOptsL2 := chainservice.L2ChainOpts{
+	chainOptsL2 = chainservice.L2ChainOpts{
 		ChainUrl:           b.config.L2ChainUrl,
 		ChainStartBlockNum: b.config.L2ChainStartBlock,
 		ChainPk:            b.config.ChainPK,
@@ -89,26 +96,26 @@ func (b *Bridge) Start() (nodeL1MultiAddress string, nodeL2MultiAddress string, 
 		CaAddress:          common.HexToAddress(b.config.CaAddress),
 	}
 
-	storeOptsL1 := store.StoreOpts{
+	storeOptsL1 = store.StoreOpts{
 		PkBytes:            common.Hex2Bytes(b.config.StateChannelPK),
 		UseDurableStore:    true,
 		DurableStoreFolder: filepath.Join(b.config.DurableStoreDir, L1_DURABLE_STORE_SUB_DIR),
 	}
 
-	storeOptsL2 := store.StoreOpts{
+	storeOptsL2 = store.StoreOpts{
 		PkBytes:            common.Hex2Bytes(b.config.StateChannelPK),
 		UseDurableStore:    true,
 		DurableStoreFolder: filepath.Join(b.config.DurableStoreDir, L2_DURABLE_STORE_SUB_DIR),
 	}
 
-	messageOptsL1 := p2pms.MessageOpts{
+	messageOptsL1 = p2pms.MessageOpts{
 		PkBytes:   common.Hex2Bytes(b.config.StateChannelPK),
 		Port:      b.config.NodeL1MsgPort,
 		BootPeers: nil,
 		PublicIp:  b.config.BridgePublicIp,
 	}
 
-	messageOptsL2 := p2pms.MessageOpts{
+	messageOptsL2 = p2pms.MessageOpts{
 		PkBytes:   common.Hex2Bytes(b.config.StateChannelPK),
 		Port:      b.config.NodeL2MsgPort,
 		BootPeers: nil,
@@ -148,25 +155,46 @@ func (b *Bridge) run(ctx context.Context) {
 		var err error
 		select {
 		case objId := <-completedObjectivesInNodeL1:
-			err = b.processCompletedObjectivesFromL1(objId)
-			b.checkError(err)
+			if objId != "" {
+				err = b.processCompletedObjectivesFromL1(objId)
+				b.checkError(err)
+			}
 		case objId := <-completedObjectivesInNodeL2:
-			err = b.processCompletedObjectivesFromL2(objId)
-			b.checkError(err)
+			if objId != "" {
+				err = b.processCompletedObjectivesFromL2(objId)
+				b.checkError(err)
+			}
 		case nodeL1Err := <-b.nodeL1.ErrListener:
-			fmt.Println("err in node 1 received")
-			// TODO: Handle L1 node error
 			// Stop the node and instantiate node again
 			slog.Error(nodeL1Err.Error())
-			b.Close()
-			b.Start()
+			err := b.nodeL1.Close()
+			if err != nil {
+				slog.Error(err.Error())
+			}
+
+			nodeL1, storeL1, _, chainServiceL1, err := nodeutils.InitializeNode(chainOptsL1, storeOptsL1, messageOptsL1)
+			if err != nil {
+				slog.Error(err.Error())
+			}
+			b.nodeL1 = nodeL1
+			b.storeL1 = *storeL1
+			b.chainServiceL1 = chainServiceL1
+
 		case nodeL2Err := <-b.nodeL2.ErrListener:
-			fmt.Println("err in node 2 received")
-			// TODO: Handle L2 node error
 			// Stop the node and instantiate node again
 			slog.Error(nodeL2Err.Error())
-			b.Close()
-			b.Start()
+			err := b.nodeL2.Close()
+			if err != nil {
+				slog.Error(err.Error())
+			}
+
+			nodeL2, storeL2, _, _, err := nodeutils.InitializeL2Node(chainOptsL2, storeOptsL2, messageOptsL2)
+			if err != nil {
+				slog.Error(err.Error())
+			}
+			b.nodeL2 = nodeL2
+			b.storeL2 = *storeL2
+
 		case <-ctx.Done():
 			return
 		}
