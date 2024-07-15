@@ -193,4 +193,6 @@ type ChainService interface {
 	GetLatestBlock() Block
 	// Close closes the ChainService
 	Close() error
+
+	GetErrorChan() chan error
 }

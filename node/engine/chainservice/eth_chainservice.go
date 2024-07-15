@@ -81,6 +81,7 @@ type EthChainService struct {
 	eventTracker             *eventTracker
 	eventSub                 ethereum.Subscription
 	newBlockSub              ethereum.Subscription
+	errChan                  chan error
 }
 
 // MAX_QUERY_BLOCK_RANGE is the maximum range of blocks we query for events at once.
@@ -151,7 +152,7 @@ func newEthChainService(chain ethChain, startBlockNum uint64, na *NitroAdjudicat
 	tracker := NewEventTracker(startBlock)
 
 	// Use a buffered channel so we don't have to worry about blocking on writing to the channel.
-	ecs := EthChainService{chain, na, naAddress, caAddress, vpaAddress, txSigner, make(chan Event, 10), logger, ctx, cancelCtx, &sync.WaitGroup{}, tracker, nil, nil}
+	ecs := EthChainService{chain, na, naAddress, caAddress, vpaAddress, txSigner, make(chan Event, 10), logger, ctx, cancelCtx, &sync.WaitGroup{}, tracker, nil, nil, make(chan error)}
 	errChan, newBlockChan, eventChan, eventQuery, err := ecs.subscribeForLogs()
 	if err != nil {
 		return nil, err
@@ -231,6 +232,7 @@ func (ecs *EthChainService) listenForErrors(errChan <-chan error) {
 			return
 		case err := <-errChan:
 			ecs.logger.Error("chain service error", "error", err)
+			ecs.errChan <- err
 			panic(err)
 		}
 	}
@@ -716,4 +718,8 @@ func (ecs *EthChainService) Close() error {
 	ecs.cancel()
 	ecs.wg.Wait()
 	return nil
+}
+
+func (ecs *EthChainService) GetErrorChan() chan error {
+	return ecs.errChan
 }

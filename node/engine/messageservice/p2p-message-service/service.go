@@ -64,6 +64,8 @@ type P2PMessageService struct {
 	logger      *slog.Logger
 
 	MultiAddr string
+
+	ErrChan chan error
 }
 
 // NewMessageService returns a running P2PMessageService listening on the given ip, port and message key.
@@ -76,6 +78,7 @@ func NewMessageService(opts MessageOpts) *P2PMessageService {
 		peers:           &safesync.Map[peer.ID]{},
 		scAddr:          opts.SCAddr,
 		logger:          logging.LoggerWithAddress(slog.Default(), opts.SCAddr),
+		ErrChan:         make(chan error),
 	}
 
 	addressFactory := func(addrs []multiaddr.Multiaddr) []multiaddr.Multiaddr {

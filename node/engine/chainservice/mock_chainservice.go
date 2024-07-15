@@ -12,6 +12,7 @@ import (
 type MockChainService struct {
 	chain     *MockChain
 	eventFeed <-chan Event
+	errorChan chan error
 }
 
 // NewMockChainService returns a new MockChainService.
@@ -64,4 +65,8 @@ func (mc *MockChainService) GetLatestBlock() Block {
 
 func (mc *MockChainService) Close() error {
 	return nil
+}
+
+func (mc *MockChainService) GetErrorChan() chan error {
+	return mc.errorChan
 }

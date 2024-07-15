@@ -77,9 +77,10 @@ func New(messageService messageservice.MessageService, chainservice chainservice
 
 	// TODO: Pass error channel to childs to push child panics
 	p2pMs, _ := messageService.(*p2pms.P2PMessageService)
+	chainErrChan := chainservice.GetErrorChan()
 
 	// TODO: Panic for all new methods and listen for errors in other cases
-	go n.listenErrors(&p2pMs.ErrChan)
+	go n.listenErrors(&p2pMs.ErrChan, &chainErrChan)
 	return n
 }
 
@@ -375,13 +376,15 @@ func (n *Node) CounterChallenge(id types.Destination, action types.CounterChalle
 	n.engine.CounterChallengeRequestsFromAPI <- types.CounterChallengeRequest{ChannelId: id, Action: action}
 }
 
-func (n *Node) listenErrors(msgServiceErrChan *chan error) {
+func (n *Node) listenErrors(msgServiceErrChan *chan error, chainServiceErrChan *chan error) {
 	// TODO: Listen for error channel where child panics are pushed
 	var err error
 
 	select {
 	case err = <-(*msgServiceErrChan):
 		fmt.Println("Message chan service received")
+	case err = <-(*chainServiceErrChan):
+		fmt.Println("chain service received")
 	}
 
 	select {

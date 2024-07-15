@@ -161,7 +161,7 @@ func (b *Bridge) run(ctx context.Context) {
 			b.Close()
 			b.Start()
 		case nodeL2Err := <-b.nodeL2.ErrListener:
-			fmt.Println("err in node 1 received")
+			fmt.Println("err in node 2 received")
 			// TODO: Handle L2 node error
 			// Stop the node and instantiate node again
 			slog.Error(nodeL2Err.Error())

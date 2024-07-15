@@ -87,7 +87,7 @@ func newL2ChainService(chain ethChain, startBlockNum uint64, bridge *Bridge.Brid
 	tracker := NewEventTracker(startBlock)
 
 	// Use a buffered channel so we don't have to worry about blocking on writing to the channel.
-	ecs := EthChainService{chain, nil, common.Address{}, caAddress, vpaAddress, txSigner, make(chan Event, 10), logger, ctx, cancelCtx, &sync.WaitGroup{}, tracker, nil, nil}
+	ecs := EthChainService{chain, nil, common.Address{}, caAddress, vpaAddress, txSigner, make(chan Event, 10), logger, ctx, cancelCtx, &sync.WaitGroup{}, tracker, nil, nil, make(chan error)}
 	l2cs := L2ChainService{&ecs, bridge, bridgeAddress}
 	errChan, newBlockChan, eventChan, eventQuery, err := l2cs.subscribeForLogs()
 	if err != nil {
