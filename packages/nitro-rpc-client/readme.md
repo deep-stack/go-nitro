@@ -65,6 +65,14 @@ Options:
   -p, --port                                            [number] [default: 4005]
 ```
 
+### Global install
+
+```bash
+yarn global add file:/path/to/local/go-nitro/packages/nitro-rpc-client
+```
+
+Replace `/path/to/local/go-nitro/packages/nitro-rpc-client` with the actual path to local nitro-rpc-client package
+
 ### Using the create-channels script
 
 A test script is available to easily create channels. It requires 3 running RPC servers for Alice,Bob, and Irene. The `go-nitro` repository contains a [test script to start and run the required RPC servers](https://github.com/statechannels/go-nitro#start-rpc-servers-test-script)
