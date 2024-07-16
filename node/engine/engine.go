@@ -5,12 +5,13 @@ import (
 	"context"
 	"crypto/sha256"
 	"encoding/json"
-	"errors"
 	"fmt"
 	"log/slog"
 	"math/big"
 	"sync"
 	"time"
+
+	"github.com/pkg/errors"
 
 	"github.com/ethereum/go-ethereum/common"
 	"github.com/ethereum/go-ethereum/crypto/secp256k1"
@@ -239,11 +240,7 @@ func (e *Engine) run(ctx context.Context) {
 // a running ledger channel by pulling its corresponding objective
 // from the store and attempting progress.
 func (e *Engine) handleProposal(proposal consensus_channel.Proposal) (EngineEvent, error) {
-	id, err := getProposalObjectiveId(proposal)
-	if err != nil {
-		e.ErrChan <- err
-		return EngineEvent{}, err
-	}
+	id := getProposalObjectiveId(proposal)
 
 	obj, err := e.store.GetObjectiveById(id)
 	if err != nil {
@@ -349,11 +346,7 @@ func (e *Engine) handleMessage(message protocols.Message) (EngineEvent, error) {
 
 	for _, entry := range message.LedgerProposals { // The ledger protocol requires us to process these proposals in turnNum order.
 		// Here we rely on the sender having packed them into the message in that order, and do not apply any checks or sorting of our own.
-		id, err := getProposalObjectiveId(entry.Proposal)
-		if err != nil {
-			e.ErrChan <- err
-			return EngineEvent{}, err
-		}
+		id := getProposalObjectiveId(entry.Proposal)
 
 		o, err := e.store.GetObjectiveById(id)
 		if err != nil {
@@ -675,6 +668,7 @@ func (e *Engine) sendMessages(msgs []protocols.Message) {
 		err := e.msg.Send(message)
 		if err != nil {
 			e.logger.Error(err.Error())
+			err = errors.WithStack(errors.New(err.Error()))
 			e.ErrChan <- err
 			return
 		}
@@ -970,25 +964,25 @@ func fromMsgErr(id protocols.ObjectiveId, err error) error {
 }
 
 // getProposalObjectiveId returns the objectiveId for a proposal.
-func getProposalObjectiveId(p consensus_channel.Proposal) (protocols.ObjectiveId, error) {
+func getProposalObjectiveId(p consensus_channel.Proposal) protocols.ObjectiveId {
 	switch p.Type() {
 	case consensus_channel.AddProposal:
 		{
 			const prefix = virtualfund.ObjectivePrefix
 			channelId := p.ToAdd.Guarantee.Target().String()
-			return protocols.ObjectiveId(prefix + channelId), nil
+			return protocols.ObjectiveId(prefix + channelId)
 
 		}
 	case consensus_channel.RemoveProposal:
 		{
 			const prefix = virtualdefund.ObjectivePrefix
 			channelId := p.ToRemove.Target.String()
-			return protocols.ObjectiveId(prefix + channelId), nil
+			return protocols.ObjectiveId(prefix + channelId)
 
 		}
 	default:
 		{
-			return "", fmt.Errorf("invalid proposal type")
+			panic("invalid proposal type")
 		}
 	}
 }
@@ -1063,6 +1057,6 @@ func (e *Engine) checkError(err error) {
 			}
 		}
 
-		e.ErrChan <- err
+		panic(err)
 	}
 }

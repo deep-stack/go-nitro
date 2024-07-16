@@ -8,6 +8,7 @@ import (
 	"runtime/debug"
 	"time"
 
+	"github.com/pkg/errors"
 	"github.com/statechannels/go-nitro/channel/state/outcome"
 	"github.com/statechannels/go-nitro/internal/safesync"
 	"github.com/statechannels/go-nitro/node/engine"
@@ -27,6 +28,10 @@ import (
 	"github.com/statechannels/go-nitro/rand"
 	"github.com/statechannels/go-nitro/types"
 )
+
+type stackTracer interface {
+	StackTrace() errors.StackTrace
+}
 
 // Node provides the interface for the consuming application
 type Node struct {
@@ -376,6 +381,18 @@ func (n *Node) CounterChallenge(id types.Destination, action types.CounterChalle
 	n.engine.CounterChallengeRequestsFromAPI <- types.CounterChallengeRequest{ChannelId: id, Action: action}
 }
 
+func printStackTrace(err error) {
+	errWithStack, ok := err.(stackTracer)
+	if !ok {
+		slog.Error("err does not implement stacktracer interface")
+		slog.Error(err.Error())
+	}
+
+	st := errWithStack.StackTrace()
+	fmt.Println("Stack trace: ")
+	fmt.Printf("%+v \n", st)
+}
+
 func (n *Node) listenForErrors(msgServiceErrChan *chan error, chainServiceErrChan *chan error, engineErrChan *chan error) {
 	// Listen for error channel where errors from child functions are pushed
 	var err error
@@ -390,8 +407,10 @@ func (n *Node) listenForErrors(msgServiceErrChan *chan error, chainServiceErrCha
 	// else panic (if no one is listening)
 	select {
 	case n.ErrListener <- err:
-		break
+		printStackTrace(err)
+
 	default:
+		printStackTrace(err)
 		panic(err)
 	}
 }

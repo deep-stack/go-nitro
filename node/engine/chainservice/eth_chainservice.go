@@ -12,6 +12,7 @@ import (
 	"github.com/ethereum/go-ethereum/accounts/abi/bind"
 	"github.com/ethereum/go-ethereum/common"
 	ethTypes "github.com/ethereum/go-ethereum/core/types"
+	"github.com/pkg/errors"
 
 	"github.com/statechannels/go-nitro/channel/state"
 	"github.com/statechannels/go-nitro/internal/logging"
@@ -232,8 +233,8 @@ func (ecs *EthChainService) listenForErrors(errChan <-chan error) {
 			return
 		case err := <-errChan:
 			ecs.logger.Error("chain service error", "error", err)
+			err = errors.New(err.Error())
 			ecs.errChan <- err
-			panic(err)
 		}
 	}
 }
