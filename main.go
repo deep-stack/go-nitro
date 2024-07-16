@@ -10,6 +10,7 @@ import (
 	"syscall"
 
 	"github.com/ethereum/go-ethereum/common"
+	"github.com/statechannels/go-nitro/cmd/utils"
 	"github.com/statechannels/go-nitro/internal/logging"
 	nodeUtils "github.com/statechannels/go-nitro/internal/node"
 	"github.com/statechannels/go-nitro/internal/rpc"
@@ -224,6 +225,9 @@ func main() {
 		Flags:  flags,
 		Before: altsrc.InitInputSourceWithContext(flags, altsrc.NewTomlSourceFromFlagFunc(CONFIG)),
 		Action: func(cCtx *cli.Context) error {
+			chainPk = utils.TrimHexPrefix(chainPk)
+			pkString = utils.TrimHexPrefix(pkString)
+
 			storeOpts := store.StoreOpts{
 				PkBytes:            common.Hex2Bytes(pkString),
 				UseDurableStore:    useDurableStore,

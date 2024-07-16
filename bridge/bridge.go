@@ -14,6 +14,7 @@ import (
 	"github.com/statechannels/go-nitro/node/query"
 	"github.com/statechannels/go-nitro/protocols/bridgedfund"
 	"github.com/statechannels/go-nitro/protocols/directfund"
+	"github.com/tidwall/buntdb"
 
 	"github.com/statechannels/go-nitro/node/engine/chainservice"
 	"github.com/statechannels/go-nitro/node/engine/store"
@@ -22,14 +23,9 @@ import (
 )
 
 const (
-	L1_DURABLE_STORE_SUB_DIR = "l1-nitro-store"
-	L2_DURABLE_STORE_SUB_DIR = "l2-nitro-store"
+	L1_DURABLE_STORE_SUB_DIR = "l1-node"
+	L2_DURABLE_STORE_SUB_DIR = "l2-node"
 )
-
-type MirrorChannelDetails struct {
-	l1ChannelId types.Destination
-	isCreated   bool
-}
 
 type Asset struct {
 	L1AssetAddress string `toml:"l1AssetAddress"`
@@ -41,6 +37,8 @@ type L1ToL2AssetConfig struct {
 }
 
 type Bridge struct {
+	bridgeStore *DurableStore
+
 	nodeL1         *node.Node
 	storeL1        store.Store
 	chainServiceL1 chainservice.ChainService
@@ -152,6 +150,13 @@ func (b *Bridge) Start(configOpts BridgeConfig) (nodeL1MultiAddress string, node
 	ctx, cancelFunc := context.WithCancel(context.Background())
 	b.cancel = cancelFunc
 
+	ds, err := NewDurableStore(configOpts.DurableStoreDir, buntdb.Config{})
+	if err != nil {
+		return nodeL1MultiAddress, nodeL2MultiAddress, err
+	}
+
+	b.bridgeStore = ds
+
 	go b.run(ctx)
 
 	return msgServiceL1.MultiAddr, msgServiceL2.MultiAddr, nil
@@ -228,7 +233,11 @@ func (b *Bridge) processCompletedObjectivesFromL1(objId protocols.ObjectiveId) e
 			return err
 		}
 
-		b.mirrorChannelMap[l2LedgerChannelResponse.ChannelId] = MirrorChannelDetails{l1ChannelId: l1LedgerChannel.Id}
+		err = b.bridgeStore.SetMirrorChannelDetails(l2LedgerChannelResponse.ChannelId, MirrorChannelDetails{L1ChannelId: l1LedgerChannel.Id})
+		if err != nil {
+			return err
+		}
+
 		slog.Debug("Started creating mirror ledger channel in L2", "channelId", l2LedgerChannelResponse.ChannelId)
 	}
 
@@ -244,12 +253,18 @@ func (b *Bridge) processCompletedObjectivesFromL2(objId protocols.ObjectiveId) e
 	bFo, isBfo := obj.(*bridgedfund.Objective)
 	if isBfo {
 		l2channelId := bFo.OwnsChannel()
-		l2Info := b.mirrorChannelMap[l2channelId]
-		l2Info.isCreated = true
-		b.mirrorChannelMap[l2channelId] = l2Info
+		mirrorChannelDetails, err := b.bridgeStore.GetMirrorChannelDetails(l2channelId)
+		if err != nil {
+			return err
+		}
+
+		err = b.bridgeStore.SetMirrorChannelDetails(l2channelId, MirrorChannelDetails{L1ChannelId: mirrorChannelDetails.L1ChannelId, IsCreated: true})
+		if err != nil {
+			return err
+		}
 
 		// Node B calls contract method to store L2ChannelId => L1ChannelId
-		setL2ToL1Tx := protocols.NewSetL2ToL1Transaction(l2Info.l1ChannelId, l2channelId)
+		setL2ToL1Tx := protocols.NewSetL2ToL1Transaction(mirrorChannelDetails.L1ChannelId, l2channelId)
 		err = b.chainServiceL1.SendTransaction(setL2ToL1Tx)
 		if err != nil {
 			return fmt.Errorf("error in send transaction %w", err)
@@ -270,13 +285,14 @@ func (b Bridge) GetBridgeAddress() common.Address {
 	return *b.nodeL1.Address
 }
 
-func (b Bridge) GetMirrorChannel(l1ChannelId types.Destination) (l2ChannelId types.Destination, isCreated bool) {
-	for key, value := range b.mirrorChannelMap {
-		if value.l1ChannelId == l1ChannelId {
-			return key, value.isCreated
-		}
+func (b Bridge) GetL2ChannelIdByL1ChannelId(l1ChannelId types.Destination) (l2ChannelId types.Destination, isCreated bool) {
+	var err error
+	l2ChannelId, isCreated, err = b.bridgeStore.GetMirrorChannelDetailsByL1Channel(l1ChannelId)
+	if err != nil {
+		return l2ChannelId, isCreated
 	}
-	return types.Destination{}, false
+
+	return l2ChannelId, isCreated
 }
 
 func (b Bridge) GetAllL2Channels() ([]query.LedgerChannelInfo, error) {
@@ -299,7 +315,7 @@ func (b *Bridge) Close() error {
 		return err
 	}
 
-	return nil
+	return b.bridgeStore.Close()
 }
 
 func (b *Bridge) checkError(err error) {

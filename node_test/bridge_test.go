@@ -105,7 +105,7 @@ func TestBridgedFund(t *testing.T) {
 
 		// Wait for mirror channel to be created
 		completedMirrorChannel := <-bridge.CompletedMirrorChannels()
-		l2LedgerChannelId, _ = bridge.GetMirrorChannel(l1LedgerChannelResponse.ChannelId)
+		l2LedgerChannelId, _ = bridge.GetL2ChannelIdByL1ChannelId(l1LedgerChannelResponse.ChannelId)
 		testhelpers.Assert(t, completedMirrorChannel == l2LedgerChannelId, "Expects mirror channel id to be %v", l2LedgerChannelId)
 		checkLedgerChannel(t, l1LedgerChannelResponse.ChannelId, initialLedgerOutcome(*nodeA.Address, bridgeAddress, ledgerChannelDeposit, 0, types.Address{}), query.Open, nodeA)
 		checkLedgerChannel(t, l2LedgerChannelId, initialLedgerOutcome(bridgeAddress, *nodeAPrime.Address, 0, ledgerChannelDeposit, types.Address{}), query.Open, nodeAPrime)
