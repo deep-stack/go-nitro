@@ -205,6 +205,12 @@ export function getAndValidateResult<T extends RequestMethod>(
         result,
         convertToInternalLedgerChannelsType
       );
+    case "get_all_l2_channels":
+      return validateAndConvertResult(
+        ledgerChannelsSchema,
+        result,
+        convertToInternalLedgerChannelsType
+      );
     case "get_payment_channel":
       return validateAndConvertResult(
         paymentChannelSchema,

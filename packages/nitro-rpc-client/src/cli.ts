@@ -72,6 +72,24 @@ yargs(hideBin(process.argv))
     }
   )
   .command(
+    "get-all-l2-channels",
+    "Get all L2 channels",
+    async () => {},
+    async (yargs) => {
+      const rpcPort = yargs.p;
+
+      const rpcClient = await NitroRpcClient.CreateHttpNitroClient(
+        getLocalRPCUrl(rpcPort)
+      );
+      const ledgers = await rpcClient.GetAllL2Channels();
+      for (const ledger of ledgers) {
+        console.log(`${compactJson(ledger)}`);
+      }
+      await rpcClient.Close();
+      process.exit(0);
+    }
+  )
+  .command(
     "get-payment-channels-by-ledger <ledgerId>",
     "Gets any payment channels funded by the given ledger",
     (yargsBuilder) => {

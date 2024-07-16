@@ -31,6 +31,9 @@ const (
 	CreateVoucherRequestMethod        RequestMethod = "create_voucher"
 	ReceiveVoucherRequestMethod       RequestMethod = "receive_voucher"
 	CounterChallengeRequestMethod     RequestMethod = "counter_challenge"
+
+	// Bridge methods
+	GetAllL2ChannelsRequestMethod RequestMethod = "get_all_l2_channels"
 )
 
 type NotificationMethod string

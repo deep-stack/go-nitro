@@ -284,7 +284,7 @@ func main() {
 				}
 			}
 
-			rpcServer, err := rpc.InitializeRpcServer(node, rpcPort, useNats, &cert)
+			rpcServer, err := rpc.InitializeNodeRpcServer(node, rpcPort, useNats, &cert)
 			if err != nil {
 				return err
 			}
