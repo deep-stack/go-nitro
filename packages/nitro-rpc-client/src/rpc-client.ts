@@ -137,21 +137,21 @@ export class NitroRpcClient implements RpcClientApi {
 
   public async CreateLedgerChannel(
     counterParty: string,
+    assetAddress: string,
     alphaAmount: number,
     betaAmount: number
   ): Promise<ObjectiveResponse> {
-    const asset = `0x${"00".repeat(20)}`;
     const payload: DirectFundPayload = {
       CounterParty: counterParty,
       ChallengeDuration: 0,
       Outcome: createOutcome(
-        asset,
+        assetAddress,
         await this.GetAddress(),
         counterParty,
         alphaAmount,
         betaAmount
       ),
-      AppDefinition: asset,
+      AppDefinition: assetAddress,
       AppData: "0x00",
       Nonce: Date.now(),
     };

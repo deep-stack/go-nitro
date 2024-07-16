@@ -10,6 +10,8 @@ import 'solidity-coverage';
 import 'hardhat-deploy';
 import 'hardhat-watcher';
 
+import './tasks/transfer';
+
 dotenv.config();
 
 const DEFAULT_GETH_CHAIN_ID = '1337';

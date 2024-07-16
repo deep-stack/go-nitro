@@ -259,16 +259,38 @@ func (ecs *EthChainService) SendTransaction(tx protocols.ChainTransaction) error
 			if tokenAddress == ethTokenAddress {
 				txOpts.Value = amount
 			} else {
-				tokenTransactor, err := Token.NewTokenTransactor(tokenAddress, ecs.chain)
+				token, err := Token.NewToken(tokenAddress, ecs.chain)
 				if err != nil {
 					return err
 				}
-				_, err = tokenTransactor.Approve(ecs.defaultTxOpts(), ecs.naAddress, amount)
+
+				approvalLogsChan := make(chan *Token.TokenApproval)
+
+				approvalSubscription, err := token.WatchApproval(&bind.WatchOpts{Context: ecs.ctx}, approvalLogsChan, []common.Address{ecs.txSigner.From}, []common.Address{ecs.naAddress})
 				if err != nil {
 					return err
 				}
-				// TODO: wait for the Approve tx to be mined before continuing
+
+				_, err = token.Approve(ecs.defaultTxOpts(), ecs.naAddress, amount)
+				if err != nil {
+					return err
+				}
+
+				// Wait for the Approve tx to be mined before continuing
+			approvalEventListenerLoop:
+				for {
+					select {
+					case log := <-approvalLogsChan:
+						if log.Owner == ecs.txSigner.From {
+							approvalSubscription.Unsubscribe()
+							break approvalEventListenerLoop
+						}
+					case err := <-approvalSubscription.Err():
+						return err
+					}
+				}
 			}
+
 			holdings, err := ecs.na.Holdings(&bind.CallOpts{}, tokenAddress, tx.ChannelId())
 			ecs.logger.Debug("existing holdings", "holdings", holdings)
 

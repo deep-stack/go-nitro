@@ -4,3 +4,5 @@ l1chainurl         = "ws://127.0.0.1:8545"
 l2chainurl         = "ws://127.0.0.1:8546"
 nodel1msgport      = 3005
 nodel2msgport      = 3006
+nodel2rpcport      = 4006
+assetmapfilepath   = "bridge-assets-map.toml"

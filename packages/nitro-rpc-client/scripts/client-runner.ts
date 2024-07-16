@@ -11,6 +11,7 @@ import {
   getLocalRPCUrl,
   logOutChannelUpdates,
 } from "../src/utils";
+import { ZERO_ETHEREUM_ADDRESS } from "../src/constants";
 
 const clientNames = ["alice", "irene", "bob", "ivan"] as const;
 const clientPortMap: Record<ClientNames, number> = {
@@ -170,11 +171,13 @@ yargs(hideBin(process.argv))
         console.log("Constructing ledger channels");
         const aliceLedger = await aliceClient.CreateLedgerChannel(
           ireneAddress,
+          ZERO_ETHEREUM_ADDRESS,
           yargs.ledgerdeposit,
           yargs.ledgerdeposit
         );
         const bobLedger = await ireneClient.CreateLedgerChannel(
           bobAddress,
+          ZERO_ETHEREUM_ADDRESS,
           yargs.ledgerdeposit,
           yargs.ledgerdeposit
         );
@@ -268,6 +271,7 @@ yargs(hideBin(process.argv))
       console.log("Constructing ledger channels");
       const ledger = await leftClient.CreateLedgerChannel(
         rightAddress,
+        ZERO_ETHEREUM_ADDRESS,
         1_000_000,
         1_000_000
       );

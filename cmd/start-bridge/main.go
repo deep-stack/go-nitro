@@ -2,10 +2,12 @@ package main
 
 import (
 	"crypto/tls"
+	"io"
 	"log"
 	"log/slog"
 	"os"
 
+	"github.com/BurntSushi/toml"
 	"github.com/statechannels/go-nitro/bridge"
 	"github.com/statechannels/go-nitro/cmd/utils"
 	"github.com/statechannels/go-nitro/internal/logging"
@@ -26,10 +28,11 @@ const (
 	CHAIN_PK         = "chainpk"
 	STATE_CHANNEL_PK = "statechannelpk"
 
-	NA_ADDRESS     = "naaddress"
-	VPA_ADDRESS    = "vpaaddress"
-	CA_ADDRESS     = "caaddress"
-	BRIDGE_ADDRESS = "bridgeaddress"
+	NA_ADDRESS         = "naaddress"
+	VPA_ADDRESS        = "vpaaddress"
+	CA_ADDRESS         = "caaddress"
+	BRIDGE_ADDRESS     = "bridgeaddress"
+	ASSET_MAP_FILEPATH = "assetmapfilepath"
 
 	DURABLE_STORE_DIR           = "nodel1durablestorefolder"
 	NODEL2_DURABLE_STORE_FOLDER = "nodel2durablestorefolder"
@@ -51,6 +54,8 @@ func main() {
 	var l1chainstartblock, l2chainstartblock uint64
 
 	var tlscertfilepath, tlskeyfilepath string
+
+	var assetsmapfilepath string
 
 	// urfave default precedence for flag value sources (highest to lowest):
 	// 1. Command line flag value
@@ -106,6 +111,11 @@ func main() {
 			Usage:       "Specifies the bridge contract address",
 			Destination: &bridgeaddress,
 			EnvVars:     []string{"BRIDGE_ADDRESS"},
+		}),
+		altsrc.NewPathFlag(&cli.PathFlag{
+			Name:        ASSET_MAP_FILEPATH,
+			Usage:       "Filepath to the map of asset address on L1 to asset address of L2",
+			Destination: &assetsmapfilepath,
 		}),
 		altsrc.NewStringFlag(&cli.StringFlag{
 			Name:        DURABLE_STORE_DIR,
@@ -169,6 +179,28 @@ func main() {
 		Flags:  flags,
 		Before: altsrc.InitInputSourceWithContext(flags, altsrc.NewTomlSourceFromFlagFunc(CONFIG)),
 		Action: func(cCtx *cli.Context) error {
+			// Variable to hold the deserialized data
+			var assets bridge.L1ToL2AssetConfig
+
+			if assetsmapfilepath != "" {
+				tomlFile, err := os.Open(assetsmapfilepath)
+				if err != nil {
+					return err
+				}
+				defer tomlFile.Close()
+
+				byteValue, err := io.ReadAll(tomlFile)
+				if err != nil {
+					return err
+				}
+
+				// Deserialize toml file data into the struct
+				err = toml.Unmarshal(byteValue, &assets)
+				if err != nil {
+					return err
+				}
+			}
+
 			bridgeConfig := bridge.BridgeConfig{
 				L1ChainUrl:        l1chainurl,
 				L2ChainUrl:        l2chainurl,
@@ -184,12 +216,13 @@ func main() {
 				BridgePublicIp:    bridgepublicip,
 				NodeL1MsgPort:     nodel1msgport,
 				NodeL2MsgPort:     nodel2msgport,
+				Assets:            assets.Assets,
 			}
 
 			logging.SetupDefaultLogger(os.Stdout, slog.LevelDebug)
-			bridge := bridge.New(bridgeConfig)
+			bridge := bridge.New()
 
-			bridgeNodeL1Multiaddress, bridgeNodeL2Multiaddress, nodeL2, err := bridge.Start()
+			bridgeNodeL1Multiaddress, bridgeNodeL2Multiaddress, nodeL2, err := bridge.Start(bridgeConfig)
 			if err != nil {
 				log.Fatal(err)
 			}

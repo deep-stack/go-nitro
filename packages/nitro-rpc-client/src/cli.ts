@@ -8,6 +8,7 @@ import { hideBin } from "yargs/helpers";
 import { NitroRpcClient } from "./rpc-client";
 import { compactJson, getLocalRPCUrl, logOutChannelUpdates } from "./utils";
 import { CounterChallengeAction } from "./types";
+import { ZERO_ETHEREUM_ADDRESS } from "./constants";
 
 yargs(hideBin(process.argv))
   .scriptName("nitro-rpc-client")
@@ -108,6 +109,11 @@ yargs(hideBin(process.argv))
           type: "string",
           demandOption: true,
         })
+        .option("assetAddress", {
+          describe: "Address of the token to be used",
+          type: "string",
+          default: ZERO_ETHEREUM_ADDRESS,
+        })
         .option("alphaAmount", {
           describe: "The amount to be funded by alpha node",
           type: "number",
@@ -129,6 +135,7 @@ yargs(hideBin(process.argv))
 
       const dfObjective = await rpcClient.CreateLedgerChannel(
         yargs.counterparty,
+        yargs.assetAddress,
         yargs.alphaAmount,
         yargs.betaAmount
       );
