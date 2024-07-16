@@ -68,10 +68,10 @@ Options:
 ### Global install
 
 ```bash
-yarn global add file:/path/to/local/go-nitro/packages/nitro-rpc-client
+yarn global add file:</path/to/local/go-nitro/packages/nitro-rpc-client>
 ```
 
-Replace `/path/to/local/go-nitro/packages/nitro-rpc-client` with the actual path to local nitro-rpc-client package
+Replace `</path/to/local/go-nitro/packages/nitro-rpc-client>` with the actual path to local nitro-rpc-client package
 
 ### Using the create-channels script
 
