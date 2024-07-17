@@ -271,25 +271,32 @@ func (ecs *EthChainService) SendTransaction(tx protocols.ChainTransaction) error
 					return err
 				}
 
-				_, err = token.Approve(ecs.defaultTxOpts(), ecs.naAddress, amount)
+				a, err := token.Approve(ecs.defaultTxOpts(), ecs.naAddress, amount)
 				if err != nil {
 					return err
 				}
+				fmt.Println("after approve", a.Hash().String(), a.Gas())
 
 				// Wait for the Approve tx to be mined before continuing
 			approvalEventListenerLoop:
 				for {
 					select {
 					case log := <-approvalLogsChan:
+						fmt.Println("inside approve outside if", log.Owner.String())
 						if log.Owner == ecs.txSigner.From {
+							fmt.Println("inside approval")
+
 							approvalSubscription.Unsubscribe()
 							break approvalEventListenerLoop
 						}
 					case err := <-approvalSubscription.Err():
+						fmt.Println("approval error")
+
 						return err
 					}
 				}
 			}
+			fmt.Println("outside for loop")
 
 			holdings, err := ecs.na.Holdings(&bind.CallOpts{}, tokenAddress, tx.ChannelId())
 			ecs.logger.Debug("existing holdings", "holdings", holdings)
