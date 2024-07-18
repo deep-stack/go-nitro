@@ -85,7 +85,6 @@ func (o Objective) MarshalJSON() ([]byte, error) {
 		left = []byte("null")
 	} else {
 		left, err = o.ToMyLeft.MarshalJSON()
-
 		if err != nil {
 			return nil, fmt.Errorf("error marshaling left channel of %v: %w", o, err)
 		}
@@ -95,7 +94,6 @@ func (o Objective) MarshalJSON() ([]byte, error) {
 		right = []byte("null")
 	} else {
 		right, err = o.ToMyRight.MarshalJSON()
-
 		if err != nil {
 			return nil, fmt.Errorf("error marshaling right channel of %v: %w", o, err)
 		}
