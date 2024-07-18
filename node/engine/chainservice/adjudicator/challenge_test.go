@@ -14,7 +14,6 @@ import (
 	"github.com/ethereum/go-ethereum/accounts/abi/bind"
 	"github.com/ethereum/go-ethereum/accounts/abi/bind/backends"
 	"github.com/ethereum/go-ethereum/common"
-	"github.com/ethereum/go-ethereum/core"
 	ethtypes "github.com/ethereum/go-ethereum/core/types"
 	"github.com/ethereum/go-ethereum/crypto"
 	"github.com/ethereum/go-ethereum/eth/ethconfig"
@@ -216,7 +215,7 @@ func prepareSimulatedBackend(t *testing.T) preparedChain {
 	// Setup "blockchain" params
 	balance := new(big.Int)
 	balance.SetString("10000000000000000000", 10) // 10 eth in wei
-	gAlloc := map[common.Address]core.GenesisAccount{
+	gAlloc := map[common.Address]ethtypes.Account{
 		address:  {Balance: balance},
 		address2: {Balance: balance},
 	}

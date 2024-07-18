@@ -648,7 +648,7 @@ func (ecs *EthChainService) updateEventTracker(errorChan chan<- error, block *Bl
 		// Ensure event & associated tx is still in the chain before adding to eventsToDispatch
 		oldBlock, err := ecs.chain.BlockByNumber(context.Background(), new(big.Int).SetUint64(chainEvent.BlockNumber))
 		if err != nil {
-			ecs.logger.Error("failed to fetch block: %v", err)
+			ecs.logger.Error("failed to fetch block", "err", err)
 			errorChan <- fmt.Errorf("failed to fetch block: %v", err)
 			return
 		}

@@ -7,7 +7,6 @@ import (
 
 	"github.com/ethereum/go-ethereum/accounts/abi/bind"
 	"github.com/ethereum/go-ethereum/common"
-	"github.com/ethereum/go-ethereum/core"
 	ethTypes "github.com/ethereum/go-ethereum/core/types"
 	"github.com/ethereum/go-ethereum/crypto"
 	"github.com/ethereum/go-ethereum/eth/ethconfig"
@@ -104,7 +103,7 @@ func (sbcs *SimulatedBackendChainService) SendTransaction(tx protocols.ChainTran
 // SetupSimulatedBackend creates a new SimulatedBackend with the supplied number of transacting accounts, deploys the Nitro Adjudicator and returns both.
 func SetupSimulatedBackend(numAccounts uint64) (SimulatedChain, Bindings, []*bind.TransactOpts, error) {
 	accounts := make([]*bind.TransactOpts, numAccounts)
-	genesisAlloc := make(map[common.Address]core.GenesisAccount)
+	genesisAlloc := make(map[common.Address]ethTypes.Account)
 	contractBindings := Bindings{}
 
 	balance, success := new(big.Int).SetString("10000000000000000000", 10) // 10 eth in wei
@@ -120,7 +119,7 @@ func SetupSimulatedBackend(numAccounts uint64) (SimulatedChain, Bindings, []*bin
 		if err != nil {
 			return nil, contractBindings, accounts, err
 		}
-		genesisAlloc[accounts[i].From] = core.GenesisAccount{Balance: balance}
+		genesisAlloc[accounts[i].From] = ethTypes.Account{Balance: balance}
 	}
 
 	// Setup "blockchain"
