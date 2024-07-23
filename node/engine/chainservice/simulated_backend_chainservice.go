@@ -152,6 +152,9 @@ func SetupSimulatedBackend(numAccounts uint64) (SimulatedChain, Bindings, []*bin
 		return nil, contractBindings, accounts, err
 	}
 
+	// https://github.com/ethereum/go-ethereum/issues/15930
+	sim.Commit()
+
 	// Distributed tokens to all accounts
 	INITIAL_TOKEN_BALANCE := big.NewInt(10_000_000)
 	for _, account := range accounts {
