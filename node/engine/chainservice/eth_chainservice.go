@@ -5,10 +5,12 @@ import (
 	"fmt"
 	"log/slog"
 	"math/big"
+	"strings"
 	"sync"
 	"time"
 
 	"github.com/ethereum/go-ethereum"
+	"github.com/ethereum/go-ethereum/accounts/abi"
 	"github.com/ethereum/go-ethereum/accounts/abi/bind"
 	"github.com/ethereum/go-ethereum/common"
 	ethTypes "github.com/ethereum/go-ethereum/core/types"
@@ -81,6 +83,7 @@ type EthChainService struct {
 	eventTracker             *eventTracker
 	eventSub                 ethereum.Subscription
 	newBlockSub              ethereum.Subscription
+	newBlockChan             chan *ethTypes.Header
 }
 
 // MAX_QUERY_BLOCK_RANGE is the maximum range of blocks we query for events at once.
@@ -102,6 +105,12 @@ const REQUIRED_BLOCK_CONFIRMATIONS = 2
 // MAX_EPOCHS is the maximum range of old epochs we can query with a single "FilterLogs" request
 // This is a restriction enforced by the rpc provider
 const MAX_EPOCHS = 60480
+
+// BLOCKS_WITHOUT_EVENT_THRESHOLD is the maximum number of blocks the node will wait for an event to confirm transaction to be mined
+const BLOCKS_WITHOUT_EVENT_THRESHOLD = 16
+
+// GAS_LIMIT_MULTIPLIER is the multiplier for updating gas limit
+const GAS_LIMIT_MULTIPLIER = 1.5
 
 // NewEthChainService is a convenient wrapper around newEthChainService, which provides a simpler API
 func NewEthChainService(chainOpts ChainOpts) (ChainService, error) {
@@ -151,11 +160,13 @@ func newEthChainService(chain ethChain, startBlockNum uint64, na *NitroAdjudicat
 	tracker := NewEventTracker(startBlock)
 
 	// Use a buffered channel so we don't have to worry about blocking on writing to the channel.
-	ecs := EthChainService{chain, na, naAddress, caAddress, vpaAddress, txSigner, make(chan Event, 10), logger, ctx, cancelCtx, &sync.WaitGroup{}, tracker, nil, nil}
+	ecs := EthChainService{chain, na, naAddress, caAddress, vpaAddress, txSigner, make(chan Event, 10), logger, ctx, cancelCtx, &sync.WaitGroup{}, tracker, nil, nil, nil}
 	errChan, newBlockChan, eventChan, eventQuery, err := ecs.subscribeForLogs()
 	if err != nil {
 		return nil, err
 	}
+
+	ecs.newBlockChan = newBlockChan
 
 	// Prevent go routines from processing events before checkForMissedEvents completes
 	ecs.eventTracker.mu.Lock()
@@ -264,6 +275,8 @@ func (ecs *EthChainService) SendTransaction(tx protocols.ChainTransaction) error
 					return err
 				}
 
+				approveTxOpts := txOpts
+
 				approvalLogsChan := make(chan *Token.TokenApproval)
 
 				approvalSubscription, err := token.WatchApproval(&bind.WatchOpts{Context: ecs.ctx}, approvalLogsChan, []common.Address{ecs.txSigner.From}, []common.Address{ecs.naAddress})
@@ -271,12 +284,20 @@ func (ecs *EthChainService) SendTransaction(tx protocols.ChainTransaction) error
 					return err
 				}
 
-				_, err = token.Approve(ecs.defaultTxOpts(), ecs.naAddress, amount)
+				approveTx, err := token.Approve(ecs.defaultTxOpts(), ecs.naAddress, amount)
 				if err != nil {
 					return err
 				}
 
-				// Wait for the Approve tx to be mined before continuing
+				// Get current block
+				currentBlock := <-ecs.newBlockChan
+
+				isApproveTxRetried := false
+
+				// Transaction hash of retried Approve transaction
+				var retryApproveTxHash common.Hash
+
+				// Wait for the Approve transaction to be mined before continuing
 			approvalEventListenerLoop:
 				for {
 					select {
@@ -287,6 +308,33 @@ func (ecs *EthChainService) SendTransaction(tx protocols.ChainTransaction) error
 						}
 					case err := <-approvalSubscription.Err():
 						return err
+					case newBlock := <-ecs.newBlockChan:
+						if (newBlock.Number.Int64() - currentBlock.Number.Int64()) > BLOCKS_WITHOUT_EVENT_THRESHOLD {
+							if isApproveTxRetried {
+								return fmt.Errorf("approve transaction with hash %s was retried with higher gas and event Approval was not emitted till block %s", retryApproveTxHash, newBlock.Number.String())
+							}
+
+							slog.Error("event Approval was not emitted", "approveTxHash", approveTx.Hash().String())
+
+							// Estimate gas for new Approve transaction
+							estimatedGasLimit, err := ecs.estimateGasForApproveTx(tokenAddress, amount)
+							if err != nil {
+								return err
+							}
+
+							// Multiply estimated gas limit with set multiplier
+							approveTxOpts.GasLimit = uint64(float64(estimatedGasLimit) * GAS_LIMIT_MULTIPLIER)
+							reApproveTx, err := token.Approve(approveTxOpts, ecs.naAddress, amount)
+							if err != nil {
+								return err
+							}
+
+							isApproveTxRetried = true
+							currentBlock = newBlock
+							retryApproveTxHash = reApproveTx.Hash()
+
+							slog.Info("Resubmitted transaction with higher gas limit", "gasLimit", approveTxOpts.GasLimit, "approveTxHash", reApproveTx.Hash().String())
+						}
 					}
 				}
 			}
@@ -738,4 +786,32 @@ func (ecs *EthChainService) Close() error {
 	ecs.cancel()
 	ecs.wg.Wait()
 	return nil
+}
+
+func (ecs *EthChainService) estimateGasForApproveTx(tokenAddress common.Address, amount *big.Int) (uint64, error) {
+	parsedABI, err := abi.JSON(strings.NewReader(Token.TokenABI))
+	if err != nil {
+		return 0, fmt.Errorf("failed to parse ABI: %w", err)
+	}
+
+	data, err := parsedABI.Pack("approve", ecs.naAddress, amount)
+	if err != nil {
+		return 0, fmt.Errorf("failed to encode function call: %w", err)
+	}
+
+	callMsg := ethereum.CallMsg{
+		From:     ecs.txSigner.From,
+		To:       &tokenAddress,
+		GasPrice: nil,
+		Gas:      0,
+		Value:    big.NewInt(0),
+		Data:     data,
+	}
+
+	estimatedGasLimit, err := ecs.chain.EstimateGas(context.Background(), callMsg)
+	if err != nil {
+		return 0, fmt.Errorf("failed to estimate gas: %w", err)
+	}
+
+	return estimatedGasLimit, nil
 }
