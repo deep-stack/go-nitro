@@ -4,9 +4,11 @@ import (
 	"context"
 	"fmt"
 	"log/slog"
+	"math/big"
 	"path/filepath"
 
 	"github.com/ethereum/go-ethereum/common"
+	"github.com/statechannels/go-nitro/channel/consensus_channel"
 	"github.com/statechannels/go-nitro/channel/state/outcome"
 	nodeutils "github.com/statechannels/go-nitro/internal/node"
 	"github.com/statechannels/go-nitro/node"
@@ -14,6 +16,7 @@ import (
 	"github.com/statechannels/go-nitro/node/query"
 	"github.com/statechannels/go-nitro/protocols/bridgedfund"
 	"github.com/statechannels/go-nitro/protocols/directfund"
+	"github.com/statechannels/go-nitro/protocols/virtualdefund"
 	"github.com/tidwall/buntdb"
 
 	"github.com/statechannels/go-nitro/node/engine/chainservice"
@@ -43,8 +46,9 @@ type Bridge struct {
 	storeL1        store.Store
 	chainServiceL1 chainservice.ChainService
 
-	nodeL2  *node.Node
-	storeL2 store.Store
+	nodeL2         *node.Node
+	storeL2        store.Store
+	chainServiceL2 chainservice.ChainService
 
 	cancel                  context.CancelFunc
 	L1ToL2AssetAddressMap   map[common.Address]common.Address
@@ -135,7 +139,7 @@ func (b *Bridge) Start(configOpts BridgeConfig) (nodeL1MultiAddress string, node
 		return nodeL1MultiAddress, nodeL2MultiAddress, err
 	}
 
-	nodeL2, storeL2, msgServiceL2, _, err := nodeutils.InitializeL2Node(chainOptsL2, storeOptsL2, messageOptsL2)
+	nodeL2, storeL2, msgServiceL2, chainServiceL2, err := nodeutils.InitializeL2Node(chainOptsL2, storeOptsL2, messageOptsL2)
 	if err != nil {
 		return nodeL1MultiAddress, nodeL2MultiAddress, err
 	}
@@ -150,6 +154,7 @@ func (b *Bridge) Start(configOpts BridgeConfig) (nodeL1MultiAddress string, node
 	b.chainServiceL1 = chainServiceL1
 	b.nodeL2 = nodeL2
 	b.storeL2 = *storeL2
+	b.chainServiceL2 = chainServiceL2
 
 	ctx, cancelFunc := context.WithCancel(context.Background())
 	b.cancel = cancelFunc
@@ -173,12 +178,18 @@ func (b *Bridge) run(ctx context.Context) {
 	for {
 		var err error
 		select {
-		case objId := <-completedObjectivesInNodeL1:
-			err = b.processCompletedObjectivesFromL1(objId)
-			b.checkError(err)
-		case objId := <-completedObjectivesInNodeL2:
-			err = b.processCompletedObjectivesFromL2(objId)
-			b.checkError(err)
+		case objId, ok := <-completedObjectivesInNodeL1:
+			if ok {
+				err = b.processCompletedObjectivesFromL1(objId)
+				b.checkError(err)
+			}
+
+		case objId, ok := <-completedObjectivesInNodeL2:
+			if ok {
+				err = b.processCompletedObjectivesFromL2(objId)
+				b.checkError(err)
+			}
+
 		case <-ctx.Done():
 			return
 		}
@@ -195,56 +206,57 @@ func (b *Bridge) processCompletedObjectivesFromL1(objId protocols.ObjectiveId) e
 	// Create new outcome for mirrored ledger channel based on L1 ledger channel
 	// Create mirrored ledger channel on L2 based on created outcome
 	ddFo, isDdfo := obj.(*directfund.Objective)
-	if isDdfo {
-		channelId := ddFo.OwnsChannel()
-		slog.Debug("Creating mirror outcome for L2", "channelId", channelId)
-		l1LedgerChannel, err := b.storeL1.GetConsensusChannelById(channelId)
-		if err != nil {
-			return err
-		}
-
-		l1ledgerChannelState := l1LedgerChannel.SupportedSignedState()
-		l1ledgerChannelStateClone := l1ledgerChannelState.Clone()
-
-		// Put NodeBPrime's allocation at index 0 as it creates mirrored ledger channel
-		// Swap the allocations to be set in mirrored ledger channel
-		tempAllocation := l1ledgerChannelStateClone.State().Outcome[0].Allocations[0]
-		l1ledgerChannelStateClone.State().Outcome[0].Allocations[0] = l1ledgerChannelStateClone.State().Outcome[0].Allocations[1]
-		l1ledgerChannelStateClone.State().Outcome[0].Allocations[1] = tempAllocation
-
-		// Create extended state outcome based on l1ChannelState
-		l1ChannelCloneOutcome := l1ledgerChannelStateClone.State().Outcome
-		var l2ChannelOutcome outcome.Exit
-
-		for _, l1Outcome := range l1ChannelCloneOutcome {
-			if (l1Outcome.Asset == common.Address{}) {
-				l2ChannelOutcome = append(l2ChannelOutcome, l1Outcome)
-			} else {
-				value, ok := b.L1ToL2AssetAddressMap[l1Outcome.Asset]
-
-				if !ok {
-					return fmt.Errorf("could not find corresponding L2 asset address for L1 asset address %s", l1Outcome.Asset.String())
-				}
-
-				l1Outcome.Asset = value
-				l2ChannelOutcome = append(l2ChannelOutcome, l1Outcome)
-			}
-		}
-
-		// Create mirrored ledger channel between node BPrime and APrime
-		l2LedgerChannelResponse, err := b.nodeL2.CreateBridgeChannel(l1ledgerChannelStateClone.State().Participants[0], uint32(10), l2ChannelOutcome)
-		if err != nil {
-			return err
-		}
-
-		err = b.bridgeStore.SetMirrorChannelDetails(l2LedgerChannelResponse.ChannelId, MirrorChannelDetails{L1ChannelId: l1LedgerChannel.Id})
-		if err != nil {
-			return err
-		}
-
-		slog.Debug("Started creating mirror ledger channel in L2", "channelId", l2LedgerChannelResponse.ChannelId)
+	if !isDdfo {
+		return nil
 	}
 
+	channelId := ddFo.OwnsChannel()
+	slog.Debug("Creating mirror outcome for L2", "channelId", channelId)
+	l1LedgerChannel, err := b.storeL1.GetConsensusChannelById(channelId)
+	if err != nil {
+		return err
+	}
+
+	l1ledgerChannelState := l1LedgerChannel.SupportedSignedState()
+	l1ledgerChannelStateClone := l1ledgerChannelState.Clone()
+
+	// Put NodeBPrime's allocation at index 0 as it creates mirrored ledger channel
+	// Swap the allocations to be set in mirrored ledger channel
+	tempAllocation := l1ledgerChannelStateClone.State().Outcome[0].Allocations[0]
+	l1ledgerChannelStateClone.State().Outcome[0].Allocations[0] = l1ledgerChannelStateClone.State().Outcome[0].Allocations[1]
+	l1ledgerChannelStateClone.State().Outcome[0].Allocations[1] = tempAllocation
+
+	// Create extended state outcome based on l1ChannelState
+	l1ChannelCloneOutcome := l1ledgerChannelStateClone.State().Outcome
+	var l2ChannelOutcome outcome.Exit
+
+	for _, l1Outcome := range l1ChannelCloneOutcome {
+		if (l1Outcome.Asset == common.Address{}) {
+			l2ChannelOutcome = append(l2ChannelOutcome, l1Outcome)
+		} else {
+			value, ok := b.L1ToL2AssetAddressMap[l1Outcome.Asset]
+
+			if !ok {
+				return fmt.Errorf("could not find corresponding L2 asset address for L1 asset address %s", l1Outcome.Asset.String())
+			}
+
+			l1Outcome.Asset = value
+			l2ChannelOutcome = append(l2ChannelOutcome, l1Outcome)
+		}
+	}
+
+	// Create mirrored ledger channel between node BPrime and APrime
+	l2LedgerChannelResponse, err := b.nodeL2.CreateBridgeChannel(l1ledgerChannelStateClone.State().Participants[0], uint32(10), l2ChannelOutcome)
+	if err != nil {
+		return err
+	}
+
+	err = b.bridgeStore.SetMirrorChannelDetails(l2LedgerChannelResponse.ChannelId, MirrorChannelDetails{L1ChannelId: l1LedgerChannel.Id})
+	if err != nil {
+		return err
+	}
+
+	slog.Debug("Started creating mirror ledger channel in L2", "channelId", l2LedgerChannelResponse.ChannelId)
 	return nil
 }
 
@@ -254,9 +266,11 @@ func (b *Bridge) processCompletedObjectivesFromL2(objId protocols.ObjectiveId) e
 		return fmt.Errorf("error in getting objective %w", err)
 	}
 
-	bFo, isBfo := obj.(*bridgedfund.Objective)
-	if isBfo {
-		l2channelId := bFo.OwnsChannel()
+	switch objective := obj.(type) {
+
+	case *bridgedfund.Objective:
+		l2channelId := objective.OwnsChannel()
+
 		mirrorChannelDetails, err := b.bridgeStore.GetMirrorChannelDetails(l2channelId)
 		if err != nil {
 			return err
@@ -279,9 +293,61 @@ func (b *Bridge) processCompletedObjectivesFromL2(objId protocols.ObjectiveId) e
 		case b.completedMirrorChannels <- l2channelId:
 		default:
 		}
+
+	case *virtualdefund.Objective:
+		// Get ledger channels from virtual defund objective
+		var ledgerChannels []*consensus_channel.ConsensusChannel
+		if objective.ToMyLeft != nil {
+			ledgerChannels = append(ledgerChannels, objective.ToMyLeft)
+		}
+
+		if objective.ToMyRight != nil {
+			ledgerChannels = append(ledgerChannels, objective.ToMyRight)
+		}
+
+		// Updates the bridge contract with the latest state of ledger channels
+		for _, ch := range ledgerChannels {
+			tx, err := b.getUpdateMirrorChannelStateTransaction(ch)
+			if err != nil {
+				return err
+			}
+
+			err = b.chainServiceL2.SendTransaction(tx)
+			if err != nil {
+				return fmt.Errorf("error in send transaction %w", err)
+			}
+		}
+	}
+	return nil
+}
+
+// Get update mirror channel state transaction from given consensus channel
+func (b *Bridge) getUpdateMirrorChannelStateTransaction(con *consensus_channel.ConsensusChannel) (protocols.ChainTransaction, error) {
+	// Get latest outcome bytes
+	ledgerOutcome := con.ConsensusVars().Outcome
+	outcome := ledgerOutcome.AsOutcome()
+	outcomeByte, err := outcome.Encode()
+	if err != nil {
+		return nil, err
 	}
 
-	return nil
+	// Get latest state hash
+	state := con.ConsensusVars().AsState(con.FixedPart())
+	stateHash, err := state.Hash()
+	if err != nil {
+		return nil, err
+	}
+
+	asset := outcome[0].Asset
+	// Calculate latest holdings
+	holdingAmount := new(big.Int)
+	for _, allocation := range outcome[0].Allocations {
+		holdingAmount.Add(holdingAmount, allocation.Amount)
+	}
+
+	updateMirroredChannelStateTx := protocols.NewUpdateMirroredChannelStatesTransaction(con.Id, stateHash, outcomeByte, asset, holdingAmount)
+
+	return updateMirroredChannelStateTx, nil
 }
 
 // Since bridge node addresses are same
