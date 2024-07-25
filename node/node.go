@@ -18,6 +18,7 @@ import (
 	"github.com/statechannels/go-nitro/node/query"
 	"github.com/statechannels/go-nitro/payments"
 	"github.com/statechannels/go-nitro/protocols"
+	"github.com/statechannels/go-nitro/protocols/bridgeddefund"
 	"github.com/statechannels/go-nitro/protocols/bridgedfund"
 	"github.com/statechannels/go-nitro/protocols/directdefund"
 	"github.com/statechannels/go-nitro/protocols/directfund"
@@ -285,6 +286,15 @@ func (n *Node) CreateBridgeChannel(Counterparty types.Address, ChallengeDuration
 // CloseLedgerChannel attempts to close and defund the given directly funded channel.
 func (n *Node) CloseLedgerChannel(channelId types.Destination, isChallenge bool) (protocols.ObjectiveId, error) {
 	objectiveRequest := directdefund.NewObjectiveRequest(channelId, isChallenge)
+
+	// Send the event to the engine
+	n.engine.ObjectiveRequestsFromAPI <- objectiveRequest
+	objectiveRequest.WaitForObjectiveToStart()
+	return objectiveRequest.Id(*n.Address, n.chainId), nil
+}
+
+func (n *Node) CloseBridgeChannel(channelId types.Destination) (protocols.ObjectiveId, error) {
+	objectiveRequest := bridgeddefund.NewObjectiveRequest(channelId)
 
 	// Send the event to the engine
 	n.engine.ObjectiveRequestsFromAPI <- objectiveRequest

@@ -24,6 +24,7 @@ import (
 	"github.com/statechannels/go-nitro/node/query"
 	"github.com/statechannels/go-nitro/payments"
 	"github.com/statechannels/go-nitro/protocols"
+	"github.com/statechannels/go-nitro/protocols/bridgeddefund"
 	"github.com/statechannels/go-nitro/protocols/bridgedfund"
 	"github.com/statechannels/go-nitro/protocols/directdefund"
 	"github.com/statechannels/go-nitro/protocols/directfund"
@@ -587,6 +588,13 @@ func (e *Engine) handleObjectiveRequest(or protocols.ObjectiveRequest) (EngineEv
 			return failedEngineEvent, fmt.Errorf("handleAPIEvent: Could not create bridgedfund objective for %+v: %w", request, err)
 		}
 		return e.attemptProgress(&bfo)
+
+	case bridgeddefund.ObjectiveRequest:
+		bdfo, err := bridgeddefund.NewObjective(request)
+		if err != nil {
+			return failedEngineEvent, fmt.Errorf("handleAPIEvent: Could not create bridgeddefund objective for %+v: %w", request, err)
+		}
+		return e.attemptProgress(&bdfo)
 
 	default:
 		return failedEngineEvent, fmt.Errorf("handleAPIEvent: Unknown objective type %T", request)
