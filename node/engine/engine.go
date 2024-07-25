@@ -594,6 +594,13 @@ func (e *Engine) handleObjectiveRequest(or protocols.ObjectiveRequest) (EngineEv
 		if err != nil {
 			return failedEngineEvent, fmt.Errorf("handleAPIEvent: Could not create bridgeddefund objective for %+v: %w", request, err)
 		}
+
+		// Destroy the consensus channel to prevent it being used (Channel will now take over governance)
+		err = e.store.DestroyConsensusChannel(bdfo.C.Id)
+		if err != nil {
+			return failedEngineEvent, err
+		}
+
 		return e.attemptProgress(&bdfo)
 
 	default:
@@ -951,7 +958,17 @@ func (e *Engine) constructObjectiveFromMessage(id protocols.ObjectiveId, p proto
 
 	case bridgedfund.IsBridgedFundObjective(id):
 		bfo, err := bridgedfund.ConstructFromPayload(false, p, *e.store.GetAddress())
+		if err != nil {
+			return &bridgedfund.Objective{}, fromMsgErr(id, err)
+		}
 		return &bfo, err
+
+	case bridgeddefund.IsBridgedDefundObjective(id):
+		bdfo, err := bridgeddefund.ConstructObjectiveFromPayload(p, false, e.store.GetConsensusChannelById)
+		if err != nil {
+			return &bridgeddefund.Objective{}, fromMsgErr(id, err)
+		}
+		return &bdfo, nil
 
 	default:
 		return &directfund.Objective{}, errors.New("cannot handle unimplemented objective type")

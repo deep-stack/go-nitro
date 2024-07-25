@@ -5,6 +5,7 @@ import (
 	"errors"
 	"fmt"
 	"math/big"
+	"strings"
 
 	"github.com/statechannels/go-nitro/channel"
 	"github.com/statechannels/go-nitro/channel/consensus_channel"
@@ -15,7 +16,20 @@ import (
 
 const ObjectivePrefix = "bridgeddefunding-"
 
+const (
+	WaitingForFinalization protocols.WaitingFor = "WaitingForFinalization"
+	WaitingForNothing      protocols.WaitingFor = "WaitingForNothing" // Finished
+)
+
+const (
+	SignedStatePayload protocols.PayloadType = "SignedStatePayload"
+)
+
 var ErrChannelNotExist error = errors.New("could not find channel")
+
+const (
+	ErrNoFinalState = types.ConstError("cannot spawn direct defund objective without a final state")
+)
 
 // Objective is a cache of data computed by reading from the store. It stores (potentially) infinite data
 type Objective struct {
@@ -54,6 +68,35 @@ func NewObjective(
 	return init, nil
 }
 
+// ConstructObjectiveFromPayload takes in a state and constructs an objective from it.
+func ConstructObjectiveFromPayload(
+	p protocols.ObjectivePayload,
+	preapprove bool,
+	getConsensusChannel GetConsensusChannel,
+) (Objective, error) {
+	ss, err := getSignedStatePayload(p.PayloadData)
+	if err != nil {
+		return Objective{}, fmt.Errorf("could not get signed state payload: %w", err)
+	}
+	s := ss.State()
+
+	// Implicit in the wire protocol is that the message signalling
+	// closure of a channel includes an isFinal state (in the 0 slot of the message)
+	//
+	if !s.IsFinal {
+		return Objective{}, ErrNoFinalState
+	}
+
+	err = s.FixedPart().Validate()
+	if err != nil {
+		return Objective{}, err
+	}
+
+	cId := s.ChannelId()
+	request := NewObjectiveRequest(cId)
+	return NewObjective(request, preapprove, getConsensusChannel)
+}
+
 // GetStatus returns the status of the objective.
 func (o *Objective) GetStatus() protocols.ObjectiveStatus {
 	return o.Status
@@ -76,8 +119,50 @@ func (o *Objective) Id() protocols.ObjectiveId {
 // It's like a state machine transition function where the finite / enumerable state is returned (computed from the extended state)
 // rather than being independent of the extended state; and where there is only one type of event ("the crank") with no data on it at all
 func (o *Objective) Crank(secretKey *[]byte) (protocols.Objective, protocols.SideEffects, protocols.WaitingFor, error) {
-	// TODO: Implement crank method
-	return o, protocols.SideEffects{}, "", nil
+	updated := o.clone()
+	sideEffects := protocols.SideEffects{}
+
+	if updated.Status != protocols.Approved {
+		return &updated, sideEffects, WaitingForNothing, protocols.ErrNotApproved
+	}
+
+	latestSignedState, err := updated.C.LatestSignedState()
+	if err != nil {
+		return &updated, sideEffects, WaitingForNothing, errors.New("the channel must contain at least one signed state to crank the defund objective")
+	}
+
+	if !latestSignedState.State().IsFinal {
+
+		stateToSign := latestSignedState.State().Clone()
+		if !stateToSign.IsFinal {
+			stateToSign.TurnNum += 1
+			stateToSign.IsFinal = true
+		}
+
+		ss, err := updated.C.SignAndAddState(stateToSign, secretKey)
+		if err != nil {
+			return &updated, protocols.SideEffects{}, WaitingForFinalization, fmt.Errorf("could not sign final state %w", err)
+		}
+
+		messages, err := protocols.CreateObjectivePayloadMessage(updated.Id(), ss, SignedStatePayload, o.otherParticipants()...)
+		if err != nil {
+			return &updated, protocols.SideEffects{}, WaitingForFinalization, fmt.Errorf("could not create payload message %w", err)
+		}
+
+		sideEffects.MessagesToSend = append(sideEffects.MessagesToSend, messages...)
+		return &updated, sideEffects, WaitingForNothing, nil
+	}
+
+	if latestSignedState.State().IsFinal && !latestSignedState.HasSignatureForParticipant(updated.C.MyIndex) {
+		stateToSign := latestSignedState.State().Clone()
+		_, err := updated.C.SignAndAddState(stateToSign, secretKey)
+		if err != nil {
+			return &updated, protocols.SideEffects{}, WaitingForFinalization, fmt.Errorf("could not sign final state %w", err)
+		}
+	}
+
+	// TODO: Discuss AlicePrime waits for bridge to accept the request
+	return o, protocols.SideEffects{}, WaitingForNothing, nil
 }
 
 func (o *Objective) Approve() protocols.Objective {
@@ -124,6 +209,17 @@ func (o *Objective) clone() Objective {
 	return clone
 }
 
+// otherParticipants returns the participants in the channel that are not the current participant.
+func (o *Objective) otherParticipants() []types.Address {
+	others := make([]types.Address, 0)
+	for i, p := range o.C.Participants {
+		if i != int(o.C.MyIndex) {
+			others = append(others, p)
+		}
+	}
+	return others
+}
+
 // getSignedStatePayload takes in a serialized signed state payload and returns the deserialized SignedState.
 func getSignedStatePayload(b []byte) (state.SignedState, error) {
 	ss := state.SignedState{}
@@ -132,6 +228,11 @@ func getSignedStatePayload(b []byte) (state.SignedState, error) {
 		return ss, fmt.Errorf("could not unmarshal signed state: %w", err)
 	}
 	return ss, nil
+}
+
+// IsBridgedDefundObjective inspects a objective id and returns true if the objective id is for a bridged defund objective.
+func IsBridgedDefundObjective(id protocols.ObjectiveId) bool {
+	return strings.HasPrefix(string(id), ObjectivePrefix)
 }
 
 // CreateChannelFromConsensusChannel creates a Channel with (an appropriate latest supported state) from the supplied ConsensusChannel.
