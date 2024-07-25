@@ -131,38 +131,33 @@ func (o *Objective) Crank(secretKey *[]byte) (protocols.Objective, protocols.Sid
 		return &updated, sideEffects, WaitingForNothing, errors.New("the channel must contain at least one signed state to crank the defund objective")
 	}
 
-	if !latestSignedState.State().IsFinal {
-
+	// Sign a final state if no supported, final state exists
+	if !latestSignedState.State().IsFinal || !latestSignedState.HasSignatureForParticipant(updated.C.MyIndex) {
 		stateToSign := latestSignedState.State().Clone()
 		if !stateToSign.IsFinal {
 			stateToSign.TurnNum += 1
 			stateToSign.IsFinal = true
 		}
-
 		ss, err := updated.C.SignAndAddState(stateToSign, secretKey)
 		if err != nil {
 			return &updated, protocols.SideEffects{}, WaitingForFinalization, fmt.Errorf("could not sign final state %w", err)
 		}
-
 		messages, err := protocols.CreateObjectivePayloadMessage(updated.Id(), ss, SignedStatePayload, o.otherParticipants()...)
 		if err != nil {
 			return &updated, protocols.SideEffects{}, WaitingForFinalization, fmt.Errorf("could not create payload message %w", err)
 		}
-
 		sideEffects.MessagesToSend = append(sideEffects.MessagesToSend, messages...)
-		return &updated, sideEffects, WaitingForNothing, nil
 	}
 
-	if latestSignedState.State().IsFinal && !latestSignedState.HasSignatureForParticipant(updated.C.MyIndex) {
-		stateToSign := latestSignedState.State().Clone()
-		_, err := updated.C.SignAndAddState(stateToSign, secretKey)
-		if err != nil {
-			return &updated, protocols.SideEffects{}, WaitingForFinalization, fmt.Errorf("could not sign final state %w", err)
-		}
+	latestSupportedState, err := updated.C.LatestSupportedState()
+	if err != nil {
+		return &updated, sideEffects, WaitingForFinalization, fmt.Errorf("error finding a supported state: %w", err)
+	}
+	if !latestSupportedState.IsFinal {
+		return &updated, sideEffects, WaitingForFinalization, nil
 	}
 
-	// TODO: Discuss AlicePrime waits for bridge to accept the request
-	return o, protocols.SideEffects{}, WaitingForNothing, nil
+	return &updated, sideEffects, WaitingForNothing, nil
 }
 
 func (o *Objective) Approve() protocols.Objective {

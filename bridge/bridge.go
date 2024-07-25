@@ -14,6 +14,7 @@ import (
 	"github.com/statechannels/go-nitro/node"
 	p2pms "github.com/statechannels/go-nitro/node/engine/messageservice/p2p-message-service"
 	"github.com/statechannels/go-nitro/node/query"
+	"github.com/statechannels/go-nitro/protocols/bridgeddefund"
 	"github.com/statechannels/go-nitro/protocols/bridgedfund"
 	"github.com/statechannels/go-nitro/protocols/directfund"
 	"github.com/statechannels/go-nitro/protocols/virtualdefund"
@@ -317,7 +318,11 @@ func (b *Bridge) processCompletedObjectivesFromL2(objId protocols.ObjectiveId) e
 				return fmt.Errorf("error in send transaction %w", err)
 			}
 		}
+
+	case *bridgeddefund.Objective:
+		// TODO: Call mirrorBridgeDefund in L1
 	}
+
 	return nil
 }
 
