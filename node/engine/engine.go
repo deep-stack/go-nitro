@@ -590,7 +590,7 @@ func (e *Engine) handleObjectiveRequest(or protocols.ObjectiveRequest) (EngineEv
 		return e.attemptProgress(&bfo)
 
 	case bridgeddefund.ObjectiveRequest:
-		bdfo, err := bridgeddefund.NewObjective(request)
+		bdfo, err := bridgeddefund.NewObjective(request, true, e.store.GetConsensusChannelById)
 		if err != nil {
 			return failedEngineEvent, fmt.Errorf("handleAPIEvent: Could not create bridgeddefund objective for %+v: %w", request, err)
 		}
