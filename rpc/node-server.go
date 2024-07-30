@@ -142,8 +142,9 @@ func (nrs *NodeRpcServer) registerHandlers() (err error) {
 				if err := serde.ValidatePaymentRequest(req); err != nil {
 					return serde.PaymentRequest{}, err
 				}
-				nrs.node.Pay(req.Channel, big.NewInt(int64(req.Amount)))
-				return req, nil
+
+				err := nrs.node.Pay(req.Channel, big.NewInt(int64(req.Amount)))
+				return req, err
 			})
 		case serde.GetPaymentChannelRequestMethod:
 			return processRequest(nrs.BaseRpcServer, permRead, requestData, func(req serde.GetPaymentChannelRequest) (query.PaymentChannelInfo, error) {

@@ -29,6 +29,8 @@ const (
 	SignedStatePayload protocols.PayloadType = "SignedStatePayload"
 )
 
+var ErrUpdatingLedgerFunding = errors.New("error updating ledger funding")
+
 const ObjectivePrefix = "VirtualFund-"
 
 // GuaranteeInfo contains the information used to generate the expected guarantees.
@@ -433,7 +435,7 @@ func (o *Objective) Crank(secretKey *[]byte) (protocols.Objective, protocols.Sid
 
 		ledgerSideEffects, err := updated.updateLedgerWithGuarantee(*updated.ToMyLeft, secretKey)
 		if err != nil {
-			return o, protocols.SideEffects{}, WaitingForNothing, fmt.Errorf("error updating ledger funding: %w", err)
+			return o, protocols.SideEffects{}, WaitingForNothing, fmt.Errorf("%w: %w", ErrUpdatingLedgerFunding, err)
 		}
 		sideEffects.Merge(ledgerSideEffects)
 	}
@@ -441,7 +443,7 @@ func (o *Objective) Crank(secretKey *[]byte) (protocols.Objective, protocols.Sid
 	if !updated.isBob() && !updated.ToMyRight.IsFundingTheTarget() {
 		ledgerSideEffects, err := updated.updateLedgerWithGuarantee(*updated.ToMyRight, secretKey)
 		if err != nil {
-			return o, protocols.SideEffects{}, WaitingForNothing, fmt.Errorf("error updating ledger funding: %w", err)
+			return o, protocols.SideEffects{}, WaitingForNothing, fmt.Errorf("%w: %w", ErrUpdatingLedgerFunding, err)
 		}
 		sideEffects.Merge(ledgerSideEffects)
 	}
