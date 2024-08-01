@@ -10,6 +10,7 @@ import (
 	"github.com/statechannels/go-nitro/channel"
 	"github.com/statechannels/go-nitro/channel/consensus_channel"
 	"github.com/statechannels/go-nitro/channel/state"
+	NitroAdjudicator "github.com/statechannels/go-nitro/node/engine/chainservice/adjudicator"
 	"github.com/statechannels/go-nitro/protocols"
 	"github.com/statechannels/go-nitro/types"
 )
@@ -20,6 +21,7 @@ const (
 	WaitingForFinalization protocols.WaitingFor = "WaitingForFinalization"
 	WaitingForNothing      protocols.WaitingFor = "WaitingForNothing" // Finished
 	WaitingForWithdraw     protocols.WaitingFor = "WaitingForWithdraw"
+	WaitingForChallenge    protocols.WaitingFor = "WaitingForChallenge"
 )
 
 const (
@@ -38,6 +40,9 @@ type Objective struct {
 	C                          *channel.Channel
 	L2SignedState              state.SignedState
 	MirrorTransactionSubmitted bool
+
+	IsChallenge                   bool
+	ChallengeTransactionSubmitted bool
 }
 
 // GetConsensusChannel describes functions which return a ConsensusChannel ledger channel for a channel id.
@@ -70,7 +75,7 @@ func NewObjective(
 	init.C = c.Clone()
 
 	init.L2SignedState = request.l2SignedState
-
+	init.IsChallenge = request.isChallenge
 	return init, nil
 }
 
@@ -103,6 +108,45 @@ func (o *Objective) Crank(secretKey *[]byte) (protocols.Objective, protocols.Sid
 		return &updated, sideEffects, WaitingForNothing, protocols.ErrNotApproved
 	}
 
+	if updated.IsChallenge {
+		return o.crankWithChallenge(updated, sideEffects, secretKey)
+	}
+
+	return o.crank(updated, sideEffects, secretKey)
+}
+
+func (o *Objective) crankWithChallenge(updated Objective, sideEffects protocols.SideEffects, secretKey *[]byte) (protocols.Objective, protocols.SideEffects, protocols.WaitingFor, error) {
+	if !updated.ChallengeTransactionSubmitted {
+		// Finalize L2 signed state by sending challenge transaction
+		challengerSig, _ := NitroAdjudicator.SignChallengeMessage(updated.L2SignedState.State(), *secretKey)
+		challengeTx := protocols.NewChallengeTransaction(updated.C.Id, updated.L2SignedState, make([]state.SignedState, 0), challengerSig)
+		sideEffects.TransactionsToSubmit = append(sideEffects.TransactionsToSubmit, challengeTx)
+		updated.ChallengeTransactionSubmitted = true
+		return &updated, sideEffects, WaitingForChallenge, nil
+	}
+
+	// Wait for channel to finalize
+	if updated.C.OnChain.ChannelMode == channel.Challenge {
+		return &updated, sideEffects, WaitingForFinalization, nil
+	}
+
+	if !updated.MirrorTransactionSubmitted {
+		// Send MirrorTransferAll transaction
+		mirrorWithdrawAllTx := protocols.NewMirrorTransferAllTransaction(updated.OwnsChannel(), updated.L2SignedState)
+		updated.MirrorTransactionSubmitted = true
+		sideEffects.TransactionsToSubmit = append(sideEffects.TransactionsToSubmit, mirrorWithdrawAllTx)
+		return &updated, sideEffects, WaitingForFinalization, nil
+	}
+
+	if !updated.FullyWithdrawn() {
+		// Wait until the channel no longer holds any assets on the chain
+		return &updated, sideEffects, WaitingForWithdraw, nil
+	}
+
+	return &updated, sideEffects, WaitingForNothing, nil
+}
+
+func (o *Objective) crank(updated Objective, sideEffects protocols.SideEffects, secretKey *[]byte) (protocols.Objective, protocols.SideEffects, protocols.WaitingFor, error) {
 	if len(updated.L2SignedState.Signatures()) != 0 && !updated.MirrorTransactionSubmitted {
 		// Create updated L1 state based on the variable part of the L2 state
 		updatedL1State, err := o.CreateL1StateBasedOnL2()
@@ -200,6 +244,8 @@ func (o *Objective) clone() Objective {
 	clone.C = o.C.Clone()
 	clone.L2SignedState = o.L2SignedState
 	clone.MirrorTransactionSubmitted = o.MirrorTransactionSubmitted
+	clone.IsChallenge = o.IsChallenge
+	clone.ChallengeTransactionSubmitted = o.ChallengeTransactionSubmitted
 
 	return clone
 }
@@ -264,7 +310,7 @@ func ConstructObjectiveFromPayload(
 	}
 
 	cId := s.ChannelId()
-	request := NewObjectiveRequest(cId, state.SignedState{})
+	request := NewObjectiveRequest(cId, state.SignedState{}, false)
 	return NewObjective(request, preapprove, getConsensusChannel, false)
 }
 
@@ -299,14 +345,16 @@ func CreateChannelFromConsensusChannel(cc consensus_channel.ConsensusChannel) (*
 type ObjectiveRequest struct {
 	l1ChannelId      types.Destination
 	l2SignedState    state.SignedState
+	isChallenge      bool
 	objectiveStarted chan struct{}
 }
 
 // NewObjectiveRequest creates a new ObjectiveRequest.
-func NewObjectiveRequest(l1ChannelId types.Destination, l2SignedState state.SignedState) ObjectiveRequest {
+func NewObjectiveRequest(l1ChannelId types.Destination, l2SignedState state.SignedState, isChallenge bool) ObjectiveRequest {
 	return ObjectiveRequest{
 		l1ChannelId:      l1ChannelId,
 		l2SignedState:    l2SignedState,
+		isChallenge:      isChallenge,
 		objectiveStarted: make(chan struct{}),
 	}
 }
