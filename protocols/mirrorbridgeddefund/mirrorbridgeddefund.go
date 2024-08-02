@@ -36,13 +36,12 @@ const (
 
 // Objective is a cache of data computed by reading from the store. It stores (potentially) infinite data
 type Objective struct {
-	Status                     protocols.ObjectiveStatus
-	C                          *channel.Channel
-	L2SignedState              state.SignedState
-	MirrorTransactionSubmitted bool
-
-	IsChallenge                   bool
-	ChallengeTransactionSubmitted bool
+	Status                        protocols.ObjectiveStatus
+	C                             *channel.Channel
+	l2SignedState                 state.SignedState
+	mirrorTransactionSubmitted    bool
+	isChallenge                   bool
+	challengeTransactionSubmitted bool
 }
 
 // GetConsensusChannel describes functions which return a ConsensusChannel ledger channel for a channel id.
@@ -74,8 +73,8 @@ func NewObjective(
 	}
 	init.C = c.Clone()
 
-	init.L2SignedState = request.l2SignedState
-	init.IsChallenge = request.isChallenge
+	init.l2SignedState = request.l2SignedState
+	init.isChallenge = request.isChallenge
 	return init, nil
 }
 
@@ -108,7 +107,7 @@ func (o *Objective) Crank(secretKey *[]byte) (protocols.Objective, protocols.Sid
 		return &updated, sideEffects, WaitingForNothing, protocols.ErrNotApproved
 	}
 
-	if updated.IsChallenge {
+	if updated.isChallenge {
 		return o.crankWithChallenge(updated, sideEffects, secretKey)
 	}
 
@@ -116,12 +115,12 @@ func (o *Objective) Crank(secretKey *[]byte) (protocols.Objective, protocols.Sid
 }
 
 func (o *Objective) crankWithChallenge(updated Objective, sideEffects protocols.SideEffects, secretKey *[]byte) (protocols.Objective, protocols.SideEffects, protocols.WaitingFor, error) {
-	if !updated.ChallengeTransactionSubmitted {
+	if !updated.challengeTransactionSubmitted {
 		// Finalize L2 signed state by sending challenge transaction
-		challengerSig, _ := NitroAdjudicator.SignChallengeMessage(updated.L2SignedState.State(), *secretKey)
-		challengeTx := protocols.NewChallengeTransaction(updated.C.Id, updated.L2SignedState, make([]state.SignedState, 0), challengerSig)
+		challengerSig, _ := NitroAdjudicator.SignChallengeMessage(updated.l2SignedState.State(), *secretKey)
+		challengeTx := protocols.NewChallengeTransaction(updated.C.Id, updated.l2SignedState, make([]state.SignedState, 0), challengerSig)
 		sideEffects.TransactionsToSubmit = append(sideEffects.TransactionsToSubmit, challengeTx)
-		updated.ChallengeTransactionSubmitted = true
+		updated.challengeTransactionSubmitted = true
 		return &updated, sideEffects, WaitingForChallenge, nil
 	}
 
@@ -130,10 +129,10 @@ func (o *Objective) crankWithChallenge(updated Objective, sideEffects protocols.
 		return &updated, sideEffects, WaitingForFinalization, nil
 	}
 
-	if !updated.MirrorTransactionSubmitted {
+	if !updated.mirrorTransactionSubmitted {
 		// Send MirrorTransferAll transaction
-		mirrorWithdrawAllTx := protocols.NewMirrorTransferAllTransaction(updated.OwnsChannel(), updated.L2SignedState)
-		updated.MirrorTransactionSubmitted = true
+		mirrorWithdrawAllTx := protocols.NewMirrorTransferAllTransaction(updated.OwnsChannel(), updated.l2SignedState)
+		updated.mirrorTransactionSubmitted = true
 		sideEffects.TransactionsToSubmit = append(sideEffects.TransactionsToSubmit, mirrorWithdrawAllTx)
 		return &updated, sideEffects, WaitingForFinalization, nil
 	}
@@ -147,7 +146,7 @@ func (o *Objective) crankWithChallenge(updated Objective, sideEffects protocols.
 }
 
 func (o *Objective) crank(updated Objective, sideEffects protocols.SideEffects, secretKey *[]byte) (protocols.Objective, protocols.SideEffects, protocols.WaitingFor, error) {
-	if len(updated.L2SignedState.Signatures()) != 0 && !updated.MirrorTransactionSubmitted {
+	if len(updated.l2SignedState.Signatures()) != 0 && !updated.mirrorTransactionSubmitted {
 		// Create updated L1 state based on the variable part of the L2 state
 		updatedL1State, err := o.CreateL1StateBasedOnL2()
 		if err != nil {
@@ -168,13 +167,13 @@ func (o *Objective) crank(updated Objective, sideEffects protocols.SideEffects, 
 		sideEffects.MessagesToSend = append(sideEffects.MessagesToSend, messages...)
 
 		// Send MirrorWithdrawAll transaction
-		mirrorWithdrawAllTx := protocols.NewMirrorWithdrawAllTransaction(updated.OwnsChannel(), updated.L2SignedState)
-		updated.MirrorTransactionSubmitted = true
+		mirrorWithdrawAllTx := protocols.NewMirrorWithdrawAllTransaction(updated.OwnsChannel(), updated.l2SignedState)
+		updated.mirrorTransactionSubmitted = true
 		sideEffects.TransactionsToSubmit = append(sideEffects.TransactionsToSubmit, mirrorWithdrawAllTx)
 		return &updated, sideEffects, WaitingForFinalization, nil
 	}
 
-	if len(updated.L2SignedState.Signatures()) == 0 && !updated.C.LatestSignedStateSignedByMe() {
+	if len(updated.l2SignedState.Signatures()) == 0 && !updated.C.LatestSignedStateSignedByMe() {
 		// Sign received signed state and send it back
 		latestSignedState, err := updated.C.LatestSignedState()
 		if err != nil {
@@ -242,10 +241,10 @@ func (o *Objective) clone() Objective {
 	clone.Status = o.Status
 
 	clone.C = o.C.Clone()
-	clone.L2SignedState = o.L2SignedState
-	clone.MirrorTransactionSubmitted = o.MirrorTransactionSubmitted
-	clone.IsChallenge = o.IsChallenge
-	clone.ChallengeTransactionSubmitted = o.ChallengeTransactionSubmitted
+	clone.l2SignedState = o.l2SignedState
+	clone.mirrorTransactionSubmitted = o.mirrorTransactionSubmitted
+	clone.isChallenge = o.isChallenge
+	clone.challengeTransactionSubmitted = o.challengeTransactionSubmitted
 
 	return clone
 }
@@ -268,7 +267,7 @@ func (o *Objective) CreateL1StateBasedOnL2() (state.State, error) {
 		return state.State{}, fmt.Errorf("could not retrieve latest signed state %w", err)
 	}
 
-	l1VariablePartBasedOnL2 := o.L2SignedState.State().VariablePart()
+	l1VariablePartBasedOnL2 := o.l2SignedState.State().VariablePart()
 
 	// Swap the L2 outcome: since Alice creates a ledger channel in L1, the 0th position in L1's state allocations corresponds to Alice. Similarly, since Bridge Prime creates a ledger channel in L2, the 0th position in L2's state allocations corresponds to Bridge Prime.
 	l1OutcomeBasedOnL2 := l1VariablePartBasedOnL2.Outcome.Clone()
