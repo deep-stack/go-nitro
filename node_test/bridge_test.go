@@ -229,7 +229,7 @@ func TestBridgedFundWithChallenge(t *testing.T) {
 	}
 
 	bridge := bridge.New()
-	bridgeMultiaddressL1, bridgeMultiaddressL2, err := bridge.Start(bridgeConfig)
+	_, _, bridgeMultiaddressL1, bridgeMultiaddressL2, err := bridge.Start(bridgeConfig)
 	if err != nil {
 		t.Log("error in starting bridge", err)
 	}
@@ -247,7 +247,7 @@ func TestBridgedFundWithChallenge(t *testing.T) {
 
 	t.Run("Create ledger channel on L1 and mirror it on L2", func(t *testing.T) {
 		// Alice create ledger channel with bridge
-		outcome := ledgerOutcome(*nodeA.Address, bridgeAddress, ledgerChannelDeposit, 0, types.Address{})
+		outcome := CreateLedgerOutcome(*nodeA.Address, bridgeAddress, ledgerChannelDeposit, 0, types.Address{})
 		l1LedgerChannelResponse, err := nodeA.CreateLedgerChannel(bridgeAddress, uint32(tcL1.ChallengeDuration), outcome)
 		if err != nil {
 			t.Fatal(err)
@@ -261,8 +261,8 @@ func TestBridgedFundWithChallenge(t *testing.T) {
 		completedMirrorChannel := <-bridge.CompletedMirrorChannels()
 		l2LedgerChannelId, _ = bridge.GetL2ChannelIdByL1ChannelId(l1LedgerChannelResponse.ChannelId)
 		testhelpers.Assert(t, completedMirrorChannel == l2LedgerChannelId, "Expects mirror channel id to be %v", l2LedgerChannelId)
-		checkLedgerChannel(t, l1LedgerChannelResponse.ChannelId, ledgerOutcome(*nodeA.Address, bridgeAddress, ledgerChannelDeposit, 0, types.Address{}), query.Open, nodeA)
-		checkLedgerChannel(t, l2LedgerChannelId, ledgerOutcome(bridgeAddress, *nodeAPrime.Address, 0, ledgerChannelDeposit, types.Address{}), query.Open, nodeAPrime)
+		checkLedgerChannel(t, l1LedgerChannelResponse.ChannelId, CreateLedgerOutcome(*nodeA.Address, bridgeAddress, ledgerChannelDeposit, 0, types.Address{}), query.Open, nodeA)
+		checkLedgerChannel(t, l2LedgerChannelId, CreateLedgerOutcome(bridgeAddress, *nodeAPrime.Address, 0, ledgerChannelDeposit, types.Address{}), query.Open, nodeAPrime)
 	})
 
 	t.Run("Create virtual channel on mirrored ledger channel and make payments", func(t *testing.T) {
@@ -311,7 +311,7 @@ func TestBridgedFundWithChallenge(t *testing.T) {
 			}
 		}
 
-		checkLedgerChannel(t, l1LedgerChannelId, ledgerOutcome(*nodeA.Address, bridgeAddress, ledgerChannelDeposit-payAmount, payAmount, types.Address{}), query.Complete, nodeA)
+		checkLedgerChannel(t, l1LedgerChannelId, CreateLedgerOutcome(*nodeA.Address, bridgeAddress, ledgerChannelDeposit-payAmount, payAmount, types.Address{}), query.Complete, nodeA)
 
 		balanceNodeA, _ := infraL1.anvilChain.GetAccountBalance(tcL1.Participants[0].Address())
 		balanceBridge, _ := infraL1.anvilChain.GetAccountBalance(tcL1.Participants[1].Address())
