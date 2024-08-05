@@ -115,10 +115,20 @@ func (o *Objective) Crank(secretKey *[]byte) (protocols.Objective, protocols.Sid
 }
 
 func (o *Objective) crankWithChallenge(updated Objective, sideEffects protocols.SideEffects, secretKey *[]byte) (protocols.Objective, protocols.SideEffects, protocols.WaitingFor, error) {
-	// TODO: Update L1 state using L2 state to ensure off-chain balance reflects on-chain balance
-
 	if !updated.challengeTransactionSubmitted {
-		// Finalize L2 signed state by sending challenge transaction
+		// Update L1 state using L2 state to ensure off-chain balance reflects on-chain balance
+		updatedL1State, err := o.CreateL1StateBasedOnL2()
+		if err != nil {
+			return &updated, protocols.SideEffects{}, WaitingForChallenge, err
+		}
+
+		// Sign the updated L1 state
+		_, err = updated.C.SignAndAddState(updatedL1State, secretKey)
+		if err != nil {
+			return &updated, protocols.SideEffects{}, WaitingForChallenge, err
+		}
+
+		// Challenge L2 signed state to finalize the state
 		challengerSig, _ := NitroAdjudicator.SignChallengeMessage(updated.l2SignedState.State(), *secretKey)
 		challengeTx := protocols.NewChallengeTransaction(updated.C.Id, updated.l2SignedState, make([]state.SignedState, 0), challengerSig)
 		sideEffects.TransactionsToSubmit = append(sideEffects.TransactionsToSubmit, challengeTx)
