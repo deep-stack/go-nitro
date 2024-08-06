@@ -31,15 +31,6 @@ const (
 	L2_DURABLE_STORE_SUB_DIR = "l2-node"
 )
 
-type Asset struct {
-	L1AssetAddress string `toml:"l1AssetAddress"`
-	L2AssetAddress string `toml:"l2AssetAddress"`
-}
-
-type L1ToL2AssetConfig struct {
-	Assets []Asset `toml:"assets"`
-}
-
 type Bridge struct {
 	bridgeStore *DurableStore
 
@@ -52,7 +43,6 @@ type Bridge struct {
 	chainServiceL2 chainservice.ChainService
 
 	cancel                  context.CancelFunc
-	L1ToL2AssetAddressMap   map[common.Address]common.Address
 	mirrorChannelMap        map[types.Destination]MirrorChannelDetails
 	completedMirrorChannels chan types.Destination
 }
@@ -68,7 +58,6 @@ type BridgeConfig struct {
 	VpaAddress         string
 	CaAddress          string
 	BridgeAddress      string
-	Assets             []Asset
 	DurableStoreDir    string
 	BridgePublicIp     string
 	NodeL1ExtMultiAddr string
@@ -80,7 +69,6 @@ type BridgeConfig struct {
 func New() *Bridge {
 	bridge := Bridge{
 		mirrorChannelMap:        make(map[types.Destination]MirrorChannelDetails),
-		L1ToL2AssetAddressMap:   make(map[common.Address]common.Address),
 		completedMirrorChannels: make(chan types.Destination),
 	}
 
@@ -143,11 +131,6 @@ func (b *Bridge) Start(configOpts BridgeConfig) (nodeL1MultiAddress string, node
 	nodeL2, storeL2, msgServiceL2, chainServiceL2, err := nodeutils.InitializeL2Node(chainOptsL2, storeOptsL2, messageOptsL2)
 	if err != nil {
 		return nodeL1MultiAddress, nodeL2MultiAddress, err
-	}
-
-	// Process Assets array to convert it to map of L1 asset address to L2 asset address
-	for _, asset := range configOpts.Assets {
-		b.L1ToL2AssetAddressMap[common.HexToAddress(asset.L1AssetAddress)] = common.HexToAddress(asset.L2AssetAddress)
 	}
 
 	b.nodeL1 = nodeL1
@@ -229,22 +212,9 @@ func (b *Bridge) processCompletedObjectivesFromL1(objId protocols.ObjectiveId) e
 
 	// Create extended state outcome based on l1ChannelState
 	l1ChannelCloneOutcome := l1ledgerChannelStateClone.State().Outcome
+
 	var l2ChannelOutcome outcome.Exit
-
-	for _, l1Outcome := range l1ChannelCloneOutcome {
-		if (l1Outcome.Asset == common.Address{}) {
-			l2ChannelOutcome = append(l2ChannelOutcome, l1Outcome)
-		} else {
-			value, ok := b.L1ToL2AssetAddressMap[l1Outcome.Asset]
-
-			if !ok {
-				return fmt.Errorf("could not find corresponding L2 asset address for L1 asset address %s", l1Outcome.Asset.String())
-			}
-
-			l1Outcome.Asset = value
-			l2ChannelOutcome = append(l2ChannelOutcome, l1Outcome)
-		}
-	}
+	l2ChannelOutcome = append(l2ChannelOutcome, l1ChannelCloneOutcome...)
 
 	// Create mirrored ledger channel between node BPrime and APrime
 	l2LedgerChannelResponse, err := b.nodeL2.CreateBridgeChannel(l1ledgerChannelStateClone.State().Participants[0], l1ledgerChannelStateClone.State().ChallengeDuration, l2ChannelOutcome)
