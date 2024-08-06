@@ -39,7 +39,7 @@ const (
 type Objective struct {
 	Status                         protocols.ObjectiveStatus
 	C                              *channel.Channel
-	l2SignedState                  state.SignedState
+	L2SignedState                  state.SignedState
 	mirrorTransactionSubmitted     bool
 	IsChallenge                    bool
 	IsCheckPoint                   bool
@@ -76,7 +76,7 @@ func NewObjective(
 	}
 	init.C = c.Clone()
 
-	init.l2SignedState = request.l2SignedState
+	init.L2SignedState = request.l2SignedState
 	init.IsChallenge = request.isChallenge
 	return init, nil
 }
@@ -110,7 +110,7 @@ func (o *Objective) Crank(secretKey *[]byte) (protocols.Objective, protocols.Sid
 		return &updated, sideEffects, WaitingForNothing, protocols.ErrNotApproved
 	}
 
-	if updated.IsChallenge {
+	if updated.IsChallenge || updated.IsCheckPoint {
 		return o.crankWithChallenge(updated, sideEffects, secretKey)
 	}
 
@@ -118,7 +118,7 @@ func (o *Objective) Crank(secretKey *[]byte) (protocols.Objective, protocols.Sid
 }
 
 func (o *Objective) crankWithChallenge(updated Objective, sideEffects protocols.SideEffects, secretKey *[]byte) (protocols.Objective, protocols.SideEffects, protocols.WaitingFor, error) {
-	if !updated.challengeTransactionSubmitted {
+	if updated.IsChallenge && !updated.challengeTransactionSubmitted {
 		// Update L1 state using L2 state to ensure off-chain balance reflects on-chain balance
 		updatedL1State, err := o.CreateL1StateBasedOnL2()
 		if err != nil {
@@ -132,8 +132,8 @@ func (o *Objective) crankWithChallenge(updated Objective, sideEffects protocols.
 		}
 
 		// Challenge L2 signed state to finalize the state
-		challengerSig, _ := NitroAdjudicator.SignChallengeMessage(updated.l2SignedState.State(), *secretKey)
-		challengeTx := protocols.NewChallengeTransaction(updated.C.Id, updated.l2SignedState, make([]state.SignedState, 0), challengerSig)
+		challengerSig, _ := NitroAdjudicator.SignChallengeMessage(updated.L2SignedState.State(), *secretKey)
+		challengeTx := protocols.NewChallengeTransaction(updated.C.Id, updated.L2SignedState, make([]state.SignedState, 0), challengerSig)
 		sideEffects.TransactionsToSubmit = append(sideEffects.TransactionsToSubmit, challengeTx)
 		updated.challengeTransactionSubmitted = true
 		return &updated, sideEffects, WaitingForChallenge, nil
@@ -141,11 +141,7 @@ func (o *Objective) crankWithChallenge(updated Objective, sideEffects protocols.
 
 	// Initiate checkpoint transaction
 	if updated.IsCheckPoint && !updated.checkpointTransactionSubmitted {
-		latestSupportedSignedState, err := updated.C.LatestSupportedSignedState()
-		if err != nil {
-			return &updated, sideEffects, WaitingForNothing, err
-		}
-		checkpointTx := protocols.NewCheckpointTransaction(updated.C.Id, latestSupportedSignedState, make([]state.SignedState, 0))
+		checkpointTx := protocols.NewCheckpointTransaction(updated.C.Id, updated.L2SignedState, make([]state.SignedState, 0))
 		sideEffects.TransactionsToSubmit = append(sideEffects.TransactionsToSubmit, checkpointTx)
 		updated.checkpointTransactionSubmitted = true
 		return &updated, sideEffects, WaitingForChallengeCleared, nil
@@ -156,12 +152,18 @@ func (o *Objective) crankWithChallenge(updated Objective, sideEffects protocols.
 		return &updated, sideEffects, WaitingForFinalization, nil
 	}
 
-	if !updated.mirrorTransactionSubmitted {
+	// Mirror briged defund with challenge objective is complete after challenge is cleared
+	if updated.C.OnChain.ChannelMode == channel.Open {
+		updated.Status = protocols.Completed
+		return &updated, sideEffects, WaitingForNothing, nil
+	}
+
+	if updated.C.OnChain.ChannelMode == channel.Finalized && !updated.mirrorTransactionSubmitted && updated.C.OnChain.IsChallengeInitiatedByMe {
 		// Send MirrorTransferAll transaction
-		mirrorWithdrawAllTx := protocols.NewMirrorTransferAllTransaction(updated.OwnsChannel(), updated.l2SignedState)
+		mirrorWithdrawAllTx := protocols.NewMirrorTransferAllTransaction(updated.OwnsChannel(), updated.L2SignedState)
 		updated.mirrorTransactionSubmitted = true
 		sideEffects.TransactionsToSubmit = append(sideEffects.TransactionsToSubmit, mirrorWithdrawAllTx)
-		return &updated, sideEffects, WaitingForFinalization, nil
+		return &updated, sideEffects, WaitingForWithdraw, nil
 	}
 
 	if !updated.FullyWithdrawn() {
@@ -173,7 +175,7 @@ func (o *Objective) crankWithChallenge(updated Objective, sideEffects protocols.
 }
 
 func (o *Objective) crank(updated Objective, sideEffects protocols.SideEffects, secretKey *[]byte) (protocols.Objective, protocols.SideEffects, protocols.WaitingFor, error) {
-	if len(updated.l2SignedState.Signatures()) != 0 && !updated.mirrorTransactionSubmitted {
+	if len(updated.L2SignedState.Signatures()) != 0 && !updated.mirrorTransactionSubmitted {
 		// Create updated L1 state based on the variable part of the L2 state
 		updatedL1State, err := o.CreateL1StateBasedOnL2()
 		if err != nil {
@@ -194,13 +196,13 @@ func (o *Objective) crank(updated Objective, sideEffects protocols.SideEffects, 
 		sideEffects.MessagesToSend = append(sideEffects.MessagesToSend, messages...)
 
 		// Send MirrorWithdrawAll transaction
-		mirrorWithdrawAllTx := protocols.NewMirrorWithdrawAllTransaction(updated.OwnsChannel(), updated.l2SignedState)
+		mirrorWithdrawAllTx := protocols.NewMirrorWithdrawAllTransaction(updated.OwnsChannel(), updated.L2SignedState)
 		updated.mirrorTransactionSubmitted = true
 		sideEffects.TransactionsToSubmit = append(sideEffects.TransactionsToSubmit, mirrorWithdrawAllTx)
 		return &updated, sideEffects, WaitingForFinalization, nil
 	}
 
-	if len(updated.l2SignedState.Signatures()) == 0 && !updated.C.LatestSignedStateSignedByMe() {
+	if len(updated.L2SignedState.Signatures()) == 0 && !updated.C.LatestSignedStateSignedByMe() {
 		// Sign received signed state and send it back
 		latestSignedState, err := updated.C.LatestSignedState()
 		if err != nil {
@@ -268,7 +270,7 @@ func (o *Objective) clone() Objective {
 	clone.Status = o.Status
 
 	clone.C = o.C.Clone()
-	clone.l2SignedState = o.l2SignedState
+	clone.L2SignedState = o.L2SignedState
 	clone.mirrorTransactionSubmitted = o.mirrorTransactionSubmitted
 	clone.IsChallenge = o.IsChallenge
 	clone.IsCheckPoint = o.IsCheckPoint
@@ -295,7 +297,7 @@ func (o *Objective) CreateL1StateBasedOnL2() (state.State, error) {
 		return state.State{}, fmt.Errorf("could not retrieve latest signed state %w", err)
 	}
 
-	l1VariablePartBasedOnL2 := o.l2SignedState.State().VariablePart()
+	l1VariablePartBasedOnL2 := o.L2SignedState.State().VariablePart()
 
 	// Swap the L2 outcome: since Alice creates a ledger channel in L1, the 0th position in L1's state allocations corresponds to Alice. Similarly, since Bridge Prime creates a ledger channel in L2, the 0th position in L2's state allocations corresponds to Bridge Prime.
 	l1OutcomeBasedOnL2 := l1VariablePartBasedOnL2.Outcome.Clone()

@@ -180,7 +180,7 @@ func (nrs *NodeRpcServer) registerHandlers() (err error) {
 			})
 		case serde.CounterChallengeRequestMethod:
 			return processRequest(nrs.BaseRpcServer, permSign, requestData, func(req serde.CounterChallengeRequest) (serde.CounterChallengeRequest, error) {
-				nrs.node.CounterChallenge(req.ChannelId, req.Action)
+				nrs.node.CounterChallenge(req.ChannelId, req.Action, nil)
 				return req, nil
 			})
 		default:

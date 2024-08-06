@@ -30,7 +30,7 @@ func (o Objective) MarshalJSON() ([]byte, error) {
 		o.Status,
 		o.C.Id,
 		o.mirrorTransactionSubmitted,
-		o.l2SignedState,
+		o.L2SignedState,
 		o.IsChallenge,
 		o.IsCheckPoint,
 		o.challengeTransactionSubmitted,
@@ -60,7 +60,7 @@ func (o *Objective) UnmarshalJSON(data []byte) error {
 	o.Status = jsonDDFO.Status
 	o.C.Id = jsonDDFO.C
 	o.mirrorTransactionSubmitted = jsonDDFO.MirrorTransactionSubmitted
-	o.l2SignedState = jsonDDFO.L2SignedState
+	o.L2SignedState = jsonDDFO.L2SignedState
 	o.IsChallenge = jsonDDFO.IsChallenge
 	o.challengeTransactionSubmitted = jsonDDFO.ChallengeTransactionSubmitted
 	o.IsCheckPoint = jsonDDFO.IsCheckPoint

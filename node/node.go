@@ -346,6 +346,15 @@ func (n *Node) GetLedgerChannel(id types.Destination) (query.LedgerChannelInfo, 
 	return query.GetLedgerChannelInfo(id, n.store)
 }
 
+func (n *Node) GetSignedState(id types.Destination) (state.SignedState, error) {
+	consensusChannel, err := n.store.GetConsensusChannelById(id)
+	if err != nil {
+		return state.SignedState{}, err
+	}
+
+	return consensusChannel.SupportedSignedState(), nil
+}
+
 // Close stops the node from responding to any input.
 func (n *Node) Close() error {
 	if err := n.engine.Close(); err != nil {
@@ -377,6 +386,6 @@ func (n *Node) handleError(err error) {
 	}
 }
 
-func (n *Node) CounterChallenge(id types.Destination, action types.CounterChallengeAction) {
-	n.engine.CounterChallengeRequestsFromAPI <- types.CounterChallengeRequest{ChannelId: id, Action: action}
+func (n *Node) CounterChallenge(id types.Destination, action types.CounterChallengeAction, payload interface{}) {
+	n.engine.CounterChallengeRequestsFromAPI <- types.CounterChallengeRequest{ChannelId: id, Action: action, Payload: payload}
 }
