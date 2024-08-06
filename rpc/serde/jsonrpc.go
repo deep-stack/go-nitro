@@ -6,6 +6,7 @@ import (
 	"github.com/statechannels/go-nitro/node/query"
 	"github.com/statechannels/go-nitro/payments"
 	"github.com/statechannels/go-nitro/protocols"
+	"github.com/statechannels/go-nitro/protocols/bridgeddefund"
 	"github.com/statechannels/go-nitro/protocols/directdefund"
 	"github.com/statechannels/go-nitro/protocols/directfund"
 	"github.com/statechannels/go-nitro/protocols/virtualdefund"
@@ -21,6 +22,7 @@ const (
 	VersionMethod                     RequestMethod = "version"
 	CreateLedgerChannelRequestMethod  RequestMethod = "create_ledger_channel"
 	CloseLedgerChannelRequestMethod   RequestMethod = "close_ledger_channel"
+	CloseBridgeChannelRequestMethod   RequestMethod = "close_bridge_channel"
 	CreatePaymentChannelRequestMethod RequestMethod = "create_payment_channel"
 	ClosePaymentChannelRequestMethod  RequestMethod = "close_payment_channel"
 	PayRequestMethod                  RequestMethod = "pay"
@@ -98,6 +100,7 @@ type RequestPayload interface {
 		payments.Voucher |
 		CounterChallengeRequest |
 		ValidateVoucherRequest
+	bridgeddefund.ObjectiveRequest
 }
 
 type NotificationPayload interface {
