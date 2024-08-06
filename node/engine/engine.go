@@ -29,6 +29,7 @@ import (
 	"github.com/statechannels/go-nitro/protocols/bridgedfund"
 	"github.com/statechannels/go-nitro/protocols/directdefund"
 	"github.com/statechannels/go-nitro/protocols/directfund"
+	"github.com/statechannels/go-nitro/protocols/mirrorbridgeddefund"
 	"github.com/statechannels/go-nitro/protocols/virtualdefund"
 	"github.com/statechannels/go-nitro/protocols/virtualfund"
 	"github.com/statechannels/go-nitro/types"
@@ -614,6 +615,19 @@ func (e *Engine) handleObjectiveRequest(or protocols.ObjectiveRequest) (EngineEv
 		}
 
 		return e.attemptProgress(&bdfo)
+	case mirrorbridgeddefund.ObjectiveRequest:
+		mbdfo, err := mirrorbridgeddefund.NewObjective(request, true, e.store.GetConsensusChannelById, true)
+		if err != nil {
+			return failedEngineEvent, fmt.Errorf("handleAPIEvent: Could not create mirrorbridgeddefund objective for %+v: %w", request, err)
+		}
+
+		// Destroy the consensus channel to prevent it being used (Channel will now take over governance)
+		err = e.store.DestroyConsensusChannel(mbdfo.C.Id)
+		if err != nil {
+			return failedEngineEvent, err
+		}
+
+		return e.attemptProgress(&mbdfo)
 
 	default:
 		return failedEngineEvent, fmt.Errorf("handleAPIEvent: Unknown objective type %T", request)
@@ -983,6 +997,13 @@ func (e *Engine) constructObjectiveFromMessage(id protocols.ObjectiveId, p proto
 			return &bridgeddefund.Objective{}, fromMsgErr(id, err)
 		}
 		return &bdfo, nil
+
+	case mirrorbridgeddefund.IsMirrorBridgedDefundObjective(id):
+		mbdfo, err := mirrorbridgeddefund.ConstructObjectiveFromPayload(p, false, e.store.GetConsensusChannelById)
+		if err != nil {
+			return &mirrorbridgeddefund.Objective{}, fromMsgErr(id, err)
+		}
+		return &mbdfo, nil
 
 	default:
 		return &directfund.Objective{}, errors.New("cannot handle unimplemented objective type")
