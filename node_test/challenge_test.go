@@ -514,6 +514,149 @@ func TestVirtualPaymentChannel(t *testing.T) {
 	testhelpers.Assert(t, balanceNodeB.Cmp(big.NewInt(ledgerChannelDeposit+payAmount)) == 0, "Balance of Bob (%v) should be equal to (%v)", balanceNodeB, ledgerChannelDeposit+payAmount)
 }
 
+func TestVirtualPaymentChannelCheckpoint(t *testing.T) {
+	tc := TestCase{
+		Description:       "Virtual channel checkpoint test",
+		Chain:             AnvilChainL1,
+		MessageService:    TestMessageService,
+		MessageDelay:      0,
+		LogName:           "Virtual_channel_checkpoint_test",
+		ChallengeDuration: 5,
+		Participants: []TestParticipant{
+			{StoreType: MemStore, Actor: testactors.Alice},
+			{StoreType: MemStore, Actor: testactors.Bob},
+		},
+	}
+
+	dataFolder, cleanup := testhelpers.GenerateTempStoreFolder()
+	defer cleanup()
+
+	infra := setupSharedInfra(tc)
+	defer infra.Close(t)
+
+	// Create go-nitro nodes
+	nodeA, _, _, storeA, chainServiceA := setupIntegrationNode(tc, tc.Participants[0], infra, []string{}, dataFolder)
+	nodeB, _, _, storeB, chainServiceB := setupIntegrationNode(tc, tc.Participants[1], infra, []string{}, dataFolder)
+	defer nodeB.Close()
+
+	// Seperate chain service to listen for events
+	testChainService := setupChainService(tc, tc.Participants[1], infra)
+	defer testChainService.Close()
+
+	// Create ledger channel
+	openLedgerChannel(t, nodeA, nodeB, types.Address{}, uint32(tc.ChallengeDuration))
+
+	// Create virtual channel
+	virtualOutcome := initialPaymentOutcome(*nodeA.Address, *nodeB.Address, types.Address{})
+	virtualResponse, _ := nodeA.CreatePaymentChannel([]common.Address{}, *nodeB.Address, uint32(tc.ChallengeDuration), virtualOutcome)
+
+	// Wait for objective to complete
+	waitForObjectives(t, nodeA, nodeB, []node.Node{}, []protocols.ObjectiveId{virtualResponse.Id})
+	checkPaymentChannel(t, virtualResponse.ChannelId, virtualOutcome, query.Open, nodeA, nodeB)
+
+	// Alice pays Bob
+	err := nodeA.Pay(virtualResponse.ChannelId, big.NewInt(payAmount))
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	// Wait for Bob to recieve voucher
+	nodeBVoucher := <-nodeB.ReceivedVouchers()
+	t.Logf("Voucher recieved %+v", nodeBVoucher)
+
+	virtualChannel, ok := storeA.GetChannelById(virtualResponse.ChannelId)
+
+	if !ok {
+		t.Fatal("Failed to get virtual channel with ID", virtualResponse.ChannelId)
+	}
+
+	nodeAVirtualState, err := virtualChannel.LatestSupportedSignedState()
+	if err != nil {
+		t.Fatal(err.Error())
+	}
+
+	// Alice calls challenge on virtual channel without adjusting voucher amount
+	oldVirtualChallengerSig, _ := NitroAdjudicator.SignChallengeMessage(nodeAVirtualState.State(), tc.Participants[0].PrivateKey)
+	oldVirtualChallengeTx := protocols.NewChallengeTransaction(virtualResponse.ChannelId, nodeAVirtualState, []state.SignedState{}, oldVirtualChallengerSig)
+	err = chainServiceA.SendTransaction(oldVirtualChallengeTx)
+	if err != nil {
+		t.Error(err)
+	}
+
+	event := waitForEvent(t, testChainService.EventFeed(), chainservice.ChallengeRegisteredEvent{})
+	t.Log("Challenge registed event received", event)
+	challengeRegisteredEvent, ok := event.(chainservice.ChallengeRegisteredEvent)
+	testhelpers.Assert(t, ok, "Expected challenge registered event")
+
+	// Bob calls checkpoint method in response to Alice's challenge
+	// To call challenge method on virtual channel with voucher, the voucher info needs to be encoded in `AppData` field of channel state
+
+	virtualChannel, _ = storeB.GetChannelById(virtualResponse.ChannelId)
+	voucherState, _ := virtualChannel.LatestSignedState()
+
+	// Create type to encode voucher amount and signature
+	voucherAmountSigTy, _ := abi.NewType("tuple", "", []abi.ArgumentMarshaling{
+		{Name: "amount", Type: "uint256"},
+		{Name: "signature", Type: "tuple", Components: []abi.ArgumentMarshaling{
+			{Name: "v", Type: "uint8"},
+			{Name: "r", Type: "bytes32"},
+			{Name: "s", Type: "bytes32"},
+		}},
+	})
+
+	arguments := abi.Arguments{
+		{Type: voucherAmountSigTy},
+	}
+
+	voucherAmountSignatureData := protocols.VoucherAmountSignature{
+		Amount:    nodeBVoucher.Amount,
+		Signature: NitroAdjudicator.ConvertSignature(nodeBVoucher.Signature),
+	}
+
+	// Use above created type and encode voucher amount and signature
+	dataEncoded, err := arguments.Pack(voucherAmountSignatureData)
+	if err != nil {
+		t.Fatalf("Failed to encode data: %v", err)
+	}
+
+	// Create expected payment outcome
+	finalVirtualOutcome := finalPaymentOutcome(*nodeA.Address, *nodeB.Address, common.Address{}, 1, uint(nodeBVoucher.Amount.Int64()))
+
+	// Construct variable part with updated outcome and app data
+	vp := state.VariablePart{Outcome: finalVirtualOutcome, TurnNum: voucherState.State().TurnNum + 1, AppData: dataEncoded, IsFinal: voucherState.State().IsFinal}
+
+	// Update state with constructed variable part
+	newState := state.StateFromFixedAndVariablePart(voucherState.State().FixedPart(), vp)
+
+	// Bob signs constructed state and adds it to the virtual channel
+	_, _ = virtualChannel.SignAndAddState(newState, &tc.Participants[1].PrivateKey)
+
+	// Update store with updated virtual channel
+	_ = storeB.SetChannel(virtualChannel)
+
+	// Get updated virtual channel
+	updatedVirtualChannel, _ := storeB.GetChannelById(virtualResponse.ChannelId)
+
+	signedVirtualState, _ := updatedVirtualChannel.LatestSignedState()
+	signedPostFundState := updatedVirtualChannel.SignedPostFundState()
+
+	// Bob calls checkpoint method on virtual channel
+	checkpointTx := protocols.NewCheckpointTransaction(virtualChannel.Id, signedVirtualState, []state.SignedState{signedPostFundState})
+	err = chainServiceB.SendTransaction(checkpointTx)
+	if err != nil {
+		t.Error(err)
+	}
+
+	// Listen for challenge cleared event
+	event = waitForEvent(t, testChainService.EventFeed(), chainservice.ChallengeClearedEvent{})
+	t.Log("Challenge cleared event received", event)
+	challengeClearedEvent, ok := event.(chainservice.ChallengeClearedEvent)
+	testhelpers.Assert(t, ok, "Expected challenge cleared event")
+	testhelpers.Assert(t, challengeClearedEvent.ChannelID() == virtualChannel.Id, "Channel ID mismatch")
+	latestBlock, _ := infra.anvilChain.GetLatestBlock()
+	testhelpers.Assert(t, challengeRegisteredEvent.FinalizesAt.Uint64() <= latestBlock.Header().Time, "Expected challenge duration to be completed")
+}
+
 func getLatestSignedState(store store.Store, id types.Destination) state.SignedState {
 	consensusChannel, _ := store.GetConsensusChannelById(id)
 	return consensusChannel.SupportedSignedState()
