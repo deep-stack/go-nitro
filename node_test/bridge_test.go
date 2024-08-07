@@ -78,7 +78,7 @@ func TestBridgedFund(t *testing.T) {
 	}
 
 	bridge := bridge.New()
-	bridgeMultiaddressL1, bridgeMultiaddressL2, err := bridge.Start(bridgeConfig)
+	_, _, bridgeMultiaddressL1, bridgeMultiaddressL2, err := bridge.Start(bridgeConfig)
 	if err != nil {
 		t.Log("error in starting bridge", err)
 	}
@@ -122,7 +122,10 @@ func TestBridgedFund(t *testing.T) {
 		checkPaymentChannel(t, virtualResponse.ChannelId, virtualOutcome, query.Open, nodeAPrime)
 
 		// APrime pays BPrime
-		nodeAPrime.Pay(virtualResponse.ChannelId, big.NewInt(payAmount))
+		err := nodeAPrime.Pay(virtualResponse.ChannelId, big.NewInt(payAmount))
+		if err != nil {
+			t.Fatal(err)
+		}
 
 		// Virtual defund
 		virtualDefundResponse, _ := nodeAPrime.ClosePaymentChannel(virtualResponse.ChannelId)
@@ -504,7 +507,10 @@ func TestExitL2WithPayments(t *testing.T) {
 		virtualChannel := createL2VirtualChannel(t, nodeAPrime, nodeBPrime, storeBPrime, tcL2)
 
 		// Bridge pays APrime
-		nodeBPrime.Pay(virtualChannel.Id, big.NewInt(payAmount))
+		err := nodeBPrime.Pay(virtualChannel.Id, big.NewInt(payAmount))
+		if err != nil {
+			t.Fatal(err)
+		}
 
 		// Wait for APrime to recieve voucher
 		nodeAPrimeVoucher := <-nodeAPrime.ReceivedVouchers()
@@ -627,7 +633,10 @@ func TestExitL2WithLedgerChannelStateUnilaterally(t *testing.T) {
 	virtualChannel := createL2VirtualChannel(t, nodeAPrime, nodeBPrime, storeBPrime, tcL2)
 
 	// Bridge pays APrime
-	nodeBPrime.Pay(virtualChannel.Id, big.NewInt(payAmount))
+	err := nodeBPrime.Pay(virtualChannel.Id, big.NewInt(payAmount))
+	if err != nil {
+		t.Fatal(err)
+	}
 
 	// Wait for APrime to recieve voucher
 	nodeAPrimeVoucher := <-nodeAPrime.ReceivedVouchers()
@@ -745,7 +754,10 @@ func TestExitL2WithVirtualChannelStateUnilaterally(t *testing.T) {
 	virtualChannel := createL2VirtualChannel(t, nodeAPrime, nodeBPrime, storeBPrime, tcL2)
 
 	// Bridge pays APrime
-	nodeBPrime.Pay(virtualChannel.Id, big.NewInt(payAmount))
+	err := nodeBPrime.Pay(virtualChannel.Id, big.NewInt(payAmount))
+	if err != nil {
+		t.Fatal(err)
+	}
 
 	// Wait for APrime to recieve voucher
 	nodeAPrimeVoucher := <-nodeAPrime.ReceivedVouchers()

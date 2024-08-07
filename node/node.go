@@ -314,9 +314,19 @@ func (n *Node) MirrorBridgedDefund(l1ChannelId types.Destination, l2SignedState 
 }
 
 // Pay will send a signed voucher to the payee that they can redeem for the given amount.
-func (n *Node) Pay(channelId types.Destination, amount *big.Int) {
+func (n *Node) Pay(channelId types.Destination, amount *big.Int) error {
+	paymentChannel, err := n.GetPaymentChannel(channelId)
+	if err != nil {
+		return err
+	}
+
+	if types.Gt(amount, (*big.Int)(paymentChannel.Balance.RemainingFunds)) {
+		return fmt.Errorf("error making payment request: insufficient funds")
+	}
+
 	// Send the event to the engine
 	n.engine.PaymentRequestsFromAPI <- engine.PaymentRequest{ChannelId: channelId, Amount: amount}
+	return nil
 }
 
 // GetPaymentChannel returns the payment channel with the given id.
