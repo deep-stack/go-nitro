@@ -7,6 +7,7 @@ import (
 	"log/slog"
 	"math/big"
 
+	"github.com/statechannels/go-nitro/channel/state"
 	"github.com/statechannels/go-nitro/internal/logging"
 	nitro "github.com/statechannels/go-nitro/node"
 	"github.com/statechannels/go-nitro/node/query"
@@ -181,8 +182,15 @@ func (nrs *NodeRpcServer) registerHandlers() (err error) {
 			})
 		case serde.CounterChallengeRequestMethod:
 			return processRequest(nrs.BaseRpcServer, permSign, requestData, func(req serde.CounterChallengeRequest) (serde.CounterChallengeRequest, error) {
-				// TODO: Unmarshall the signed state string
-				nrs.node.CounterChallenge(req.ChannelId, req.Action, req.Payload)
+				var l2SignedState state.SignedState
+				if len(req.Payload) > 0 {
+					err := json.Unmarshal([]byte(req.Payload), &l2SignedState)
+					if err != nil {
+						return serde.CounterChallengeRequest{}, fmt.Errorf("error in unmarshalling signed state payload %w", err)
+					}
+				}
+
+				nrs.node.CounterChallenge(req.ChannelId, req.Action, l2SignedState)
 				return req, nil
 			})
 		default:
