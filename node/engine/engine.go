@@ -12,13 +12,13 @@ import (
 	"sync"
 	"time"
 
-	"github.com/ethereum/go-ethereum/common"
 	"github.com/ethereum/go-ethereum/crypto/secp256k1"
 	"github.com/statechannels/go-nitro/channel"
 	"github.com/statechannels/go-nitro/channel/consensus_channel"
 	"github.com/statechannels/go-nitro/channel/state"
 	"github.com/statechannels/go-nitro/internal/logging"
 	"github.com/statechannels/go-nitro/node/engine/chainservice"
+	NitroAdjudicator "github.com/statechannels/go-nitro/node/engine/chainservice/adjudicator"
 	"github.com/statechannels/go-nitro/node/engine/messageservice"
 	p2pms "github.com/statechannels/go-nitro/node/engine/messageservice/p2p-message-service"
 	"github.com/statechannels/go-nitro/node/engine/store"
@@ -46,6 +46,13 @@ type CounterChallengeRequest struct {
 	ChannelId types.Destination
 	Action    types.CounterChallengeAction
 	Payload   state.SignedState
+}
+
+type UnilateralExitRequest struct {
+	ChannelId   types.Destination
+	Action      types.CounterChallengeAction
+	SignedState state.SignedState
+	Voucher     payments.Voucher
 }
 
 func (uce *ErrUnhandledChainEvent) Error() string {
@@ -76,6 +83,7 @@ type Engine struct {
 	ObjectiveRequestsFromAPI        chan protocols.ObjectiveRequest
 	PaymentRequestsFromAPI          chan PaymentRequest
 	CounterChallengeRequestsFromAPI chan CounterChallengeRequest
+	UnilateralExitRequestFromAPI    chan UnilateralExitRequest
 
 	fromChain    <-chan chainservice.Event
 	fromMsg      <-chan protocols.Message
@@ -94,6 +102,8 @@ type Engine struct {
 
 	wg     *sync.WaitGroup
 	cancel context.CancelFunc
+
+	signedStateMap map[types.Destination]state.SignedState
 }
 
 // PaymentRequest represents a request from the API to make a payment using a channel
@@ -152,6 +162,7 @@ func New(vm *payments.VoucherManager, msg messageservice.MessageService, chain c
 	e.ObjectiveRequestsFromAPI = make(chan protocols.ObjectiveRequest)
 	e.PaymentRequestsFromAPI = make(chan PaymentRequest)
 	e.CounterChallengeRequestsFromAPI = make(chan CounterChallengeRequest)
+	e.UnilateralExitRequestFromAPI = make(chan UnilateralExitRequest)
 
 	e.fromChain = chain.EventFeed()
 	e.fromMsg = msg.P2PMessages()
@@ -165,6 +176,7 @@ func New(vm *payments.VoucherManager, msg messageservice.MessageService, chain c
 	e.policymaker = policymaker
 
 	e.vm = vm
+	e.signedStateMap = make(map[types.Destination]state.SignedState)
 
 	e.logger.Info("Constructed Engine")
 
@@ -214,6 +226,8 @@ func (e *Engine) run(ctx context.Context) {
 			err = e.handleSignRequest(signReq)
 		case counterChallengeReq := <-e.CounterChallengeRequestsFromAPI:
 			err = e.handleCounterChallengeRequest(counterChallengeReq)
+		case unilateralExitReq := <-e.UnilateralExitRequestFromAPI:
+			err = e.HandleUnilateralExitRequest(unilateralExitReq)
 		case <-blockTicker.C:
 			blockNum := e.chain.GetLastConfirmedBlockNum()
 			err = e.store.SetLastBlockNumSeen(blockNum)
@@ -447,30 +461,42 @@ func (e *Engine) handleChainEvent(chainEvent chainservice.Event) (EngineEvent, e
 		return EngineEvent{}, err
 	}
 
-	var l2ChallengeRegistered bool
+	// var l2ChallengeRegistered bool
 	c, ok := e.store.GetChannelById(chainEvent.ChannelID())
 	if !ok {
 		_, isChallengeRegistered := chainEvent.(chainservice.ChallengeRegisteredEvent)
 		if isChallengeRegistered {
-			channel, err := e.processChallengeRegisteredEvent(chainEvent)
-			if err != nil {
-				if errors.Is(err, store.ErrNoSuchChannel) {
-					return EngineEvent{}, nil
-				}
-				return EngineEvent{}, err
-			}
-			c = channel
-		} else if _, isChallengeCleared := chainEvent.(chainservice.ChallengeClearedEvent); isChallengeCleared {
-			l1ChannelId, err := e.chain.GetL1ChannelFromL2(chainEvent.ChannelID())
-			if err != nil {
-				slog.Debug("l1 channel id not found from chain")
-			}
 
-			l1Channel, ok := e.store.GetChannelById(l1ChannelId)
-
-			if ok {
-				c = l1Channel
+			ch, err := e.processChallengeRegisteredEvent2(chainEvent)
+			if err != nil {
+				// TODO: Return error nil only for consensus channel not found
+				// For others throw error
+				return EngineEvent{}, nil
 			}
+			c = ch
+			// }
+			// // 	channel, err := e.processChallengeRegisteredEvent(chainEvent)
+			// // _, isChallengeRegistered := chainEvent.(chainservice.ChallengeRegisteredEvent)
+			// // if isChallengeRegistered {
+			// // 	channel, err := e.processChallengeRegisteredEvent(chainEvent)
+			// // 	if err != nil {
+			// // 		if errors.Is(err, store.ErrNoSuchChannel) {
+			// // 			return EngineEvent{}, nil
+			// // 		}
+			// // 		return EngineEvent{}, err
+			// // 	}
+			// // 	c = channel
+			// // } else if _, isChallengeCleared := chainEvent.(chainservice.ChallengeClearedEvent); isChallengeCleared {
+			// // 	l1ChannelId, err := e.chain.GetL1ChannelFromL2(chainEvent.ChannelID())
+			// // 	if err != nil {
+			// // 		slog.Debug("l1 channel id not found from chain")
+			// // 	}
+
+			// // 	l1Channel, ok := e.store.GetChannelById(l1ChannelId)
+
+			// // 	if ok {
+			// // 		c = l1Channel
+			// // 	}
 		} else {
 			// TODO: Right now the chain service returns chain events for ALL channels even those we aren't involved in
 			// for now we can ignore channels we aren't involved in
@@ -485,6 +511,7 @@ func (e *Engine) handleChainEvent(chainEvent chainservice.Event) (EngineEvent, e
 	}
 	updatedChannel.UpdateChannelMode(chainEvent.Block().Timestamp)
 
+	// fmt.Printf(">>HANDLE CHAIN EVENT updated channel%+v", updatedChannel)
 	err = e.store.SetChannel(updatedChannel)
 	if err != nil {
 		return EngineEvent{}, err
@@ -492,41 +519,69 @@ func (e *Engine) handleChainEvent(chainEvent chainservice.Event) (EngineEvent, e
 
 	objective, ok := e.store.GetObjectiveByChannelId(c.Id)
 	if ok {
+		fmt.Println("HANDLE CHAIN EVENT SHOULD NOT RETURN FROM HERE")
 		return e.attemptProgress(objective)
 	}
 
 	// When a challenge is registered on a virtual channel, identify the related ledger channel and its associated objective, and then process it.
 	// Challenge registered on virtual channels are handled only by the one who raised the challenge
-	_, isChallengeRegisteredEvent := chainEvent.(chainservice.ChallengeRegisteredEvent)
-	if isChallengeRegisteredEvent && c.Type == channel.Virtual && c.OnChain.IsChallengeInitiatedByMe {
-		myAddress := *e.store.GetAddress()
-		counterParty := common.Address{}
+	// _, isChallengeRegisteredEvent := chainEvent.(chainservice.ChallengeRegisteredEvent)
+	// if isChallengeRegisteredEvent && c.Type == channel.Virtual && c.OnChain.IsChallengeInitiatedByMe {
+	// 	myAddress := *e.store.GetAddress()
+	// 	counterParty := common.Address{}
 
-		// Find counterparty address to get consensus channel between us
-		if myAddress == c.Participants[0] {
-			counterParty = c.Participants[len(c.Participants)-1]
-		} else if myAddress == c.Participants[len(c.Participants)-1] {
-			counterParty = c.Participants[0]
-		}
+	// 	// Find counterparty address to get consensus channel between us
+	// 	if myAddress == c.Participants[0] {
+	// 		counterParty = c.Participants[len(c.Participants)-1]
+	// 	} else if myAddress == c.Participants[len(c.Participants)-1] {
+	// 		counterParty = c.Participants[0]
+	// 	}
 
-		consensusChannel, ok := e.store.GetConsensusChannel(counterParty)
-		if ok {
-			obj, ok := e.store.GetObjectiveByChannelId(consensusChannel.Id)
-			if ok {
-				return e.attemptProgress(obj)
-			}
-		}
-	}
+	// 	consensusChannel, ok := e.store.GetConsensusChannel(counterParty)
+	// 	if ok {
+	// 		obj, ok := e.store.GetObjectiveByChannelId(consensusChannel.Id)
+	// 		if ok {
+	// 			return e.attemptProgress(obj)
+	// 		}
+	// 	}
+	// }
 
-	if l2ChallengeRegistered {
-		objective, ok := e.store.GetObjectiveByChannelId(updatedChannel.Id)
+	// if l2ChallengeRegistered {
+	// 	objective, ok := e.store.GetObjectiveByChannelId(updatedChannel.Id)
 
-		if ok {
-			return e.attemptProgress(objective)
-		}
-	}
+	// 	if ok {
+	// 		return e.attemptProgress(objective)
+	// 	}
+	// }
 
+	fmt.Println("HANDLE CHAIN EVENT SHOULD RETURN FROM HERE")
 	return EngineEvent{}, nil
+}
+
+func (e *Engine) processChallengeRegisteredEvent2(chainEvent chainservice.Event) (*channel.Channel, error) {
+	// check channel id corresponds to l2 channel
+	ledgerChannelId := chainEvent.ChannelID()
+
+	l1ChannelId, err := e.chain.GetL1ChannelFromL2(chainEvent.ChannelID())
+	if err != nil {
+		slog.Info("not l2 channel")
+	}
+
+	if !l1ChannelId.IsZero() {
+		ledgerChannelId = l1ChannelId
+	}
+
+	cc, err := e.store.GetConsensusChannelById(ledgerChannelId)
+	if err != nil {
+		return &channel.Channel{}, err
+	}
+
+	c, err := directdefund.CreateChannelFromConsensusChannel(*cc)
+	if err != nil {
+		return &channel.Channel{}, err
+	}
+
+	return c, nil
 }
 
 func (e *Engine) processChallengeRegisteredEvent(chainEvent chainservice.Event) (*channel.Channel, error) {
@@ -779,6 +834,43 @@ func (e *Engine) handleCounterChallengeRequest(request CounterChallengeRequest) 
 		}
 	default:
 		return fmt.Errorf("unknown objective type %T", objective)
+	}
+
+	return nil
+}
+
+func (e *Engine) HandleUnilateralExitRequest(request UnilateralExitRequest) error {
+	fmt.Println("Inside handle unilateral exit from engine")
+	// TODO: Check whether channel holds any objective
+
+	// Get channel
+	// _, ok := e.store.GetChannelById(request.ChannelId)
+	// if !ok {
+	// 	fmt.Println("ERROR FROM HERE")
+	// 	return fmt.Errorf("channel not found")
+	// }
+
+	secretKey := e.store.GetChannelSecretKey()
+	var tx protocols.ChainTransaction
+
+	switch request.Action {
+	case types.Checkpoint:
+		tx = protocols.NewCheckpointTransaction(request.SignedState.ChannelId(), request.SignedState, make([]state.SignedState, 0))
+
+	case types.Challenge:
+		// Challenging a normal ledger channel
+		challengerSig, _ := NitroAdjudicator.SignChallengeMessage(request.SignedState.State(), *secretKey)
+		tx = protocols.NewChallengeTransaction(request.SignedState.ChannelId(), request.SignedState, make([]state.SignedState, 0), challengerSig)
+		// Store the information for liquidating only if the transaction was succesful
+		e.signedStateMap[request.ChannelId] = request.SignedState
+
+	default:
+		return fmt.Errorf("unknown exit channel action")
+	}
+
+	err := e.chain.SendTransaction(tx)
+	if err != nil {
+		return err
 	}
 
 	return nil
@@ -1197,31 +1289,54 @@ func (e *Engine) processStoreChannels(latestblock chainservice.Block) error {
 		}
 
 		// Liquidate assets for finalized ledger channels
-		if ch.Type == channel.Ledger && ch.OnChain.ChannelMode == channel.Finalized {
-			obj, ok := e.store.GetObjectiveByChannelId(ch.Id)
+		if ch.Type == channel.Ledger && ch.OnChain.ChannelMode == channel.Finalized && ch.OnChain.IsChallengeInitiatedByMe {
+			fmt.Println("INSIDE PROCESS STORE CHANNEL, CHANNEL GOING TO LIQUIDATE")
 
-			if !ok {
-				slog.Debug("Objective not found for liquidating the finalized ledger channel", "ledger channel", ch.Id)
-				return nil
-			}
+			// TODO: Delete entry from this on challenge cleared and allocation updated event
+			ss := e.signedStateMap[ch.Id]
 
-			switch objective := obj.(type) {
-			case *directdefund.Objective:
-				if objective.C.OnChain.IsChallengeInitiatedByMe {
-					_, err = e.attemptProgress(objective)
-					if err != nil {
-						return err
-					}
+			// TODO: Check this signedstateMap state hash matches with c.onchain.statehash
+
+			if ch.Id == ss.ChannelId() {
+				fmt.Println(">>>LIQUIDATING NORMAL LEDGER CHANNEL")
+				transferTx := protocols.NewTransferAllTransaction(ch.Id, ss)
+				err := e.chain.SendTransaction(transferTx)
+				if err != nil {
+					return err
 				}
-
-			case *mirrorbridgeddefund.Objective:
-				if objective.C.OnChain.IsChallengeInitiatedByMe {
-					_, err = e.attemptProgress(objective)
-					if err != nil {
-						return err
-					}
+			} else {
+				fmt.Println(">>>LIQUIDATING MIRROR LEDGER CHANNEL")
+				mirrorWithdrawAllTx := protocols.NewMirrorTransferAllTransaction(ch.Id, ss)
+				err := e.chain.SendTransaction(mirrorWithdrawAllTx)
+				if err != nil {
+					return err
 				}
 			}
+
+			// obj, ok := e.store.GetObjectiveByChannelId(ch.Id)
+
+			// if !ok {
+			// 	slog.Debug("Objective not found for liquidating the finalized ledger channel", "ledger channel", ch.Id)
+			// 	return nil
+			// }
+
+			// switch objective := obj.(type) {
+			// case *directdefund.Objective:
+			// 	if objective.C.OnChain.IsChallengeInitiatedByMe {
+			// 		_, err = e.attemptProgress(objective)
+			// 		if err != nil {
+			// 			return err
+			// 		}
+			// 	}
+
+			// case *mirrorbridgeddefund.Objective:
+			// 	if objective.C.OnChain.IsChallengeInitiatedByMe {
+			// 		_, err = e.attemptProgress(objective)
+			// 		if err != nil {
+			// 			return err
+			// 		}
+			// 	}
+			// }
 		}
 	}
 	return nil
