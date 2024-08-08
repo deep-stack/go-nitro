@@ -365,6 +365,7 @@ func (c *Channel) UpdateWithChainEvent(event chainservice.Event) (*Channel, erro
 	// Process event
 	switch e := event.(type) {
 	case chainservice.AllocationUpdatedEvent:
+		// TODO: Mark channel as complete(for unilateral exits), then channel finalized for (happy exits)
 		c.OnChain.Holdings[e.AssetAddress] = e.AssetAmount
 		// TODO: update OnChain.StateHash and OnChain.Outcome
 	case chainservice.DepositedEvent:

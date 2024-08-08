@@ -399,3 +399,20 @@ func (n *Node) handleError(err error) {
 func (n *Node) CounterChallenge(id types.Destination, action types.CounterChallengeAction, payload state.SignedState) {
 	n.engine.CounterChallengeRequestsFromAPI <- engine.CounterChallengeRequest{ChannelId: id, Action: action, Payload: payload}
 }
+
+// TODO: Rename CounterChallengeAction to ExitAction
+// TODO: Later add support for voucher
+func (n *Node) UnilateralExit(channelId types.Destination, action types.CounterChallengeAction, signedState state.SignedState) error {
+	fmt.Println("Called unilateral exit from node")
+	n.engine.UnilateralExitRequestFromAPI <- engine.UnilateralExitRequest{ChannelId: channelId, Action: action, SignedState: signedState}
+	return nil
+}
+
+func (n *Node) GetSupportedSignedState(id types.Destination) (state.SignedState, error) {
+	consensusChannel, err := n.store.GetConsensusChannelById(id)
+	if err != nil {
+		return state.SignedState{}, err
+	}
+
+	return consensusChannel.SupportedSignedState(), nil
+}
