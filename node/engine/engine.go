@@ -466,7 +466,7 @@ func (e *Engine) handleChainEvent(chainEvent chainservice.Event) (EngineEvent, e
 	if !ok {
 		_, isChallengeRegistered := chainEvent.(chainservice.ChallengeRegisteredEvent)
 		if isChallengeRegistered {
-
+			//  If challenge registered and didn't found channel then try to find channel from consensus channel and l2tol1 map on chain
 			ch, err := e.processChallengeRegisteredEvent2(chainEvent)
 			if err != nil {
 				// TODO: Return error nil only for consensus channel not found
@@ -519,7 +519,7 @@ func (e *Engine) handleChainEvent(chainEvent chainservice.Event) (EngineEvent, e
 
 	objective, ok := e.store.GetObjectiveByChannelId(c.Id)
 	if ok {
-		fmt.Println("HANDLE CHAIN EVENT SHOULD NOT RETURN FROM HERE")
+		// fmt.Println("HANDLE CHAIN EVENT SHOULD NOT RETURN FROM HERE")
 		return e.attemptProgress(objective)
 	}
 
@@ -554,7 +554,9 @@ func (e *Engine) handleChainEvent(chainEvent chainservice.Event) (EngineEvent, e
 	// 	}
 	// }
 
-	fmt.Println("HANDLE CHAIN EVENT SHOULD RETURN FROM HERE")
+	// TODO: Delete entry from signedstate map on challenge cleared event if it exist
+
+	// fmt.Println("HANDLE CHAIN EVENT SHOULD RETURN FROM HERE")
 	return EngineEvent{}, nil
 }
 
@@ -840,7 +842,7 @@ func (e *Engine) handleCounterChallengeRequest(request CounterChallengeRequest) 
 }
 
 func (e *Engine) HandleUnilateralExitRequest(request UnilateralExitRequest) error {
-	fmt.Println("Inside handle unilateral exit from engine")
+	// fmt.Println("Inside handle unilateral exit from engine")
 	// TODO: Check whether channel holds any objective
 
 	// Get channel
@@ -861,8 +863,6 @@ func (e *Engine) HandleUnilateralExitRequest(request UnilateralExitRequest) erro
 		// Challenging a normal ledger channel
 		challengerSig, _ := NitroAdjudicator.SignChallengeMessage(request.SignedState.State(), *secretKey)
 		tx = protocols.NewChallengeTransaction(request.SignedState.ChannelId(), request.SignedState, make([]state.SignedState, 0), challengerSig)
-		// Store the information for liquidating only if the transaction was succesful
-		e.signedStateMap[request.ChannelId] = request.SignedState
 
 	default:
 		return fmt.Errorf("unknown exit channel action")
@@ -871,6 +871,11 @@ func (e *Engine) HandleUnilateralExitRequest(request UnilateralExitRequest) erro
 	err := e.chain.SendTransaction(tx)
 	if err != nil {
 		return err
+	}
+
+	if request.Action == types.Challenge {
+		// Store the information for liquidating only if the transaction was succesful
+		e.signedStateMap[request.ChannelId] = request.SignedState
 	}
 
 	return nil
@@ -1287,9 +1292,9 @@ func (e *Engine) processStoreChannels(latestblock chainservice.Block) error {
 				return err
 			}
 		}
-
+		// fmt.Println(">>>>>CHANNEL IN PROCESS STORE CHANNEL", ch.Id, ch.OnChain.ChannelMode)
 		// Liquidate assets for finalized ledger channels
-		if ch.Type == channel.Ledger && ch.OnChain.ChannelMode == channel.Finalized && ch.OnChain.IsChallengeInitiatedByMe {
+		if ch.Type == channel.Ledger && ch.OnChain.ChannelMode == channel.Finalized && ch.OnChain.IsChallengeInitiatedByMe && ch.OnChain.Holdings.IsNonZero() {
 			fmt.Println("INSIDE PROCESS STORE CHANNEL, CHANNEL GOING TO LIQUIDATE")
 
 			// TODO: Delete entry from this on challenge cleared and allocation updated event
