@@ -403,7 +403,6 @@ func (n *Node) CounterChallenge(id types.Destination, action types.CounterChalle
 // TODO: Rename CounterChallengeAction to ExitAction
 // TODO: Later add support for voucher
 func (n *Node) UnilateralExit(channelId types.Destination, action types.CounterChallengeAction, signedState state.SignedState) error {
-	fmt.Println("Called unilateral exit from node")
 	n.engine.UnilateralExitRequestFromAPI <- engine.UnilateralExitRequest{ChannelId: channelId, Action: action, SignedState: signedState}
 	return nil
 }

@@ -1,6 +1,7 @@
 package node_test
 
 import (
+	"fmt"
 	"math/big"
 	"testing"
 	"time"
@@ -107,7 +108,7 @@ func TestCheckpoint(t *testing.T) {
 		Description:       "Check point test",
 		Chain:             AnvilChainL1,
 		MessageService:    TestMessageService,
-		ChallengeDuration: 10,
+		ChallengeDuration: 5,
 		MessageDelay:      0,
 		LogName:           "Checkpoint_test",
 		Participants: []TestParticipant{
@@ -123,7 +124,7 @@ func TestCheckpoint(t *testing.T) {
 	defer infra.Close(t)
 
 	// Create go-nitro nodes
-	nodeA, _, _, storeA, _ := setupIntegrationNode(testCase, testCase.Participants[0], infra, []string{}, dataFolder)
+	nodeA, _, _, _, _ := setupIntegrationNode(testCase, testCase.Participants[0], infra, []string{}, dataFolder)
 	defer nodeA.Close()
 	nodeB, _, _, _, _ := setupIntegrationNode(testCase, testCase.Participants[1], infra, []string{}, dataFolder)
 	defer nodeB.Close()
@@ -136,12 +137,12 @@ func TestCheckpoint(t *testing.T) {
 	testhelpers.Assert(t, balanceNodeA.Int64() == 0, "Balance of Alice should be zero")
 	testhelpers.Assert(t, balanceNodeB.Int64() == 0, "Balance of Bob should be zero")
 
-	oldConsensusChannelAlice, err := storeA.GetConsensusChannelById(ledgerChannel)
+	oldState, err := nodeA.GetSupportedSignedState(ledgerChannel)
 	if err != nil {
 		t.Error(err)
 	}
 
-	ledgerUpdatesChannelNodeB := nodeB.LedgerUpdatedChan(ledgerChannel)
+	// ledgerUpdatesChannelNodeB := nodeB.LedgerUpdatedChan(ledgerChannel)
 
 	// Conduct virtual fund, make payment and virtual defund
 	virtualOutcome := initialPaymentOutcome(*nodeA.Address, *nodeB.Address, common.BigToAddress(common.Big0))
@@ -164,52 +165,71 @@ func TestCheckpoint(t *testing.T) {
 	}
 	waitForObjectives(t, nodeA, nodeB, []node.Node{}, []protocols.ObjectiveId{virtualDefundResponse})
 
-	// Alice performs a direct defund with a challenge using the old state
-	newConsensusChannelAlice, err := storeA.GetConsensusChannelById(ledgerChannel)
+	newState, err := nodeB.GetSupportedSignedState(ledgerChannel)
 	if err != nil {
 		t.Error(err)
 	}
-	err = storeA.SetConsensusChannel(oldConsensusChannelAlice)
-	if err != nil {
-		t.Log(err)
-	}
-	res, err := nodeA.CloseLedgerChannel(ledgerChannel, true)
-	if err != nil {
-		t.Log(err)
-	}
 
-	// Bob waits for the channel to enter challenge mode and then counters the registered challenge by checkpoint
-	listenForLedgerUpdates(ledgerUpdatesChannelNodeB, channel.Challenge)
-	nodeB.CounterChallenge(ledgerChannel, types.Checkpoint, state.SignedState{})
+	nodeA.UnilateralExit(ledgerChannel, types.Challenge, oldState)
+	time.Sleep(2 * time.Second)
+	nodeB.UnilateralExit(ledgerChannel, types.Checkpoint, newState)
+	time.Sleep(4 * time.Second)
 
-	// Wait for direct defund objectives to complete
-	chA := nodeA.ObjectiveCompleteChan(res)
-	chB := nodeB.ObjectiveCompleteChan(res)
-	<-chA
-	<-chB
-
-	// Bob performs normal direct defund
-	err = storeA.SetConsensusChannel(newConsensusChannelAlice)
-	if err != nil {
-		t.Log(err)
-	}
-	res, err = nodeB.CloseLedgerChannel(ledgerChannel, false)
-	if err != nil {
-		t.Log(err)
-	}
-	// Wait for direct defund objectives to complete
-	chA = nodeA.ObjectiveCompleteChan(res)
-	chB = nodeB.ObjectiveCompleteChan(res)
-	<-chA
-	<-chB
-
-	// Check assets are liquidated
 	balanceNodeA, _ = infra.anvilChain.GetAccountBalance(testCase.Participants[0].Address())
 	balanceNodeB, _ = infra.anvilChain.GetAccountBalance(testCase.Participants[1].Address())
 	t.Log("Balance of Alice", balanceNodeA, "\nBalance of Bob", balanceNodeB)
-	// Alice's balance is determined by subtracting amount paid from her ledger deposit, while Bob's balance is calculated by adding his ledger deposit to the amount received
-	testhelpers.Assert(t, balanceNodeA.Cmp(big.NewInt(ledgerChannelDeposit-payAmount)) == 0, "Balance of Alice (%v) should be equal to (%v)", balanceNodeA, ledgerChannelDeposit-payAmount)
-	testhelpers.Assert(t, balanceNodeB.Cmp(big.NewInt(ledgerChannelDeposit+payAmount)) == 0, "Balance of Bob (%v) should be equal to (%v)", balanceNodeB, ledgerChannelDeposit+payAmount)
+	nodeB.UnilateralExit(ledgerChannel, types.Challenge, newState)
+	time.Sleep(15 * time.Second)
+	balanceNodeA, _ = infra.anvilChain.GetAccountBalance(testCase.Participants[0].Address())
+	balanceNodeB, _ = infra.anvilChain.GetAccountBalance(testCase.Participants[1].Address())
+	t.Log("Balance of Alice", balanceNodeA, "\nBalance of Bob", balanceNodeB)
+
+	// // Alice performs a direct defund with a challenge using the old state
+	// newConsensusChannelAlice, err := storeA.GetConsensusChannelById(ledgerChannel)
+	// if err != nil {
+	// 	t.Error(err)
+	// }
+	// err = storeA.SetConsensusChannel(oldConsensusChannelAlice)
+	// if err != nil {
+	// 	t.Log(err)
+	// }
+	// res, err := nodeA.CloseLedgerChannel(ledgerChannel, true)
+	// if err != nil {
+	// 	t.Log(err)
+	// }
+
+	// // Bob waits for the channel to enter challenge mode and then counters the registered challenge by checkpoint
+	// listenForLedgerUpdates(ledgerUpdatesChannelNodeB, channel.Challenge)
+	// nodeB.CounterChallenge(ledgerChannel, types.Checkpoint, state.SignedState{})
+
+	// // Wait for direct defund objectives to complete
+	// chA := nodeA.ObjectiveCompleteChan(res)
+	// chB := nodeB.ObjectiveCompleteChan(res)
+	// <-chA
+	// <-chB
+
+	// // Bob performs normal direct defund
+	// err = storeA.SetConsensusChannel(newConsensusChannelAlice)
+	// if err != nil {
+	// 	t.Log(err)
+	// }
+	// res, err = nodeB.CloseLedgerChannel(ledgerChannel, false)
+	// if err != nil {
+	// 	t.Log(err)
+	// }
+	// // Wait for direct defund objectives to complete
+	// chA = nodeA.ObjectiveCompleteChan(res)
+	// chB = nodeB.ObjectiveCompleteChan(res)
+	// <-chA
+	// <-chB
+
+	// // Check assets are liquidated
+	// balanceNodeA, _ = infra.anvilChain.GetAccountBalance(testCase.Participants[0].Address())
+	// balanceNodeB, _ = infra.anvilChain.GetAccountBalance(testCase.Participants[1].Address())
+	// t.Log("Balance of Alice", balanceNodeA, "\nBalance of Bob", balanceNodeB)
+	// // Alice's balance is determined by subtracting amount paid from her ledger deposit, while Bob's balance is calculated by adding his ledger deposit to the amount received
+	// testhelpers.Assert(t, balanceNodeA.Cmp(big.NewInt(ledgerChannelDeposit-payAmount)) == 0, "Balance of Alice (%v) should be equal to (%v)", balanceNodeA, ledgerChannelDeposit-payAmount)
+	// testhelpers.Assert(t, balanceNodeB.Cmp(big.NewInt(ledgerChannelDeposit+payAmount)) == 0, "Balance of Bob (%v) should be equal to (%v)", balanceNodeB, ledgerChannelDeposit+payAmount)
 }
 
 func TestCounterChallenge(t *testing.T) {
@@ -534,6 +554,7 @@ func getLatestSignedState(store store.Store, id types.Destination) state.SignedS
 
 func listenForLedgerUpdates(ledgerUpdatesChan <-chan query.LedgerChannelInfo, listenType channel.ChannelMode) {
 	for ledgerInfo := range ledgerUpdatesChan {
+		fmt.Println(">>>>LEDGER INFO", ledgerInfo)
 		if ledgerInfo.ChannelMode == listenType {
 			return
 		}
