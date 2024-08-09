@@ -146,13 +146,13 @@ func (vm *VoucherManager) Remaining(chanId types.Destination) (*big.Int, error) 
 }
 
 // GetVoucherIfAmountPresent returns voucher information if a non-zero amount has been paid on the channel
-func (vm *VoucherManager) GetVoucherIfAmountPresent(channelId types.Destination) (*VoucherInfo, bool) {
+func (vm *VoucherManager) GetVoucherIfAmountPresent(channelId types.Destination) (VoucherInfo, bool) {
 	if vm.ChannelRegistered(channelId) {
 		amountPaid, _ := vm.Paid(channelId)
 		if amountPaid.Cmp(big.NewInt(0)) != 0 {
 			voucherInfo, _ := vm.store.GetVoucherInfo(channelId)
-			return voucherInfo, true
+			return *voucherInfo, true
 		}
 	}
-	return nil, false
+	return VoucherInfo{}, false
 }
