@@ -62,7 +62,7 @@ type Objective struct {
 	checkpointTransactionSubmitted bool
 
 	FundedChannels            map[types.Destination]*channel.Channel
-	GetVoucherIfAmountPresent func(channelId types.Destination) (*payments.VoucherInfo, bool) `json:"-"`
+	GetVoucherIfAmountPresent func(channelId types.Destination) (payments.VoucherInfo, bool) `json:"-"`
 }
 
 // isInConsensusOrFinalState returns true if the channel has a final state or latest state that is supported
@@ -90,7 +90,7 @@ type GetChannelByIdFunction func(id types.Destination) (channel *channel.Channel
 // GetConsensusChannel describes functions which return a ConsensusChannel ledger channel for a channel id.
 type GetConsensusChannel func(channelId types.Destination) (ledger *consensus_channel.ConsensusChannel, err error)
 
-type GetVoucherIfAmountPresent func(channelId types.Destination) (*payments.VoucherInfo, bool)
+type GetVoucherIfAmountPresent func(channelId types.Destination) (payments.VoucherInfo, bool)
 
 // NewObjective initiates an Objective with the supplied channel
 func NewObjective(

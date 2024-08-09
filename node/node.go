@@ -402,16 +402,26 @@ func (n *Node) CounterChallenge(id types.Destination, action types.CounterChalle
 
 // TODO: Rename CounterChallengeAction to ExitAction
 // TODO: Later add support for voucher
-func (n *Node) UnilateralExit(channelId types.Destination, action types.CounterChallengeAction, signedState state.SignedState) error {
-	n.engine.UnilateralExitRequestFromAPI <- engine.UnilateralExitRequest{ChannelId: channelId, Action: action, SignedState: signedState}
+func (n *Node) UnilateralExit(channelId types.Destination, action types.CounterChallengeAction, signedState state.SignedState, voucher payments.Voucher) error {
+	n.engine.UnilateralExitRequestFromAPI <- engine.UnilateralExitRequest{ChannelId: channelId, Action: action, SignedState: signedState, Voucher: voucher}
 	return nil
 }
 
 func (n *Node) GetSupportedSignedState(id types.Destination) (state.SignedState, error) {
+	c, ok := n.store.GetChannelById(id)
+
+	if ok {
+		return c.LatestSupportedSignedState()
+	}
+
 	consensusChannel, err := n.store.GetConsensusChannelById(id)
 	if err != nil {
 		return state.SignedState{}, err
 	}
 
 	return consensusChannel.SupportedSignedState(), nil
+}
+
+func (n Node) GetVoucherIfAmountPresent(channelId types.Destination) (payments.VoucherInfo, bool) {
+	return n.vm.GetVoucherIfAmountPresent(channelId)
 }

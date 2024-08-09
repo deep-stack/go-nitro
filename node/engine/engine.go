@@ -9,13 +9,17 @@ import (
 	"fmt"
 	"log/slog"
 	"math/big"
+	"strings"
 	"sync"
 	"time"
 
+	"github.com/ethereum/go-ethereum/accounts/abi"
+	"github.com/ethereum/go-ethereum/common"
 	"github.com/ethereum/go-ethereum/crypto/secp256k1"
 	"github.com/statechannels/go-nitro/channel"
 	"github.com/statechannels/go-nitro/channel/consensus_channel"
 	"github.com/statechannels/go-nitro/channel/state"
+	"github.com/statechannels/go-nitro/channel/state/outcome"
 	"github.com/statechannels/go-nitro/internal/logging"
 	"github.com/statechannels/go-nitro/node/engine/chainservice"
 	NitroAdjudicator "github.com/statechannels/go-nitro/node/engine/chainservice/adjudicator"
@@ -209,7 +213,7 @@ func (e *Engine) run(ctx context.Context) {
 		var res EngineEvent
 		var err error
 
-		blockTicker := time.NewTicker(5 * time.Second)
+		blockTicker := time.NewTicker(6 * time.Second)
 
 		select {
 
@@ -854,22 +858,84 @@ func (e *Engine) HandleUnilateralExitRequest(request UnilateralExitRequest) erro
 		tx = protocols.NewCheckpointTransaction(request.SignedState.ChannelId(), request.SignedState, make([]state.SignedState, 0))
 
 	case types.Challenge:
+		signedStateToChallenge := request.SignedState
+		proof := make([]state.SignedState, 0)
+
+		// If voucher exist and its virtual channel
+		// TODO: Request.SignedState.ChannelId corresponds to virtual channel
+		if !request.Voucher.ChannelId.IsZero() {
+			voucherSigner, err := request.Voucher.RecoverSigner()
+			if err != nil {
+				return err
+			}
+
+			// Node who created virtual channel should sign the voucher
+			if request.SignedState.State().Participants[0] != voucherSigner {
+				return fmt.Errorf("voucher signed doesnt match")
+			}
+
+			voucherAmountSigTy, _ := abi.NewType("tuple", "", []abi.ArgumentMarshaling{
+				{Name: "amount", Type: "uint256"},
+				{Name: "signature", Type: "tuple", Components: []abi.ArgumentMarshaling{
+					{Name: "v", Type: "uint8"},
+					{Name: "r", Type: "bytes32"},
+					{Name: "s", Type: "bytes32"},
+				}},
+			})
+
+			arguments := abi.Arguments{
+				{Type: voucherAmountSigTy},
+			}
+
+			voucherAmountSignatureData := protocols.VoucherAmountSignature{
+				Amount:    request.Voucher.Amount,
+				Signature: NitroAdjudicator.ConvertSignature(request.Voucher.Signature),
+			}
+
+			fmt.Println(">>>>voucherAmountSignatureData", voucherAmountSignatureData)
+
+			// Use above created type and encode voucher amount and signature
+			dataEncoded, _ := arguments.Pack(voucherAmountSignatureData)
+
+			s := request.SignedState.State()
+			s.AppData = dataEncoded
+			s.TurnNum++
+			s.Outcome[0].Allocations[0].Amount = s.Outcome[0].Allocations[0].Amount.Sub(s.Outcome[0].Allocations[0].Amount, request.Voucher.Amount)
+			s.Outcome[0].Allocations[1].Amount = request.Voucher.Amount
+
+			fmt.Println(">>>>>uppdated state", s)
+			fmt.Println(">>>>>uppdated outcome", s.Outcome[0].Allocations)
+
+			sig, err := s.Sign(*e.store.GetChannelSecretKey())
+			if err != nil {
+				return err
+			}
+			ss := state.NewSignedState(s)
+			err = ss.AddSignature(sig)
+			if err != nil {
+				return err
+			}
+			signedStateToChallenge = ss
+			proof = append(proof, request.SignedState)
+		}
+
 		// Challenging a normal ledger channel
-		challengerSig, _ := NitroAdjudicator.SignChallengeMessage(request.SignedState.State(), *secretKey)
-		tx = protocols.NewChallengeTransaction(request.SignedState.ChannelId(), request.SignedState, make([]state.SignedState, 0), challengerSig)
+		fmt.Printf(">>>PARAMS TO CHALLENGE %+v %+v", signedStateToChallenge, proof)
+
+		challengerSig, _ := NitroAdjudicator.SignChallengeMessage(signedStateToChallenge.State(), *secretKey)
+		tx = protocols.NewChallengeTransaction(signedStateToChallenge.State().ChannelId(), signedStateToChallenge, proof, challengerSig)
+
+		// TODO: Store the information for liquidating only if the transaction was succesful
+		// TODO: Update state only after successful challenge event (now store in pending field, in handle chain event if its successful then update signed state)
+		e.signedStateMap[request.ChannelId] = signedStateToChallenge
 
 	default:
 		return fmt.Errorf("unknown exit channel action")
 	}
-
+	// TODO: Use side effect to send transaction
 	err := e.chain.SendTransaction(tx)
 	if err != nil {
 		return err
-	}
-
-	if request.Action == types.Challenge {
-		// Store the information for liquidating only if the transaction was succesful
-		e.signedStateMap[request.ChannelId] = request.SignedState
 	}
 
 	return nil
@@ -1296,17 +1362,82 @@ func (e *Engine) processStoreChannels(latestblock chainservice.Block) error {
 			// TODO: Delete entry from this on challenge cleared and allocation updated event
 			ss := e.signedStateMap[ch.Id]
 
+			if len(ss.State().Participants) != len(ss.State().Outcome[0].Allocations) {
+				fmt.Println("DO RECLAIM FIRST FOR THE CHALLENGED LEDGER CHANNEL")
+
+				convertedLedgerFixedPart := NitroAdjudicator.ConvertFixedPart(ss.State().FixedPart())
+				convertedLedgerVariablePart := NitroAdjudicator.ConvertVariablePart(ss.State().VariablePart())
+				sourceOutcome := ss.State().Outcome
+				sourceOb, _ := sourceOutcome.Encode()
+
+				// For computing new outcome for liquidatation
+				aliceAllocation := ss.State().Outcome[0].Allocations[0]
+				bobAllocation := ss.State().Outcome[0].Allocations[1]
+
+				for _, allocation := range ss.State().Outcome[0].Allocations {
+					// TODO: Should reclaim multiple virtual channels of a specific ledger channel
+
+					if contains(ss.State().Participants, allocation.Destination) {
+						continue
+					}
+					fmt.Println(">>>>INSIDE RECLAIMS ON VIRTUAL CHANNEL", allocation.Destination)
+
+					virtualSignedState := e.signedStateMap[allocation.Destination]
+					virtualStateHash, _ := virtualSignedState.State().Hash()
+					targetOutcome := virtualSignedState.State().Outcome
+					targetOb, _ := targetOutcome.Encode()
+
+					reclaimArgs := NitroAdjudicator.IMultiAssetHolderReclaimArgs{
+						SourceChannelId:       ss.ChannelId(),
+						FixedPart:             convertedLedgerFixedPart,
+						VariablePart:          convertedLedgerVariablePart,
+						SourceOutcomeBytes:    sourceOb,
+						SourceAssetIndex:      common.Big0,
+						IndexOfTargetInSource: common.Big2,
+						TargetStateHash:       virtualStateHash,
+						TargetOutcomeBytes:    targetOb,
+						TargetAssetIndex:      common.Big0,
+					}
+					// TODO: Use side effect to send transaction
+					reclaimTx := protocols.NewReclaimTransaction(ss.ChannelId(), reclaimArgs)
+					err := e.chain.SendTransaction(reclaimTx)
+					if err != nil {
+						return err
+					}
+
+					// compute new ledger channel state after reclaim to liquidate
+					for i, allocation := range virtualSignedState.State().Outcome[0].Allocations {
+						if aliceAllocation.Destination == allocation.Destination {
+							aliceAllocation.Amount.Add(aliceAllocation.Amount, virtualSignedState.State().Outcome[0].Allocations[i].Amount)
+						}
+						if bobAllocation.Destination == allocation.Destination {
+							bobAllocation.Amount.Add(bobAllocation.Amount, virtualSignedState.State().Outcome[0].Allocations[i].Amount)
+						}
+					}
+				}
+
+				// compute and save new ledger channel state after reclaim to liquidate
+				latestState := ss.State()
+				latestState.Outcome[0].Allocations = outcome.Allocations{aliceAllocation, bobAllocation}
+				latestSignedState := state.NewSignedState(latestState)
+				// TODO: Update state only after successful reclaim event (now store in pending field, in handle chain event if its successful then update signed state)
+				e.signedStateMap[ss.ChannelId()] = latestSignedState
+				return nil
+			}
+
 			// TODO: Check this signedstateMap state hash matches with c.onchain.statehash
 
 			if ch.Id == ss.ChannelId() {
 				fmt.Println(">>>LIQUIDATING NORMAL LEDGER CHANNEL")
 				transferTx := protocols.NewTransferAllTransaction(ch.Id, ss)
+				// TODO: Use side effect to send transaction
 				err := e.chain.SendTransaction(transferTx)
 				if err != nil {
 					return err
 				}
 			} else {
 				fmt.Println(">>>LIQUIDATING MIRROR LEDGER CHANNEL")
+				// TODO: Use side effect to send transaction
 				mirrorWithdrawAllTx := protocols.NewMirrorTransferAllTransaction(ch.Id, ss)
 				err := e.chain.SendTransaction(mirrorWithdrawAllTx)
 				if err != nil {
@@ -1355,4 +1486,30 @@ func (e *Engine) checkError(err error) {
 
 		panic(err)
 	}
+}
+
+func contains(arr []common.Address, x types.Destination) bool {
+	for _, v := range arr {
+		// fmt.Println(">>>>LOOPING ADDRESS", v.String(), x.String())
+		normalizedStr1 := normalizeAddress(v.String())
+		normalizedStr2 := normalizeAddress(x.String())
+		if strings.EqualFold(normalizedStr1, normalizedStr2) {
+			return true
+		}
+	}
+	return false
+}
+
+func normalizeAddress(addr string) string {
+	// Remove the "0x" prefix if it exists
+	addr = strings.TrimPrefix(addr, "0x")
+
+	// Remove leading zeros
+	addr = strings.TrimLeft(addr, "0")
+
+	return addr
+}
+
+func (e Engine) GetVoucherIfAmountPresent(channelId types.Destination) (payments.VoucherInfo, bool) {
+	return e.vm.GetVoucherIfAmountPresent(channelId)
 }
