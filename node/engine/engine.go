@@ -892,19 +892,14 @@ func (e *Engine) HandleUnilateralExitRequest(request UnilateralExitRequest) erro
 				Signature: NitroAdjudicator.ConvertSignature(request.Voucher.Signature),
 			}
 
-			fmt.Println(">>>>voucherAmountSignatureData", voucherAmountSignatureData)
-
 			// Use above created type and encode voucher amount and signature
 			dataEncoded, _ := arguments.Pack(voucherAmountSignatureData)
 
-			s := request.SignedState.State()
+			s := request.SignedState.State().Clone()
 			s.AppData = dataEncoded
 			s.TurnNum++
 			s.Outcome[0].Allocations[0].Amount = s.Outcome[0].Allocations[0].Amount.Sub(s.Outcome[0].Allocations[0].Amount, request.Voucher.Amount)
 			s.Outcome[0].Allocations[1].Amount = request.Voucher.Amount
-
-			fmt.Println(">>>>>uppdated state", s)
-			fmt.Println(">>>>>uppdated outcome", s.Outcome[0].Allocations)
 
 			sig, err := s.Sign(*e.store.GetChannelSecretKey())
 			if err != nil {
@@ -920,8 +915,6 @@ func (e *Engine) HandleUnilateralExitRequest(request UnilateralExitRequest) erro
 		}
 
 		// Challenging a normal ledger channel
-		fmt.Printf(">>>PARAMS TO CHALLENGE %+v %+v", signedStateToChallenge, proof)
-
 		challengerSig, _ := NitroAdjudicator.SignChallengeMessage(signedStateToChallenge.State(), *secretKey)
 		tx = protocols.NewChallengeTransaction(signedStateToChallenge.State().ChannelId(), signedStateToChallenge, proof, challengerSig)
 

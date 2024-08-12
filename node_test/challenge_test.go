@@ -18,6 +18,7 @@ import (
 	NitroAdjudicator "github.com/statechannels/go-nitro/node/engine/chainservice/adjudicator"
 	"github.com/statechannels/go-nitro/node/engine/store"
 	"github.com/statechannels/go-nitro/node/query"
+	"github.com/statechannels/go-nitro/payments"
 	"github.com/statechannels/go-nitro/protocols"
 	"github.com/statechannels/go-nitro/types"
 )
@@ -61,7 +62,7 @@ func TestChallenge(t *testing.T) {
 		t.Fatal(err)
 	}
 
-	nodeA.UnilateralExit(ledgerChannel, types.Challenge, ss)
+	nodeA.UnilateralExit(ledgerChannel, types.Challenge, ss, payments.Voucher{})
 
 	time.Sleep(10 * time.Second)
 
@@ -170,15 +171,15 @@ func TestCheckpoint(t *testing.T) {
 		t.Error(err)
 	}
 
-	nodeA.UnilateralExit(ledgerChannel, types.Challenge, oldState)
+	nodeA.UnilateralExit(ledgerChannel, types.Challenge, oldState, payments.Voucher{})
 	time.Sleep(2 * time.Second)
-	nodeB.UnilateralExit(ledgerChannel, types.Checkpoint, newState)
+	nodeB.UnilateralExit(ledgerChannel, types.Checkpoint, newState, payments.Voucher{})
 	time.Sleep(4 * time.Second)
 
 	balanceNodeA, _ = infra.anvilChain.GetAccountBalance(testCase.Participants[0].Address())
 	balanceNodeB, _ = infra.anvilChain.GetAccountBalance(testCase.Participants[1].Address())
 	t.Log("Balance of Alice", balanceNodeA, "\nBalance of Bob", balanceNodeB)
-	nodeB.UnilateralExit(ledgerChannel, types.Challenge, newState)
+	nodeB.UnilateralExit(ledgerChannel, types.Challenge, newState, payments.Voucher{})
 	time.Sleep(15 * time.Second)
 	balanceNodeA, _ = infra.anvilChain.GetAccountBalance(testCase.Participants[0].Address())
 	balanceNodeB, _ = infra.anvilChain.GetAccountBalance(testCase.Participants[1].Address())
@@ -321,6 +322,332 @@ func TestCounterChallenge(t *testing.T) {
 	// Alice's balance is determined by subtracting amount paid from her ledger deposit, while Bob's balance is calculated by adding his ledger deposit to the amount received
 	testhelpers.Assert(t, balanceNodeA.Cmp(big.NewInt(ledgerChannelDeposit-payAmount)) == 0, "Balance of Alice (%v) should be equal to (%v)", balanceNodeA, ledgerChannelDeposit-payAmount)
 	testhelpers.Assert(t, balanceNodeB.Cmp(big.NewInt(ledgerChannelDeposit+payAmount)) == 0, "Balance of Bob (%v) should be equal to (%v)", balanceNodeB, ledgerChannelDeposit+payAmount)
+}
+
+func TestVirtualChannelWithVoucher(t *testing.T) {
+	tc := TestCase{
+		Description:       "Virtual channel test",
+		Chain:             AnvilChainL1,
+		MessageService:    TestMessageService,
+		MessageDelay:      0,
+		LogName:           "Virtual_channel_test",
+		ChallengeDuration: 5,
+		Participants: []TestParticipant{
+			{StoreType: MemStore, Actor: testactors.Alice},
+			{StoreType: MemStore, Actor: testactors.Bob},
+		},
+	}
+
+	dataFolder, cleanup := testhelpers.GenerateTempStoreFolder()
+	defer cleanup()
+
+	infra := setupSharedInfra(tc)
+	defer infra.Close(t)
+
+	// Create go-nitro nodes
+	nodeA, _, _, _, _ := setupIntegrationNode(tc, tc.Participants[0], infra, []string{}, dataFolder)
+	nodeB, _, _, _, _ := setupIntegrationNode(tc, tc.Participants[1], infra, []string{}, dataFolder)
+	defer nodeB.Close()
+
+	// Seperate chain service to listen for events
+	testChainService := setupChainService(tc, tc.Participants[1], infra)
+	defer testChainService.Close()
+
+	// Create ledger channel
+	ledgerChannel := openLedgerChannel(t, nodeA, nodeB, types.Address{}, uint32(tc.ChallengeDuration))
+	fmt.Println(">>>>>LEDGER CHANNEL", ledgerChannel)
+
+	// Create virtual channel
+	virtualOutcome := initialPaymentOutcome(*nodeA.Address, *nodeB.Address, types.Address{})
+	virtualResponse, _ := nodeA.CreatePaymentChannel([]common.Address{}, *nodeB.Address, uint32(tc.ChallengeDuration), virtualOutcome)
+
+	// Wait for objective to complete
+	waitForObjectives(t, nodeA, nodeB, []node.Node{}, []protocols.ObjectiveId{virtualResponse.Id})
+	checkPaymentChannel(t, virtualResponse.ChannelId, virtualOutcome, query.Open, nodeA, nodeB)
+
+	nodeA.Pay(virtualResponse.ChannelId, big.NewInt(payAmount))
+	nodeBVoucher := <-nodeB.ReceivedVouchers()
+	fmt.Println(">>>>>>RECIEVED VOUCHER", nodeBVoucher)
+
+	nodeA.Pay(virtualResponse.ChannelId, big.NewInt(payAmount))
+	nodeBVoucher = <-nodeB.ReceivedVouchers()
+
+	fmt.Println(">>>>>>RECIEVED VOUCHER", nodeBVoucher)
+
+	ss, err := nodeB.GetSupportedSignedState(virtualResponse.ChannelId)
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	// v, _ := nodeB.GetVoucherIfAmountPresent(virtualResponse.ChannelId)
+	// fmt.Printf(">>>>>VOUCHER>>> %+v", v)
+	nodeB.UnilateralExit(ss.ChannelId(), types.Challenge, ss, nodeBVoucher)
+
+	time.Sleep(5 * time.Second)
+
+	ss, err = nodeB.GetSupportedSignedState(ledgerChannel)
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	// fmt.Printf(">>>SSS %+v", ss)
+	// fmt.Printf(">>>ledger channel %+v", ledgerChannel)
+
+	nodeB.UnilateralExit(ss.ChannelId(), types.Challenge, ss, payments.Voucher{})
+	time.Sleep(30 * time.Second)
+
+	// ss, err = nodeA.GetSupportedSignedState(ledgerChannel)
+	// if err != nil {
+	// 	t.Fatal(err)
+	// }
+	// nodeA.UnilateralExit(ss.ChannelId(), types.Challenge, ss)
+	// time.Sleep(30 * time.Second)
+	balanceNodeA, _ := infra.anvilChain.GetAccountBalance(tc.Participants[0].Address())
+	balanceNodeB, _ := infra.anvilChain.GetAccountBalance(tc.Participants[1].Address())
+	t.Log("Balance of Alice", balanceNodeA, "\nBalance of Bob", balanceNodeB)
+}
+
+func TestVirtualChannelWithoutVoucher(t *testing.T) {
+	tc := TestCase{
+		Description:       "Virtual channel test",
+		Chain:             AnvilChainL1,
+		MessageService:    TestMessageService,
+		MessageDelay:      0,
+		LogName:           "Virtual_channel_test",
+		ChallengeDuration: 5,
+		Participants: []TestParticipant{
+			{StoreType: MemStore, Actor: testactors.Alice},
+			{StoreType: MemStore, Actor: testactors.Bob},
+		},
+	}
+
+	dataFolder, cleanup := testhelpers.GenerateTempStoreFolder()
+	defer cleanup()
+
+	infra := setupSharedInfra(tc)
+	defer infra.Close(t)
+
+	// Create go-nitro nodes
+	nodeA, _, _, _, _ := setupIntegrationNode(tc, tc.Participants[0], infra, []string{}, dataFolder)
+	nodeB, _, _, _, _ := setupIntegrationNode(tc, tc.Participants[1], infra, []string{}, dataFolder)
+	defer nodeB.Close()
+
+	// Seperate chain service to listen for events
+	testChainService := setupChainService(tc, tc.Participants[1], infra)
+	defer testChainService.Close()
+
+	// Create ledger channel
+	ledgerChannel := openLedgerChannel(t, nodeA, nodeB, types.Address{}, uint32(tc.ChallengeDuration))
+
+	// Create virtual channel
+	virtualOutcome := initialPaymentOutcome(*nodeA.Address, *nodeB.Address, types.Address{})
+	virtualResponse, _ := nodeA.CreatePaymentChannel([]common.Address{}, *nodeB.Address, uint32(tc.ChallengeDuration), virtualOutcome)
+
+	// Wait for objective to complete
+	waitForObjectives(t, nodeA, nodeB, []node.Node{}, []protocols.ObjectiveId{virtualResponse.Id})
+	checkPaymentChannel(t, virtualResponse.ChannelId, virtualOutcome, query.Open, nodeA, nodeB)
+
+	ss, err := nodeA.GetSupportedSignedState(virtualResponse.ChannelId)
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	fmt.Printf(">>>SSS %+v", ss)
+	fmt.Printf(">>>ledger channel %+v", ledgerChannel)
+
+	nodeA.UnilateralExit(ss.ChannelId(), types.Challenge, ss, payments.Voucher{})
+
+	time.Sleep(5 * time.Second)
+
+	ss, err = nodeA.GetSupportedSignedState(ledgerChannel)
+	if err != nil {
+		t.Fatal(err)
+	}
+	nodeA.UnilateralExit(ss.ChannelId(), types.Challenge, ss, payments.Voucher{})
+	time.Sleep(30 * time.Second)
+	balanceNodeA, _ := infra.anvilChain.GetAccountBalance(tc.Participants[0].Address())
+	balanceNodeB, _ := infra.anvilChain.GetAccountBalance(tc.Participants[1].Address())
+	t.Log("Balance of Alice", balanceNodeA, "\nBalance of Bob", balanceNodeB)
+
+	// // Alice pays Bob
+	// nodeA.Pay(virtualResponse.ChannelId, big.NewInt(payAmount))
+
+	// // Close Alice's node
+	// closeNode(t, &nodeA)
+
+	// // Wait for Bob to recieve voucher
+	// nodeBVoucher := <-nodeB.ReceivedVouchers()
+	// t.Logf("Voucher recieved %+v", nodeBVoucher)
+
+	// // As Alice's node has closed, Bob has to force the defunding from virtual and ledger channel
+	// // To call challenge method on virtual channel with voucher, the voucher info needs to be encoded in `AppData` field of channel state
+
+	// virtualChannel, _ := storeB.GetChannelById(virtualResponse.ChannelId)
+	// voucherState, _ := virtualChannel.LatestSignedState()
+
+	// // Create type to encode voucher amount and signature
+	// voucherAmountSigTy, _ := abi.NewType("tuple", "", []abi.ArgumentMarshaling{
+	// 	{Name: "amount", Type: "uint256"},
+	// 	{Name: "signature", Type: "tuple", Components: []abi.ArgumentMarshaling{
+	// 		{Name: "v", Type: "uint8"},
+	// 		{Name: "r", Type: "bytes32"},
+	// 		{Name: "s", Type: "bytes32"},
+	// 	}},
+	// })
+
+	// arguments := abi.Arguments{
+	// 	{Type: voucherAmountSigTy},
+	// }
+
+	// voucherAmountSignatureData := protocols.VoucherAmountSignature{
+	// 	Amount:    nodeBVoucher.Amount,
+	// 	Signature: NitroAdjudicator.ConvertSignature(nodeBVoucher.Signature),
+	// }
+
+	// // Use above created type and encode voucher amount and signature
+	// dataEncoded, err := arguments.Pack(voucherAmountSignatureData)
+	// if err != nil {
+	// 	t.Fatalf("Failed to encode data: %v", err)
+	// }
+
+	// // Create expected payment outcome
+	// finalVirtualOutcome := finalPaymentOutcome(*nodeA.Address, *nodeB.Address, common.Address{}, 1, uint(nodeBVoucher.Amount.Int64()))
+
+	// // Construct variable part with updated outcome and app data
+	// vp := state.VariablePart{Outcome: finalVirtualOutcome, TurnNum: voucherState.State().TurnNum + 1, AppData: dataEncoded, IsFinal: voucherState.State().IsFinal}
+
+	// // Update state with constructed variable part
+	// newState := state.StateFromFixedAndVariablePart(voucherState.State().FixedPart(), vp)
+
+	// // Bob signs constructed state and adds it to the virtual channel
+	// _, _ = virtualChannel.SignAndAddState(newState, &tc.Participants[1].PrivateKey)
+
+	// // Update store with updated virtual channel
+	// _ = storeB.SetChannel(virtualChannel)
+
+	// // Get updated virtual channel
+	// updatedVirtualChannel, _ := storeB.GetChannelById(virtualResponse.ChannelId)
+
+	// signedLedgerState := getLatestSignedState(storeB, ledgerChannel)
+	// signedVirtualState, _ := updatedVirtualChannel.LatestSignedState()
+	// signedPostFundState := updatedVirtualChannel.SignedPostFundState()
+
+	// // Bob calls challenge method on virtual channel
+	// virtualChallengerSig, _ := NitroAdjudicator.SignChallengeMessage(signedVirtualState.State(), tc.Participants[1].PrivateKey)
+	// virtualChallengeTx := protocols.NewChallengeTransaction(virtualResponse.ChannelId, signedVirtualState, []state.SignedState{signedPostFundState}, virtualChallengerSig)
+	// err = chainServiceB.SendTransaction(virtualChallengeTx)
+	// if err != nil {
+	// 	t.Error(err)
+	// }
+
+	// // Listen for challenge registered event
+	// event := waitForEvent(t, testChainService.EventFeed(), chainservice.ChallengeRegisteredEvent{})
+	// t.Log("Challenge registed event received", event)
+	// challengeRegisteredEvent, ok := event.(chainservice.ChallengeRegisteredEvent)
+	// testhelpers.Assert(t, ok, "Expected challenge registered event")
+
+	// time.Sleep(time.Duration(tc.ChallengeDuration) * time.Second)
+	// latestBlock, _ := infra.anvilChain.GetLatestBlock()
+	// testhelpers.Assert(t, challengeRegisteredEvent.FinalizesAt.Uint64() <= latestBlock.Header().Time, "Expected channel to be finalized")
+
+	// // Bob calls challenge method on ledger channel
+	// challengerSig, _ := NitroAdjudicator.SignChallengeMessage(signedLedgerState.State(), tc.Participants[1].PrivateKey)
+	// challengeTx := protocols.NewChallengeTransaction(ledgerChannel, signedLedgerState, make([]state.SignedState, 0), challengerSig)
+	// err = chainServiceB.SendTransaction(challengeTx)
+	// if err != nil {
+	// 	t.Error(err)
+	// }
+
+	// // Listen for challenge registered event
+	// event = waitForEvent(t, testChainService.EventFeed(), chainservice.ChallengeRegisteredEvent{})
+	// t.Log("Challenge registed event received", event)
+	// challengeRegisteredEvent, ok = event.(chainservice.ChallengeRegisteredEvent)
+	// testhelpers.Assert(t, ok, "Expected challenge registered event")
+
+	// time.Sleep(time.Duration(tc.ChallengeDuration) * time.Second)
+	// latestBlock, _ = infra.anvilChain.GetLatestBlock()
+	// testhelpers.Assert(t, challengeRegisteredEvent.FinalizesAt.Uint64() <= latestBlock.Header().Time, "Expected channel to be finalized")
+
+	// // Now that ledger and virtual channels are finalized, call reclaim method
+	// convertedLedgerFixedPart := NitroAdjudicator.ConvertFixedPart(signedLedgerState.State().FixedPart())
+	// convertedLedgerVariablePart := NitroAdjudicator.ConvertVariablePart(signedLedgerState.State().VariablePart())
+	// virtualStateHash, _ := signedVirtualState.State().Hash()
+	// sourceOutcome := signedLedgerState.State().Outcome
+	// sourceOb, _ := sourceOutcome.Encode()
+	// targetOutcome := signedVirtualState.State().Outcome
+	// targetOb, _ := targetOutcome.Encode()
+
+	// reclaimArgs := NitroAdjudicator.IMultiAssetHolderReclaimArgs{
+	// 	SourceChannelId:       ledgerChannel,
+	// 	FixedPart:             convertedLedgerFixedPart,
+	// 	VariablePart:          convertedLedgerVariablePart,
+	// 	SourceOutcomeBytes:    sourceOb,
+	// 	SourceAssetIndex:      common.Big0,
+	// 	IndexOfTargetInSource: common.Big2,
+	// 	TargetStateHash:       virtualStateHash,
+	// 	TargetOutcomeBytes:    targetOb,
+	// 	TargetAssetIndex:      common.Big0,
+	// }
+
+	// reclaimTx := protocols.NewReclaimTransaction(ledgerChannel, reclaimArgs)
+	// err = chainServiceB.SendTransaction(reclaimTx)
+	// if err != nil {
+	// 	t.Error(err)
+	// }
+
+	// // Listen for reclaimed event
+	// event = waitForEvent(t, testChainService.EventFeed(), chainservice.ReclaimedEvent{})
+	// _, ok = event.(chainservice.ReclaimedEvent)
+	// testhelpers.Assert(t, ok, "Expected reclaimed event")
+
+	// // Compute new state outcome allocations
+	// aliceOutcomeAllocationAmount := signedLedgerState.State().Outcome[0].Allocations[0].Amount
+	// bobOutcomeAllocationAmount := signedLedgerState.State().Outcome[0].Allocations[1].Amount
+
+	// aliceOutcomeAllocationAmount.Add(aliceOutcomeAllocationAmount, signedVirtualState.State().Outcome[0].Allocations[0].Amount)
+	// bobOutcomeAllocationAmount.Add(bobOutcomeAllocationAmount, signedVirtualState.State().Outcome[0].Allocations[1].Amount)
+
+	// // Get latest ledger channel state
+	// latestLedgerState := getLatestSignedState(storeA, ledgerChannel)
+	// latestState := latestLedgerState.State()
+
+	// // Construct exit state with updated outcome allocations
+	// latestState.Outcome[0].Allocations = outcome.Allocations{
+	// 	{
+	// 		Destination:    latestLedgerState.State().Outcome[0].Allocations[0].Destination,
+	// 		Amount:         aliceOutcomeAllocationAmount,
+	// 		AllocationType: outcome.SimpleAllocationType,
+	// 		Metadata:       latestLedgerState.State().Outcome[0].Allocations[0].Metadata,
+	// 	},
+	// 	{
+	// 		Destination:    latestLedgerState.State().Outcome[0].Allocations[1].Destination,
+	// 		Amount:         bobOutcomeAllocationAmount,
+	// 		AllocationType: outcome.SimpleAllocationType,
+	// 		Metadata:       latestLedgerState.State().Outcome[0].Allocations[1].Metadata,
+	// 	},
+	// }
+
+	// signedConstructedState := state.NewSignedState(latestState)
+
+	// // Bob calls transferAllAssets method
+	// transferTx := protocols.NewTransferAllTransaction(ledgerChannel, signedConstructedState)
+	// err = chainServiceB.SendTransaction(transferTx)
+
+	// testhelpers.Assert(t, err == nil, "Expected assets liquidated")
+
+	// // Listen for allocation updated event
+	// event = waitForEvent(t, testChainService.EventFeed(), chainservice.AllocationUpdatedEvent{})
+	// _, ok = event.(chainservice.AllocationUpdatedEvent)
+	// testhelpers.Assert(t, ok, "Expected allocation updated event")
+
+	// // Check assets are liquidated
+	// balanceNodeA, _ := infra.anvilChain.GetAccountBalance(tc.Participants[0].Address())
+	// balanceNodeB, _ := infra.anvilChain.GetAccountBalance(tc.Participants[1].Address())
+	// t.Log("Balance of Alice", balanceNodeA, "\nBalance of Bob", balanceNodeB)
+
+	// // Alice's balance is determined by subtracting amount paid from her ledger deposit, while Bob's balance is calculated by adding his ledger deposit to the amount received
+	// testhelpers.Assert(t, balanceNodeA.Cmp(big.NewInt(ledgerChannelDeposit-payAmount)) == 0, "Balance of Alice (%v) should be equal to (%v)", balanceNodeA, ledgerChannelDeposit-payAmount)
+	// testhelpers.Assert(t, balanceNodeB.Cmp(big.NewInt(ledgerChannelDeposit+payAmount)) == 0, "Balance of Bob (%v) should be equal to (%v)", balanceNodeB, ledgerChannelDeposit+payAmount)
 }
 
 func TestVirtualPaymentChannel(t *testing.T) {

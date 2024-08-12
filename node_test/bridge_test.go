@@ -18,6 +18,7 @@ import (
 	NitroAdjudicator "github.com/statechannels/go-nitro/node/engine/chainservice/adjudicator"
 	"github.com/statechannels/go-nitro/node/engine/store"
 	"github.com/statechannels/go-nitro/node/query"
+	"github.com/statechannels/go-nitro/payments"
 	"github.com/statechannels/go-nitro/protocols"
 	"github.com/statechannels/go-nitro/protocols/mirrorbridgeddefund"
 	"github.com/statechannels/go-nitro/types"
@@ -585,7 +586,7 @@ func TestBridgedFundWithChallenge(t *testing.T) {
 			t.Fatal(err)
 		}
 
-		nodeA.UnilateralExit(l1LedgerChannelId, types.Challenge, ss)
+		nodeA.UnilateralExit(l1LedgerChannelId, types.Challenge, ss, payments.Voucher{})
 		time.Sleep(10 * time.Second)
 
 		balanceNodeA, _ := infraL1.anvilChain.GetAccountBalance(tcL1.Participants[0].Address())
