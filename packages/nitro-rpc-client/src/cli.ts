@@ -3,6 +3,7 @@
 /* eslint-disable @typescript-eslint/no-shadow */
 
 import { readFileSync } from "fs";
+
 import yargs from "yargs/yargs";
 import { hideBin } from "yargs/helpers";
 
