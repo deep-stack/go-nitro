@@ -15,6 +15,7 @@ import (
 	"github.com/statechannels/go-nitro/node"
 	p2pms "github.com/statechannels/go-nitro/node/engine/messageservice/p2p-message-service"
 	"github.com/statechannels/go-nitro/node/query"
+	"github.com/statechannels/go-nitro/payments"
 	"github.com/statechannels/go-nitro/protocols/bridgeddefund"
 	"github.com/statechannels/go-nitro/protocols/bridgedfund"
 	"github.com/statechannels/go-nitro/protocols/directfund"
@@ -387,6 +388,10 @@ func (b Bridge) MirrorBridgedDefund(l1ChannelId types.Destination, l2SignedState
 
 func (b Bridge) CounterChallenge(id types.Destination, action types.CounterChallengeAction, payload state.SignedState) {
 	b.nodeL1.CounterChallenge(id, action, payload)
+}
+
+func (b Bridge) UnilateralExit(channelId types.Destination, action types.CounterChallengeAction, signedState state.SignedState, voucher payments.Voucher) {
+	b.nodeL1.UnilateralExit(channelId, action, signedState, voucher)
 }
 
 func (b Bridge) GetL2ChannelIdByL1ChannelId(l1ChannelId types.Destination) (l2ChannelId types.Destination, isCreated bool) {

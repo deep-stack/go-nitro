@@ -468,11 +468,10 @@ func (e *Engine) handleChainEvent(chainEvent chainservice.Event) (EngineEvent, e
 
 	c, ok := e.store.GetChannelById(chainEvent.ChannelID())
 	if !ok {
-		// If channel doesn't exist and chain event is ChallengeRegistered then create a new direct defund objective
-		// This doesn't occur for actor who registered the challenge
 		_, isChallengeRegistered := chainEvent.(chainservice.ChallengeRegisteredEvent)
-		if isChallengeRegistered {
-			// If a challenge is registered and the channel is not found, attempt to locate the channel from the consensus channel or the L2-to-L1 map on-chain.
+		_, isChallengeCleared := chainEvent.(chainservice.ChallengeClearedEvent)
+		if isChallengeRegistered || isChallengeCleared {
+			// If a challenge is registered / cleared and the channel is not found, attempt to locate the channel from the consensus channel or the L2-to-L1 map on-chain.
 			ch, err := e.getChannelForChallengeRegisteredEvent(chainEvent)
 			if err != nil {
 				if errors.Is(err, store.ErrNoSuchChannel) {
@@ -521,8 +520,13 @@ func (e *Engine) getChannelForChallengeRegisteredEvent(chainEvent chainservice.E
 
 	if !l1ChannelId.IsZero() {
 		ledgerChannelId = l1ChannelId
+		channel, ok := e.store.GetChannelById(l1ChannelId)
+		if ok {
+			return channel, nil
+		}
 	}
 
+	// Check if the consensus channel exists, then create a channel from consensus channel
 	cc, err := e.store.GetConsensusChannelById(ledgerChannelId)
 	if err != nil {
 		return &channel.Channel{}, err
