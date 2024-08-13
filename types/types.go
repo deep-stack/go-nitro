@@ -33,6 +33,7 @@ type ConstError string
 
 func (c ConstError) Error() string { return string(c) }
 
+// TODO: Rename CounterChallengeAction to ExitAction
 type CounterChallengeAction int
 
 const (

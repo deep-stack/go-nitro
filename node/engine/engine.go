@@ -108,7 +108,7 @@ type Engine struct {
 	wg     *sync.WaitGroup
 	cancel context.CancelFunc
 
-	signedStateMap map[types.Destination]state.SignedState
+	signedStatesForLiquidation map[types.Destination]state.SignedState
 }
 
 // PaymentRequest represents a request from the API to make a payment using a channel
@@ -181,7 +181,7 @@ func New(vm *payments.VoucherManager, msg messageservice.MessageService, chain c
 	e.policymaker = policymaker
 
 	e.vm = vm
-	e.signedStateMap = make(map[types.Destination]state.SignedState)
+	e.signedStatesForLiquidation = make(map[types.Destination]state.SignedState)
 
 	e.logger.Info("Constructed Engine")
 
@@ -466,44 +466,22 @@ func (e *Engine) handleChainEvent(chainEvent chainservice.Event) (EngineEvent, e
 		return EngineEvent{}, err
 	}
 
-	// var l2ChallengeRegistered bool
 	c, ok := e.store.GetChannelById(chainEvent.ChannelID())
 	if !ok {
 		// If channel doesn't exist and chain event is ChallengeRegistered then create a new direct defund objective
 		// This doesn't occur for actor who registered the challenge
 		_, isChallengeRegistered := chainEvent.(chainservice.ChallengeRegisteredEvent)
 		if isChallengeRegistered {
-			//  If challenge registered and didn't found channel then try to find channel from consensus channel and l2tol1 map on chain
-			ch, err := e.processChallengeRegisteredEvent2(chainEvent)
+			// If a challenge is registered and the channel is not found, attempt to locate the channel from the consensus channel or the L2-to-L1 map on-chain.
+			ch, err := e.getChannelForChallengeRegisteredEvent(chainEvent)
 			if err != nil {
-				// TODO: Return error nil only for consensus channel not found
-				// For others throw error
-				return EngineEvent{}, nil
+				if errors.Is(err, store.ErrNoSuchChannel) {
+					return EngineEvent{}, nil
+				}
+
+				return EngineEvent{}, err
 			}
 			c = ch
-			// }
-			// // 	channel, err := e.processChallengeRegisteredEvent(chainEvent)
-			// // _, isChallengeRegistered := chainEvent.(chainservice.ChallengeRegisteredEvent)
-			// // if isChallengeRegistered {
-			// // 	channel, err := e.processChallengeRegisteredEvent(chainEvent)
-			// // 	if err != nil {
-			// // 		if errors.Is(err, store.ErrNoSuchChannel) {
-			// // 			return EngineEvent{}, nil
-			// // 		}
-			// // 		return EngineEvent{}, err
-			// // 	}
-			// // 	c = channel
-			// // } else if _, isChallengeCleared := chainEvent.(chainservice.ChallengeClearedEvent); isChallengeCleared {
-			// // 	l1ChannelId, err := e.chain.GetL1ChannelFromL2(chainEvent.ChannelID())
-			// // 	if err != nil {
-			// // 		slog.Debug("l1 channel id not found from chain")
-			// // 	}
-
-			// // 	l1Channel, ok := e.store.GetChannelById(l1ChannelId)
-
-			// // 	if ok {
-			// // 		c = l1Channel
-			// // 	}
 		} else {
 			// TODO: Right now the chain service returns chain events for ALL channels even those we aren't involved in
 			// for now we can ignore channels we aren't involved in
@@ -518,7 +496,6 @@ func (e *Engine) handleChainEvent(chainEvent chainservice.Event) (EngineEvent, e
 	}
 	updatedChannel.UpdateChannelMode(chainEvent.Block().Timestamp)
 
-	// fmt.Printf(">>HANDLE CHAIN EVENT updated channel%+v", updatedChannel)
 	err = e.store.SetChannel(updatedChannel)
 	if err != nil {
 		return EngineEvent{}, err
@@ -527,54 +504,19 @@ func (e *Engine) handleChainEvent(chainEvent chainservice.Event) (EngineEvent, e
 	objective, ok := e.store.GetObjectiveByChannelId(updatedChannel.Id)
 
 	if ok {
-		// fmt.Println("HANDLE CHAIN EVENT SHOULD NOT RETURN FROM HERE")
 		return e.attemptProgress(objective)
 	}
 
-	// When a challenge is registered on a virtual channel, identify the related ledger channel and its associated objective, and then process it.
-	// Challenge registered on virtual channels are handled only by the one who raised the challenge
-	// _, isChallengeRegisteredEvent := chainEvent.(chainservice.ChallengeRegisteredEvent)
-	// if isChallengeRegisteredEvent && c.Type == channel.Virtual && c.OnChain.IsChallengeInitiatedByMe {
-	// 	myAddress := *e.store.GetAddress()
-	// 	counterParty := common.Address{}
-
-	// 	// Find counterparty address to get consensus channel between us
-	// 	if myAddress == c.Participants[0] {
-	// 		counterParty = c.Participants[len(c.Participants)-1]
-	// 	} else if myAddress == c.Participants[len(c.Participants)-1] {
-	// 		counterParty = c.Participants[0]
-	// 	}
-
-	// 	consensusChannel, ok := e.store.GetConsensusChannel(counterParty)
-	// 	if ok {
-	// 		obj, ok := e.store.GetObjectiveByChannelId(consensusChannel.Id)
-	// 		if ok {
-	// 			return e.attemptProgress(obj)
-	// 		}
-	// 	}
-	// }
-
-	// if l2ChallengeRegistered {
-	// 	objective, ok := e.store.GetObjectiveByChannelId(updatedChannel.Id)
-
-	// 	if ok {
-	// 		return e.attemptProgress(objective)
-	// 	}
-	// }
-
-	// TODO: Delete entry from signedstate map on challenge cleared event if it exist
-
-	// fmt.Println("HANDLE CHAIN EVENT SHOULD RETURN FROM HERE")
 	return EngineEvent{}, nil
 }
 
-func (e *Engine) processChallengeRegisteredEvent2(chainEvent chainservice.Event) (*channel.Channel, error) {
-	// check channel id corresponds to l2 channel
+func (e *Engine) getChannelForChallengeRegisteredEvent(chainEvent chainservice.Event) (*channel.Channel, error) {
+	// Check if the channel ID corresponds to L2 channel
 	ledgerChannelId := chainEvent.ChannelID()
 
 	l1ChannelId, err := e.chain.GetL1ChannelFromL2(chainEvent.ChannelID())
 	if err != nil {
-		slog.Info("not l2 channel")
+		slog.Info("channel Id does not correspond to L2 channel")
 	}
 
 	if !l1ChannelId.IsZero() {
@@ -592,67 +534,6 @@ func (e *Engine) processChallengeRegisteredEvent2(chainEvent chainservice.Event)
 	}
 
 	return c, nil
-}
-
-func (e *Engine) processChallengeRegisteredEvent(chainEvent chainservice.Event) (*channel.Channel, error) {
-	l1ChannelId, err := e.chain.GetL1ChannelFromL2(chainEvent.ChannelID())
-	if err != nil {
-		slog.Debug("l1 channel id not found from chain, proceeding with processing the registered challenge event")
-	}
-
-	if !l1ChannelId.IsZero() {
-		l1Channel, ok := e.store.GetChannelById(l1ChannelId)
-
-		if ok {
-			return l1Channel, nil
-		}
-
-		mbdfo, err := mirrorbridgeddefund.NewObjective(mirrorbridgeddefund.NewObjectiveRequest(l1ChannelId, state.SignedState{}, false), true, e.store.GetConsensusChannelById, true)
-		if err != nil {
-			return nil, err
-		}
-
-		// Destroy the consensus channel to prevent it being used (Channel will now take over governance)
-		err = e.store.DestroyConsensusChannel(mbdfo.C.Id)
-		if err != nil {
-			return nil, err
-		}
-
-		err = e.store.SetObjective(&mbdfo)
-		if err != nil {
-			return nil, err
-		}
-
-		return mbdfo.C, nil
-	}
-
-	consensusChannel, err := e.store.GetConsensusChannelById(chainEvent.ChannelID())
-	if err != nil {
-		return nil, err
-	}
-
-	// Create direct defund objective if consensus channel exists
-	// This doesn't occur for actor who registered the challenge
-	if !consensusChannel.Id.IsZero() {
-		ddfo, err := directdefund.NewObjective(directdefund.NewObjectiveRequest(chainEvent.ChannelID(), false), true, e.store.GetConsensusChannelById, e.store.GetChannelById, e.vm.GetVoucherIfAmountPresent, true)
-		if err != nil {
-			return nil, err
-		}
-
-		// If ddfo creation was successful, destroy the consensus channel to prevent it being used (a Channel will now take over governance)
-		err = e.store.DestroyConsensusChannel(chainEvent.ChannelID())
-		if err != nil {
-			return nil, err
-		}
-		err = e.store.SetObjective(&ddfo)
-		if err != nil {
-			return nil, err
-		}
-
-		return ddfo.C, nil
-	}
-
-	return nil, fmt.Errorf("invalid channel id %s from challenge registered event", chainEvent.ChannelID())
 }
 
 // handleObjectiveRequest handles an ObjectiveRequest (triggered by a client API call).
@@ -840,30 +721,31 @@ func (e *Engine) handleCounterChallengeRequest(request CounterChallengeRequest) 
 }
 
 func (e *Engine) HandleUnilateralExitRequest(request UnilateralExitRequest) error {
-	// fmt.Println("Inside handle unilateral exit from engine")
-	// TODO: Check whether channel holds any objective
-
-	// Get channel
-	// _, ok := e.store.GetChannelById(request.ChannelId)
-	// if !ok {
-	// 	fmt.Println("ERROR FROM HERE")
-	// 	return fmt.Errorf("channel not found")
-	// }
-
+	sideEffects := protocols.SideEffects{}
 	secretKey := e.store.GetChannelSecretKey()
-	var tx protocols.ChainTransaction
 
 	switch request.Action {
 	case types.Checkpoint:
-		tx = protocols.NewCheckpointTransaction(request.SignedState.ChannelId(), request.SignedState, make([]state.SignedState, 0))
+		checkPointTx := protocols.NewCheckpointTransaction(request.SignedState.ChannelId(), request.SignedState, make([]state.SignedState, 0))
+		sideEffects.TransactionsToSubmit = append(sideEffects.TransactionsToSubmit, checkPointTx)
 
 	case types.Challenge:
 		signedStateToChallenge := request.SignedState
 		proof := make([]state.SignedState, 0)
 
-		// If voucher exist and its virtual channel
-		// TODO: Request.SignedState.ChannelId corresponds to virtual channel
+		// Use voucher information (if present) to challenge a virtual channel state
 		if !request.Voucher.ChannelId.IsZero() {
+			ch, ok := e.store.GetChannelById(request.SignedState.ChannelId())
+
+			if !ok {
+				return fmt.Errorf("channel not found")
+			}
+
+			// Verify if the channel is a virtual channel
+			if ch.Type != channel.Virtual {
+				return fmt.Errorf("require virtual channel")
+			}
+
 			voucherSigner, err := request.Voucher.RecoverSigner()
 			if err != nil {
 				return err
@@ -871,9 +753,10 @@ func (e *Engine) HandleUnilateralExitRequest(request UnilateralExitRequest) erro
 
 			// Node who created virtual channel should sign the voucher
 			if request.SignedState.State().Participants[0] != voucherSigner {
-				return fmt.Errorf("voucher signed doesnt match")
+				return fmt.Errorf("voucher signer does not match")
 			}
 
+			// Create type to encode voucher amount and signature
 			voucherAmountSigTy, _ := abi.NewType("tuple", "", []abi.ArgumentMarshaling{
 				{Name: "amount", Type: "uint256"},
 				{Name: "signature", Type: "tuple", Components: []abi.ArgumentMarshaling{
@@ -895,38 +778,37 @@ func (e *Engine) HandleUnilateralExitRequest(request UnilateralExitRequest) erro
 			// Use above created type and encode voucher amount and signature
 			dataEncoded, _ := arguments.Pack(voucherAmountSignatureData)
 
-			s := request.SignedState.State().Clone()
-			s.AppData = dataEncoded
-			s.TurnNum++
-			s.Outcome[0].Allocations[0].Amount = s.Outcome[0].Allocations[0].Amount.Sub(s.Outcome[0].Allocations[0].Amount, request.Voucher.Amount)
-			s.Outcome[0].Allocations[1].Amount = request.Voucher.Amount
+			// Create updated virtual channel state based on voucher
+			updateState := request.SignedState.State().Clone()
+			updateState.AppData = dataEncoded
+			updateState.TurnNum++
 
-			sig, err := s.Sign(*e.store.GetChannelSecretKey())
+			// Update allocation based on voucher
+			updateState.Outcome[0].Allocations[0].Amount = updateState.Outcome[0].Allocations[0].Amount.Sub(updateState.Outcome[0].Allocations[0].Amount, request.Voucher.Amount)
+			updateState.Outcome[0].Allocations[1].Amount = request.Voucher.Amount
+
+			updateSignedState, err := ch.SignAndAddState(updateState, e.store.GetChannelSecretKey())
 			if err != nil {
-				return err
+				return fmt.Errorf("error in signing and adding state to channel")
 			}
-			ss := state.NewSignedState(s)
-			err = ss.AddSignature(sig)
-			if err != nil {
-				return err
-			}
-			signedStateToChallenge = ss
+
+			signedStateToChallenge = updateSignedState
 			proof = append(proof, request.SignedState)
 		}
 
-		// Challenging a normal ledger channel
+		// Create challenge transaction
 		challengerSig, _ := NitroAdjudicator.SignChallengeMessage(signedStateToChallenge.State(), *secretKey)
-		tx = protocols.NewChallengeTransaction(signedStateToChallenge.State().ChannelId(), signedStateToChallenge, proof, challengerSig)
+		challengeTx := protocols.NewChallengeTransaction(signedStateToChallenge.State().ChannelId(), signedStateToChallenge, proof, challengerSig)
+		sideEffects.TransactionsToSubmit = append(sideEffects.TransactionsToSubmit, challengeTx)
 
-		// TODO: Store the information for liquidating only if the transaction was succesful
-		// TODO: Update state only after successful challenge event (now store in pending field, in handle chain event if its successful then update signed state)
-		e.signedStateMap[request.ChannelId] = signedStateToChallenge
+		// Store the updated signed state for channel liquidation
+		e.signedStatesForLiquidation[request.ChannelId] = signedStateToChallenge
 
 	default:
 		return fmt.Errorf("unknown exit channel action")
 	}
-	// TODO: Use side effect to send transaction
-	err := e.chain.SendTransaction(tx)
+
+	err := e.executeSideEffects(sideEffects)
 	if err != nil {
 		return err
 	}
@@ -1347,41 +1229,43 @@ func (e *Engine) processStoreChannels(latestblock chainservice.Block) error {
 				return err
 			}
 		}
-		// fmt.Println(">>>>>CHANNEL IN PROCESS STORE CHANNEL", ch.Id, ch.OnChain.ChannelMode)
-		// Liquidate assets for finalized ledger channels
+
+		// Liquidate assets for finalized ledger channels that hold assets on-chain
 		if ch.Type == channel.Ledger && ch.OnChain.ChannelMode == channel.Finalized && ch.OnChain.IsChallengeInitiatedByMe && ch.OnChain.Holdings.IsNonZero() {
-			fmt.Println("INSIDE PROCESS STORE CHANNEL, CHANNEL GOING TO LIQUIDATE")
+			sideEffects := protocols.SideEffects{}
 
-			// TODO: Delete entry from this on challenge cleared and allocation updated event
-			ss := e.signedStateMap[ch.Id]
+			slog.Info("Liquidating channel", "channel Id", ch.Id)
+			ledgerSignedState := e.signedStatesForLiquidation[ch.Id]
 
-			if len(ss.State().Participants) != len(ss.State().Outcome[0].Allocations) {
-				fmt.Println("DO RECLAIM FIRST FOR THE CHALLENGED LEDGER CHANNEL")
-
-				convertedLedgerFixedPart := NitroAdjudicator.ConvertFixedPart(ss.State().FixedPart())
-				convertedLedgerVariablePart := NitroAdjudicator.ConvertVariablePart(ss.State().VariablePart())
-				sourceOutcome := ss.State().Outcome
+			// Verify if virtual channels are present
+			// If virtual channels are found, initiate a reclaim transaction
+			if len(ledgerSignedState.State().Participants) != len(ledgerSignedState.State().Outcome[0].Allocations) {
+				// Create reclaim transaction arguments
+				convertedLedgerFixedPart := NitroAdjudicator.ConvertFixedPart(ledgerSignedState.State().FixedPart())
+				convertedLedgerVariablePart := NitroAdjudicator.ConvertVariablePart(ledgerSignedState.State().VariablePart())
+				sourceOutcome := ledgerSignedState.State().Outcome
 				sourceOb, _ := sourceOutcome.Encode()
 
-				// For computing new outcome for liquidatation
-				aliceAllocation := ss.State().Outcome[0].Allocations[0]
-				bobAllocation := ss.State().Outcome[0].Allocations[1]
+				// For computing new outcome for liquidation
+				aliceAllocation := ledgerSignedState.State().Outcome[0].Allocations[0]
+				bobAllocation := ledgerSignedState.State().Outcome[0].Allocations[1]
 
-				for _, allocation := range ss.State().Outcome[0].Allocations {
-					// TODO: Should reclaim multiple virtual channels of a specific ledger channel
+				// TODO: Should reclaim multiple virtual channels of a specific ledger channel
+				for _, allocation := range ledgerSignedState.State().Outcome[0].Allocations {
 
-					if contains(ss.State().Participants, allocation.Destination) {
+					// Skip participants
+					if contains(ledgerSignedState.State().Participants, allocation.Destination) {
 						continue
 					}
-					fmt.Println(">>>>INSIDE RECLAIMS ON VIRTUAL CHANNEL", allocation.Destination)
 
-					virtualSignedState := e.signedStateMap[allocation.Destination]
+					// Create reclaim transaction arguments
+					virtualSignedState := e.signedStatesForLiquidation[allocation.Destination]
 					virtualStateHash, _ := virtualSignedState.State().Hash()
 					targetOutcome := virtualSignedState.State().Outcome
 					targetOb, _ := targetOutcome.Encode()
 
 					reclaimArgs := NitroAdjudicator.IMultiAssetHolderReclaimArgs{
-						SourceChannelId:       ss.ChannelId(),
+						SourceChannelId:       ledgerSignedState.ChannelId(),
 						FixedPart:             convertedLedgerFixedPart,
 						VariablePart:          convertedLedgerVariablePart,
 						SourceOutcomeBytes:    sourceOb,
@@ -1391,14 +1275,13 @@ func (e *Engine) processStoreChannels(latestblock chainservice.Block) error {
 						TargetOutcomeBytes:    targetOb,
 						TargetAssetIndex:      common.Big0,
 					}
-					// TODO: Use side effect to send transaction
-					reclaimTx := protocols.NewReclaimTransaction(ss.ChannelId(), reclaimArgs)
-					err := e.chain.SendTransaction(reclaimTx)
-					if err != nil {
-						return err
-					}
 
-					// compute new ledger channel state after reclaim to liquidate
+					// Create reclaim transaction
+					reclaimTx := protocols.NewReclaimTransaction(ledgerSignedState.ChannelId(), reclaimArgs)
+					sideEffects.TransactionsToSubmit = append(sideEffects.TransactionsToSubmit, reclaimTx)
+
+					// Compute new outcome for liquidation
+					// Use virtual channel allocations for computing new ledger channel allocations
 					for i, allocation := range virtualSignedState.State().Outcome[0].Allocations {
 						if aliceAllocation.Destination == allocation.Destination {
 							aliceAllocation.Amount.Add(aliceAllocation.Amount, virtualSignedState.State().Outcome[0].Allocations[i].Amount)
@@ -1409,59 +1292,34 @@ func (e *Engine) processStoreChannels(latestblock chainservice.Block) error {
 					}
 				}
 
-				// compute and save new ledger channel state after reclaim to liquidate
-				latestState := ss.State()
+				// Create new ledger channel state based on virtual channel outcome for liquidation
+				latestState := ledgerSignedState.State()
 				latestState.Outcome[0].Allocations = outcome.Allocations{aliceAllocation, bobAllocation}
 				latestSignedState := state.NewSignedState(latestState)
-				// TODO: Update state only after successful reclaim event (now store in pending field, in handle chain event if its successful then update signed state)
-				e.signedStateMap[ss.ChannelId()] = latestSignedState
+				e.signedStatesForLiquidation[ledgerSignedState.ChannelId()] = latestSignedState
+
+				err := e.executeSideEffects(sideEffects)
+				if err != nil {
+					return err
+				}
+
 				return nil
 			}
 
-			// TODO: Check this signedstateMap state hash matches with c.onchain.statehash
-
-			if ch.Id == ss.ChannelId() {
-				fmt.Println(">>>LIQUIDATING NORMAL LEDGER CHANNEL")
-				transferTx := protocols.NewTransferAllTransaction(ch.Id, ss)
-				// TODO: Use side effect to send transaction
-				err := e.chain.SendTransaction(transferTx)
-				if err != nil {
-					return err
-				}
+			if ch.Id == ledgerSignedState.ChannelId() {
+				// Liquidate normal ledger channel
+				transferTx := protocols.NewTransferAllTransaction(ch.Id, ledgerSignedState)
+				sideEffects.TransactionsToSubmit = append(sideEffects.TransactionsToSubmit, transferTx)
 			} else {
-				fmt.Println(">>>LIQUIDATING MIRROR LEDGER CHANNEL")
-				// TODO: Use side effect to send transaction
-				mirrorWithdrawAllTx := protocols.NewMirrorTransferAllTransaction(ch.Id, ss)
-				err := e.chain.SendTransaction(mirrorWithdrawAllTx)
-				if err != nil {
-					return err
-				}
+				// Liquidate mirror bridge channel
+				mirrorWithdrawAllTx := protocols.NewMirrorTransferAllTransaction(ch.Id, ledgerSignedState)
+				sideEffects.TransactionsToSubmit = append(sideEffects.TransactionsToSubmit, mirrorWithdrawAllTx)
 			}
 
-			// obj, ok := e.store.GetObjectiveByChannelId(ch.Id)
-
-			// if !ok {
-			// 	slog.Debug("Objective not found for liquidating the finalized ledger channel", "ledger channel", ch.Id)
-			// 	return nil
-			// }
-
-			// switch objective := obj.(type) {
-			// case *directdefund.Objective:
-			// 	if objective.C.OnChain.IsChallengeInitiatedByMe {
-			// 		_, err = e.attemptProgress(objective)
-			// 		if err != nil {
-			// 			return err
-			// 		}
-			// 	}
-
-			// case *mirrorbridgeddefund.Objective:
-			// 	if objective.C.OnChain.IsChallengeInitiatedByMe {
-			// 		_, err = e.attemptProgress(objective)
-			// 		if err != nil {
-			// 			return err
-			// 		}
-			// 	}
-			// }
+			err := e.executeSideEffects(sideEffects)
+			if err != nil {
+				return err
+			}
 		}
 	}
 	return nil
@@ -1483,7 +1341,6 @@ func (e *Engine) checkError(err error) {
 
 func contains(arr []common.Address, x types.Destination) bool {
 	for _, v := range arr {
-		// fmt.Println(">>>>LOOPING ADDRESS", v.String(), x.String())
 		normalizedStr1 := normalizeAddress(v.String())
 		normalizedStr2 := normalizeAddress(x.String())
 		if strings.EqualFold(normalizedStr1, normalizedStr2) {
@@ -1501,8 +1358,4 @@ func normalizeAddress(addr string) string {
 	addr = strings.TrimLeft(addr, "0")
 
 	return addr
-}
-
-func (e Engine) GetVoucherIfAmountPresent(channelId types.Destination) (payments.VoucherInfo, bool) {
-	return e.vm.GetVoucherIfAmountPresent(channelId)
 }

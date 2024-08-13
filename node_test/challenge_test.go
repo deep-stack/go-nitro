@@ -452,9 +452,6 @@ func TestVirtualChannelWithoutVoucher(t *testing.T) {
 		t.Fatal(err)
 	}
 
-	fmt.Printf(">>>SSS %+v", ss)
-	fmt.Printf(">>>ledger channel %+v", ledgerChannel)
-
 	nodeA.UnilateralExit(ss.ChannelId(), types.Challenge, ss, payments.Voucher{})
 
 	time.Sleep(5 * time.Second)
