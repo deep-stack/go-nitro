@@ -441,7 +441,22 @@ func (e *Engine) handleChainEvent(chainEvent chainservice.Event) (EngineEvent, e
 		return EngineEvent{}, err
 	}
 
-	c, ok := e.store.GetChannelById(chainEvent.ChannelID())
+	channelId := chainEvent.ChannelID()
+
+	_, isChallengeRegistered := chainEvent.(chainservice.ChallengeRegisteredEvent)
+	if isChallengeRegistered {
+		// Check whether a challenge has been registered for the L2 channel, and then retrieve its L1 channel using an eth call to NitroAdjudicator contract
+		l1ChannelId, err := e.chain.GetL1ChannelFromL2(chainEvent.ChannelID())
+		if err != nil {
+			return EngineEvent{}, err
+		}
+
+		if !l1ChannelId.IsZero() {
+			channelId = l1ChannelId
+		}
+	}
+
+	c, ok := e.store.GetChannelById(channelId)
 	if !ok {
 		// If channel doesn't exist and chain event is ChallengeRegistered then create a new direct defund objective
 		// This doesn't occur for actor who registered the challenge
@@ -486,7 +501,7 @@ func (e *Engine) handleChainEvent(chainEvent chainservice.Event) (EngineEvent, e
 		return EngineEvent{}, err
 	}
 
-	objective, ok := e.store.GetObjectiveByChannelId(chainEvent.ChannelID())
+	objective, ok := e.store.GetObjectiveByChannelId(updatedChannel.Id)
 
 	if ok {
 		return e.attemptProgress(objective)
@@ -1076,12 +1091,27 @@ func (e *Engine) processStoreChannels(latestblock chainservice.Block) error {
 		// Liquidate assets for finalized ledger channels
 		if ch.Type == channel.Ledger && ch.OnChain.ChannelMode == channel.Finalized {
 			obj, ok := e.store.GetObjectiveByChannelId(ch.Id)
-			dDfo, isDdfo := obj.(*directdefund.Objective)
 
-			if ok && isDdfo && dDfo.C.OnChain.IsChallengeInitiatedByMe {
-				_, err = e.attemptProgress(dDfo)
-				if err != nil {
-					return err
+			if !ok {
+				slog.Debug("Objective not found for liquidating the finalized ledger channel", "ledger channel", ch.Id)
+				return nil
+			}
+
+			switch objective := obj.(type) {
+			case *directdefund.Objective:
+				if objective.C.OnChain.IsChallengeInitiatedByMe {
+					_, err = e.attemptProgress(objective)
+					if err != nil {
+						return err
+					}
+				}
+
+			case *mirrorbridgeddefund.Objective:
+				if objective.C.OnChain.IsChallengeInitiatedByMe {
+					_, err = e.attemptProgress(objective)
+					if err != nil {
+						return err
+					}
 				}
 			}
 		}

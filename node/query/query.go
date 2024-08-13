@@ -58,11 +58,11 @@ func getPaymentChannelBalance(participants []types.Address, outcome outcome.Exit
 
 // getLatestSupportedOrPreFund returns the latest supported state of the channel
 // or the prefund state if no supported state exists
-func getLatestSupportedOrPreFund(channel *channel.Channel) (state.State, error) {
-	if channel.HasSupportedState() {
-		return channel.LatestSupportedState()
+func getLatestSupportedOrPreFund(ledgerChannel *channel.Channel) (state.State, error) {
+	if ledgerChannel.HasSupportedState() {
+		return ledgerChannel.LatestSupportedState()
 	}
-	return channel.PreFundState(), nil
+	return ledgerChannel.PreFundState(), nil
 }
 
 // getLedgerBalanceFromState returns the balance of the ledger channel from the given state
