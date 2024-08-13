@@ -196,6 +196,9 @@ type ChainService interface {
 	GetLastConfirmedBlockNum() uint64
 	// GetBlockByNumber returns the block for given block number
 	GetBlockByNumber(blockNum *big.Int) (*ethTypes.Block, error)
+	// TODO: Implement method for eth calls
+	// GetL1ChannelFromL2 returns the L1 ledger channel ID from the L2 ledger channel by making a contract call to the l2ToL1 map of the Nitro Adjudicator contract
+	GetL1ChannelFromL2(l2Channel types.Destination) (types.Destination, error)
 	// Close closes the ChainService
 	Close() error
 }
