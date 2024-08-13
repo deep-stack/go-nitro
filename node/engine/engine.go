@@ -516,7 +516,7 @@ func (e *Engine) getChannelForChallengeRegisteredEvent(chainEvent chainservice.E
 
 	l1ChannelId, err := e.chain.GetL1ChannelFromL2(chainEvent.ChannelID())
 	if err != nil {
-		slog.Info("channel Id does not correspond to L2 channel")
+		return nil, fmt.Errorf("error occurred while making eth call to retrieve L1 channel from L2 channel: %w", err)
 	}
 
 	if !l1ChannelId.IsZero() {
@@ -1246,12 +1246,12 @@ func (e *Engine) processStoreChannels(latestblock chainservice.Block) error {
 				sourceOutcome := ledgerSignedState.State().Outcome
 				sourceOb, _ := sourceOutcome.Encode()
 
-				// For computing new outcome for liquidation
-				aliceAllocation := ledgerSignedState.State().Outcome[0].Allocations[0]
-				bobAllocation := ledgerSignedState.State().Outcome[0].Allocations[1]
+				// // For computing new outcome for liquidation
+				aliceAllocation := ledgerSignedState.State().Clone().Outcome[0].Allocations[0]
+				bobAllocation := ledgerSignedState.State().Clone().Outcome[0].Allocations[1]
 
 				// TODO: Should reclaim multiple virtual channels of a specific ledger channel
-				for _, allocation := range ledgerSignedState.State().Outcome[0].Allocations {
+				for i, allocation := range ledgerSignedState.State().Outcome[0].Allocations {
 
 					// Skip participants
 					if contains(ledgerSignedState.State().Participants, allocation.Destination) {
@@ -1270,7 +1270,7 @@ func (e *Engine) processStoreChannels(latestblock chainservice.Block) error {
 						VariablePart:          convertedLedgerVariablePart,
 						SourceOutcomeBytes:    sourceOb,
 						SourceAssetIndex:      common.Big0,
-						IndexOfTargetInSource: common.Big2,
+						IndexOfTargetInSource: big.NewInt(int64(i)),
 						TargetStateHash:       virtualStateHash,
 						TargetOutcomeBytes:    targetOb,
 						TargetAssetIndex:      common.Big0,
