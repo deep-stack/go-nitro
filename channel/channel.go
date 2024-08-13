@@ -380,11 +380,17 @@ func (c *Channel) UpdateWithChainEvent(event chainservice.Event) (*Channel, erro
 		c.OnChain.Outcome = e.Outcome()
 		c.OnChain.FinalizesAt = e.FinalizesAt
 		c.OnChain.IsChallengeInitiatedByMe = e.IsInitiatedByMe
-		ss, err := e.SignedState(c.FixedPart)
-		if err != nil {
-			return nil, err
+
+		// Add a signed state from a chain event to a channel only if the channel ID matches
+		// If challenge is registered on the L2 state then then channel Ids will be different
+		if c.Id == event.ChannelID() {
+			ss, err := e.SignedState(c.FixedPart)
+			if err != nil {
+				return nil, err
+			}
+
+			c.AddSignedState(ss)
 		}
-		c.AddSignedState(ss)
 
 	case chainservice.ChallengeClearedEvent:
 		// On chain, statusOf map is updated with the same values below following a checkpoint transaction in ForceMove contract
@@ -398,10 +404,7 @@ func (c *Channel) UpdateWithChainEvent(event chainservice.Event) (*Channel, erro
 	case chainservice.ReclaimedEvent:
 	// TODO: Handle ReclaimedEvent
 	case chainservice.StatusUpdatedEvent:
-		statusUpdatedEvent, ok := event.(chainservice.StatusUpdatedEvent)
-		if ok {
-			c.OnChain.StateHash = statusUpdatedEvent.StateHash
-		}
+		c.OnChain.StateHash = e.StateHash
 	default:
 		return &Channel{}, fmt.Errorf("channel %+v cannot handle event %+v", c, event)
 	}
