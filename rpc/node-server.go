@@ -7,6 +7,7 @@ import (
 	"log/slog"
 	"math/big"
 
+	"github.com/statechannels/go-nitro/channel/state"
 	"github.com/statechannels/go-nitro/internal/logging"
 	nitro "github.com/statechannels/go-nitro/node"
 	"github.com/statechannels/go-nitro/node/query"
@@ -143,6 +144,20 @@ func (nrs *NodeRpcServer) registerHandlers() (err error) {
 				}
 				return nrs.node.CloseBridgeChannel(req.ChannelId)
 			})
+		case serde.MirrorBridgedDefundRequestMethod:
+			return processRequest(nrs.BaseRpcServer, permSign, requestData, func(req serde.MirrorBridgedDefundRequest) (protocols.ObjectiveId, error) {
+				if DISABLE_BRIDGE_DEFUND {
+					return protocols.ObjectiveId(bridgeddefund.ObjectivePrefix + req.ChannelId.String()), fmt.Errorf("brided defund is currently disabled")
+				}
+
+				var l2SignedState state.SignedState
+				err := json.Unmarshal([]byte(req.StringifiedL2SignedState), &l2SignedState)
+				if err != nil {
+					return "", err
+				}
+
+				return nrs.node.MirrorBridgedDefund(req.ChannelId, l2SignedState, req.IsChallenge)
+			})
 		case serde.CreatePaymentChannelRequestMethod:
 			return processRequest(nrs.BaseRpcServer, permSign, requestData, func(req virtualfund.ObjectiveRequest) (virtualfund.ObjectiveResponse, error) {
 				return nrs.node.CreatePaymentChannel(req.Intermediaries, req.CounterParty, req.ChallengeDuration, req.Outcome)
@@ -192,6 +207,24 @@ func (nrs *NodeRpcServer) registerHandlers() (err error) {
 				success, errCode := nrs.paymentManager.ValidateVoucher(req.VoucherHash, req.Signer, big.NewInt(int64(req.Value)))
 				response := serde.ValidateVoucherResponse{Success: success, ErrorCode: errCode}
 				return response, nil
+			})
+		case serde.GetSignedStateMethod:
+			return processRequest(nrs.BaseRpcServer, permRead, requestData, func(req serde.GetSignedStateRequest) (string, error) {
+				if err := serde.ValidateGetSignedStateRequest(req); err != nil {
+					return "", err
+				}
+
+				latestState, err := nrs.node.GetSignedState(req.Id)
+				if err != nil {
+					return "", err
+				}
+
+				marshalledState, err := json.Marshal(latestState)
+				if err != nil {
+					return "", err
+				}
+
+				return string(marshalledState), nil
 			})
 		default:
 			errRes := serde.NewJsonRpcErrorResponse(jsonrpcReq.Id, serde.MethodNotFoundError)

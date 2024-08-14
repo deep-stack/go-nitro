@@ -23,6 +23,7 @@ const (
 	CreateLedgerChannelRequestMethod  RequestMethod = "create_ledger_channel"
 	CloseLedgerChannelRequestMethod   RequestMethod = "close_ledger_channel"
 	CloseBridgeChannelRequestMethod   RequestMethod = "close_bridge_channel"
+	MirrorBridgedDefundRequestMethod  RequestMethod = "mirror_bridged_defund"
 	CreatePaymentChannelRequestMethod RequestMethod = "create_payment_channel"
 	ClosePaymentChannelRequestMethod  RequestMethod = "close_payment_channel"
 	PayRequestMethod                  RequestMethod = "pay"
@@ -37,6 +38,8 @@ const (
 
 	// Bridge methods
 	GetAllL2ChannelsRequestMethod RequestMethod = "get_all_l2_channels"
+
+	GetSignedStateMethod RequestMethod = "get_signed_state"
 )
 
 type NotificationMethod string
@@ -59,6 +62,12 @@ type AuthRequest struct {
 type PaymentRequest struct {
 	Amount  uint64
 	Channel types.Destination
+}
+
+type MirrorBridgedDefundRequest struct {
+	ChannelId                types.Destination
+	StringifiedL2SignedState string
+	IsChallenge              bool
 }
 
 type CounterChallengeRequest struct {
@@ -86,9 +95,14 @@ type (
 	NoPayloadRequest = struct{}
 )
 
+type GetSignedStateRequest struct {
+	Id types.Destination
+}
+
 type RequestPayload interface {
 	directfund.ObjectiveRequest |
 		directdefund.ObjectiveRequest |
+		MirrorBridgedDefundRequest |
 		virtualfund.ObjectiveRequest |
 		virtualdefund.ObjectiveRequest |
 		AuthRequest |
@@ -96,6 +110,7 @@ type RequestPayload interface {
 		GetLedgerChannelRequest |
 		GetPaymentChannelRequest |
 		GetPaymentChannelsByLedgerRequest |
+		GetSignedStateRequest |
 		NoPayloadRequest |
 		payments.Voucher |
 		CounterChallengeRequest |
