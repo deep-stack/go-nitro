@@ -190,7 +190,7 @@ func main() {
 		altsrc.NewIntFlag(&cli.IntFlag{
 			Name:        WS_MSG_PORT,
 			Usage:       "Specifies the websocket port for the message service.",
-			Value:       5005,
+			Value:       6005,
 			Category:    "Connectivity:",
 			Destination: &wsMsgPort,
 		}),
