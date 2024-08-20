@@ -71,7 +71,8 @@ func setupMessageService(tc TestCase, tp TestParticipant, si sharedTestInfrastru
 	case P2PMessageService:
 		ms := p2pms.NewMessageService(p2pms.MessageOpts{
 			PublicIp:  DEFAULT_PUBLIC_IP,
-			Port:      int(tp.Port),
+			TcpPort:   int(tp.Port),
+			WsMsgPort: int(tp.WSPort),
 			SCAddr:    tp.Address(),
 			PkBytes:   tp.PrivateKey,
 			BootPeers: bootPeers,

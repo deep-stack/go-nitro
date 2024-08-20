@@ -12,6 +12,7 @@ import (
 	"github.com/statechannels/go-nitro/cmd/utils"
 	"github.com/statechannels/go-nitro/internal/logging"
 	"github.com/statechannels/go-nitro/internal/rpc"
+	"github.com/statechannels/go-nitro/paymentsmanager"
 	"github.com/urfave/cli/v2"
 	"github.com/urfave/cli/v2/altsrc"
 )
@@ -266,12 +267,12 @@ func main() {
 			}
 
 			// RPC servers for individual nodes used only for debugging
-			nodeL1RpcServer, err := rpc.InitializeNodeRpcServer(nodeL1, NODEL1_RPC_PORT, false, &cert)
+			nodeL1RpcServer, err := rpc.InitializeNodeRpcServer(nodeL1, paymentsmanager.PaymentsManager{}, NODEL1_RPC_PORT, false, &cert)
 			if err != nil {
 				return err
 			}
 
-			nodeL2RpcServer, err := rpc.InitializeNodeRpcServer(nodeL2, NODEL2_RPC_PORT, false, &cert)
+			nodeL2RpcServer, err := rpc.InitializeNodeRpcServer(nodeL2, paymentsmanager.PaymentsManager{}, NODEL2_RPC_PORT, false, &cert)
 			if err != nil {
 				return err
 			}

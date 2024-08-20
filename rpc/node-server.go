@@ -10,6 +10,7 @@ import (
 	nitro "github.com/statechannels/go-nitro/node"
 	"github.com/statechannels/go-nitro/node/query"
 	"github.com/statechannels/go-nitro/payments"
+	"github.com/statechannels/go-nitro/paymentsmanager"
 	"github.com/statechannels/go-nitro/protocols"
 	"github.com/statechannels/go-nitro/protocols/directdefund"
 	"github.com/statechannels/go-nitro/protocols/directfund"
@@ -22,15 +23,16 @@ import (
 
 type NodeRpcServer struct {
 	*BaseRpcServer
-	node *nitro.Node
+	node           *nitro.Node
+	paymentManager paymentsmanager.PaymentsManager
 }
 
 // newNodeRpcServerWithoutNotifications creates a new rpc server without notifications enabled
 func newNodeRpcServerWithoutNotifications(nitroNode *nitro.Node, trans transport.Responder) (*NodeRpcServer, error) {
 	baseRpcServer := NewBaseRpcServer(trans)
 	nrs := &NodeRpcServer{
-		baseRpcServer,
-		nitroNode,
+		BaseRpcServer: baseRpcServer,
+		node:          nitroNode,
 	}
 
 	if hasNitroAddress := (nitroNode.Address != nil) && (nitroNode.Address != &types.Address{}); hasNitroAddress {
@@ -45,14 +47,15 @@ func newNodeRpcServerWithoutNotifications(nitroNode *nitro.Node, trans transport
 	return nrs, nil
 }
 
-func NewNodeRpcServer(node *nitro.Node, trans transport.Responder) (*NodeRpcServer, error) {
+func NewNodeRpcServer(nitroNode *nitro.Node, paymentManager paymentsmanager.PaymentsManager, trans transport.Responder) (*NodeRpcServer, error) {
 	baseRpcServer := NewBaseRpcServer(trans)
 	nrs := &NodeRpcServer{
-		baseRpcServer,
-		node,
+		BaseRpcServer:  baseRpcServer,
+		node:           nitroNode,
+		paymentManager: paymentManager,
 	}
 
-	nrs.logger = logging.LoggerWithAddress(slog.Default(), *node.Address)
+	nrs.logger = logging.LoggerWithAddress(slog.Default(), *nitroNode.Address)
 	ctx, cancel := context.WithCancel(context.Background())
 	nrs.cancel = cancel
 	nrs.wg.Add(1)
@@ -172,6 +175,12 @@ func (nrs *NodeRpcServer) registerHandlers() (err error) {
 			return processRequest(nrs.BaseRpcServer, permSign, requestData, func(req serde.CounterChallengeRequest) (serde.CounterChallengeRequest, error) {
 				nrs.node.CounterChallenge(req.ChannelId, req.Action)
 				return req, nil
+			})
+		case serde.ValidateVoucherRequestMethod:
+			return processRequest(nrs.BaseRpcServer, permRead, requestData, func(req serde.ValidateVoucherRequest) (serde.ValidateVoucherResponse, error) {
+				success, errCode := nrs.paymentManager.ValidateVoucher(req.VoucherHash, req.Signer, big.NewInt(int64(req.Value)))
+				response := serde.ValidateVoucherResponse{Success: success, ErrorCode: errCode}
+				return response, nil
 			})
 		default:
 			errRes := serde.NewJsonRpcErrorResponse(jsonrpcReq.Id, serde.MethodNotFoundError)

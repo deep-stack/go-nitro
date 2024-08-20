@@ -15,6 +15,7 @@ type Actor struct {
 	Name              ActorName
 	ChainAccountIndex uint
 	Port              uint
+	WSPort            uint
 }
 
 func (a Actor) Destination() types.Destination {
@@ -25,7 +26,10 @@ func (a Actor) Address() types.Address {
 	return crypto.GetAddressFromSecretKeyBytes(a.PrivateKey)
 }
 
-const START_PORT = 3200
+const (
+	START_PORT    = 3200
+	WS_START_PORT = 6200
+)
 
 // Alice has the address 0xAAA6628Ec44A8a742987EF3A114dDFE2D4F7aDCE
 // peerId: 16Uiu2HAmSjXJqsyBJgcBUU2HQmykxGseafSatbpq5471XmuaUqyv
@@ -35,6 +39,7 @@ var Alice Actor = Actor{
 	"alice",
 	0,
 	START_PORT + 0,
+	WS_START_PORT + 0,
 }
 
 // Bob has the address 0xBBB676f9cFF8D242e9eaC39D063848807d3D1D94
@@ -45,6 +50,7 @@ var Bob Actor = Actor{
 	"bob",
 	1,
 	START_PORT + 1,
+	WS_START_PORT + 1,
 }
 
 // Ivan has the address 0xA8d2D06aCE9c7FFc24Ee785C2695678aeCDfd7A0
@@ -55,6 +61,7 @@ var Ivan Actor = Actor{
 	"ivan",
 	2,
 	START_PORT + 2,
+	WS_START_PORT + 2,
 }
 
 // Irene has the address 0x111A00868581f73AB42FEEF67D235Ca09ca1E8db
@@ -65,6 +72,7 @@ var Irene Actor = Actor{
 	"irene",
 	3,
 	START_PORT + 3,
+	WS_START_PORT + 3,
 }
 
 // Actors for L2
@@ -77,6 +85,7 @@ var AlicePrime Actor = Actor{
 	"alice",
 	0,
 	START_PORT + 4,
+	WS_START_PORT + 4,
 }
 
 // BobPrime has the address 0xBBB676f9cFF8D242e9eaC39D063848807d3D1D94
@@ -87,4 +96,5 @@ var BobPrime Actor = Actor{
 	"bob",
 	1,
 	START_PORT + 5,
+	WS_START_PORT + 5,
 }
