@@ -100,7 +100,7 @@ const MAX_QUERY_BLOCK_RANGE = 2000
 const RESUB_INTERVAL = 15 * time.Second
 
 // REQUIRED_BLOCK_CONFIRMATIONS is how many blocks must be mined before an emitted event is processed
-const REQUIRED_BLOCK_CONFIRMATIONS = 2
+const REQUIRED_BLOCK_CONFIRMATIONS = 3
 
 // MAX_EPOCHS is the maximum range of old epochs we can query with a single "FilterLogs" request
 // This is a restriction enforced by the rpc provider
@@ -166,7 +166,13 @@ func newEthChainService(chain ethChain, startBlockNum uint64, na *NitroAdjudicat
 		return nil, err
 	}
 
-	ecs.newBlockChan = newBlockChan
+	newBlockSubChan := make(chan *ethTypes.Header)
+	_, err = ecs.chain.SubscribeNewHead(ecs.ctx, newBlockSubChan)
+	if err != nil {
+		return nil, err
+	}
+
+	ecs.newBlockChan = newBlockSubChan
 
 	// Prevent go routines from processing events before checkForMissedEvents completes
 	ecs.eventTracker.mu.Lock()
@@ -349,7 +355,9 @@ func (ecs *EthChainService) SendTransaction(tx protocols.ChainTransaction) error
 
 			_, err = ecs.na.Deposit(txOpts, tokenAddress, tx.ChannelId(), holdings, amount)
 			if err != nil {
-				return err
+				// Return nil to not panic the node and log the error instead
+				slog.Error("error sending Deposit transaction", "error", err)
+				return nil
 			}
 		}
 		return nil
@@ -777,10 +785,13 @@ func (ecs *EthChainService) GetLastConfirmedBlockNum() uint64 {
 	return confirmedBlockNum
 }
 
-func (ecs *EthChainService) GetLatestBlock() Block {
-	ecs.eventTracker.mu.Lock()
-	defer ecs.eventTracker.mu.Unlock()
-	return ecs.eventTracker.latestBlock
+func (ecs *EthChainService) GetBlockByNumber(blockNum *big.Int) (*ethTypes.Block, error) {
+	block, err := ecs.chain.BlockByNumber(context.Background(), blockNum)
+	if err != nil {
+		return nil, err
+	}
+
+	return block, nil
 }
 
 func (ecs *EthChainService) Close() error {

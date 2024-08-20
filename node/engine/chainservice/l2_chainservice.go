@@ -94,8 +94,6 @@ func newL2ChainService(chain ethChain, startBlockNum uint64, bridge *Bridge.Brid
 		return nil, err
 	}
 
-	l2cs.newBlockChan = newBlockChan
-
 	// Prevent go routines from processing events before checkForMissedEvents completes
 	l2cs.eventTracker.mu.Lock()
 	defer l2cs.eventTracker.mu.Unlock()

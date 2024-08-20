@@ -6,6 +6,7 @@ import (
 	"math/big"
 
 	"github.com/ethereum/go-ethereum/common"
+	ethTypes "github.com/ethereum/go-ethereum/core/types"
 	"github.com/statechannels/go-nitro/channel/state"
 	"github.com/statechannels/go-nitro/channel/state/outcome"
 	"github.com/statechannels/go-nitro/protocols"
@@ -193,8 +194,8 @@ type ChainService interface {
 	GetChainId() (*big.Int, error)
 	// GetLastConfirmedBlockNum returns the highest blockNum that satisfies the chainservice's REQUIRED_BLOCK_CONFIRMATIONS
 	GetLastConfirmedBlockNum() uint64
-	// GetLatestBlock returns the latest block
-	GetLatestBlock() Block
+	// GetBlockByNumber returns the block for given block number
+	GetBlockByNumber(blockNum *big.Int) (*ethTypes.Block, error)
 	// Close closes the ChainService
 	Close() error
 }

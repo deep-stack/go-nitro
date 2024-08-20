@@ -4,6 +4,7 @@ import (
 	"math/big"
 
 	"github.com/ethereum/go-ethereum/common"
+	ethTypes "github.com/ethereum/go-ethereum/core/types"
 	"github.com/statechannels/go-nitro/protocols"
 	"github.com/statechannels/go-nitro/types"
 )
@@ -52,14 +53,8 @@ func (mc *MockChainService) GetLastConfirmedBlockNum() uint64 {
 	return blockNum
 }
 
-func (mc *MockChainService) GetLatestBlock() Block {
-	mc.chain.blockNumMu.Lock()
-	blockNum := mc.chain.BlockNum
-	mc.chain.blockNumMu.Unlock()
-
-	return Block{
-		BlockNum: blockNum,
-	}
+func (mc *MockChainService) GetBlockByNumber(blockNum *big.Int) (*ethTypes.Block, error) {
+	return &ethTypes.Block{}, nil
 }
 
 func (mc *MockChainService) Close() error {
