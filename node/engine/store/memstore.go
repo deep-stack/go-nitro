@@ -549,10 +549,6 @@ func decodeObjective(id protocols.ObjectiveId, data []byte) (protocols.Objective
 		bdfo := bridgeddefund.Objective{}
 		err := bdfo.UnmarshalJSON(data)
 		return &bdfo, err
-	case bridgeddefund.IsBridgedDefundObjective(id):
-		bdfo := bridgeddefund.Objective{}
-		err := bdfo.UnmarshalJSON(data)
-		return &bdfo, err
 	case mirrorbridgeddefund.IsMirrorBridgedDefundObjective(id):
 		mbdfo := mirrorbridgeddefund.Objective{}
 		err := mbdfo.UnmarshalJSON(data)

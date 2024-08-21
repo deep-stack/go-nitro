@@ -144,7 +144,7 @@ export class NitroRpcClient implements RpcClientApi {
   ): Promise<ObjectiveResponse> {
     const payload: DirectFundPayload = {
       CounterParty: counterParty,
-      ChallengeDuration: 0,
+      ChallengeDuration: 10,
       Outcome: createOutcome(
         assetAddress,
         await this.GetAddress(),
@@ -227,11 +227,13 @@ export class NitroRpcClient implements RpcClientApi {
 
   public async CounterChallenge(
     channelId: string,
-    action: CounterChallengeAction
+    action: CounterChallengeAction,
+    signedState?: string
   ): Promise<CounterChallengeResult> {
     const payload = {
       ChannelId: channelId,
       Action: action,
+      StringifiedL2SignedState: signedState,
     };
     return this.sendRequest("counter_challenge", payload);
   }

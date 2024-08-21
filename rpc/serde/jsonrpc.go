@@ -71,8 +71,9 @@ type MirrorBridgedDefundRequest struct {
 }
 
 type CounterChallengeRequest struct {
-	ChannelId types.Destination
-	Action    types.CounterChallengeAction
+	ChannelId                types.Destination
+	Action                   types.CounterChallengeAction
+	StringifiedL2SignedState string
 }
 
 type GetPaymentChannelRequest struct {
@@ -114,8 +115,8 @@ type RequestPayload interface {
 		NoPayloadRequest |
 		payments.Voucher |
 		CounterChallengeRequest |
-		ValidateVoucherRequest
-	bridgeddefund.ObjectiveRequest
+		ValidateVoucherRequest |
+		bridgeddefund.ObjectiveRequest
 }
 
 type NotificationPayload interface {

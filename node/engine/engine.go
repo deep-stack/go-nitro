@@ -17,6 +17,7 @@ import (
 	"github.com/ethereum/go-ethereum/crypto/secp256k1"
 	"github.com/statechannels/go-nitro/channel"
 	"github.com/statechannels/go-nitro/channel/consensus_channel"
+	"github.com/statechannels/go-nitro/channel/state"
 	"github.com/statechannels/go-nitro/internal/logging"
 	"github.com/statechannels/go-nitro/node/engine/chainservice"
 	"github.com/statechannels/go-nitro/node/engine/messageservice"
@@ -70,7 +71,7 @@ type Engine struct {
 	// From API
 	ObjectiveRequestsFromAPI        chan protocols.ObjectiveRequest
 	PaymentRequestsFromAPI          chan PaymentRequest
-	CounterChallengeRequestsFromAPI chan types.CounterChallengeRequest
+	CounterChallengeRequestsFromAPI chan CounterChallengeRequest
 
 	fromChain    <-chan chainservice.Event
 	fromMsg      <-chan protocols.Message
@@ -95,6 +96,13 @@ type Engine struct {
 type PaymentRequest struct {
 	ChannelId types.Destination
 	Amount    *big.Int
+}
+
+// CounterChallengeRequest represents a request from the API to initiate a counter challenge against registered challenge
+type CounterChallengeRequest struct {
+	ChannelId types.Destination
+	Action    types.CounterChallengeAction
+	Payload   state.SignedState
 }
 
 // EngineEvent is a struct that contains a list of changes caused by handling a message/chain event/api event
@@ -146,7 +154,7 @@ func New(vm *payments.VoucherManager, msg messageservice.MessageService, chain c
 	// bind to inbound chans
 	e.ObjectiveRequestsFromAPI = make(chan protocols.ObjectiveRequest)
 	e.PaymentRequestsFromAPI = make(chan PaymentRequest)
-	e.CounterChallengeRequestsFromAPI = make(chan types.CounterChallengeRequest)
+	e.CounterChallengeRequestsFromAPI = make(chan CounterChallengeRequest)
 
 	e.fromChain = chain.EventFeed()
 	e.fromMsg = msg.P2PMessages()
@@ -455,10 +463,15 @@ func (e *Engine) handleChainEvent(chainEvent chainservice.Event) (EngineEvent, e
 	channelId := chainEvent.ChannelID()
 
 	_, isChallengeRegistered := chainEvent.(chainservice.ChallengeRegisteredEvent)
-	if isChallengeRegistered {
-		// Check whether a challenge has been registered for the L2 channel, and then retrieve its L1 channel using an eth call to NitroAdjudicator contract
-		l1ChannelId, err := e.chain.GetL1ChannelFromL2(chainEvent.ChannelID())
+	_, isChallengeCleared := chainEvent.(chainservice.ChallengeClearedEvent)
+
+	if isChallengeRegistered || isChallengeCleared {
+		l1ChannelId, err := e.checkAndProcessL2Channel(chainEvent, isChallengeRegistered)
 		if err != nil {
+			if errors.Is(err, mirrorbridgeddefund.ErrChannelNotExist) {
+				return EngineEvent{}, nil
+			}
+
 			return EngineEvent{}, err
 		}
 
@@ -542,6 +555,49 @@ func (e *Engine) handleChainEvent(chainEvent chainservice.Event) (EngineEvent, e
 	}
 
 	return EngineEvent{}, nil
+}
+
+// checkAndProcessL2Channel checks if the chain event corresponds to an L2 channel and retrieves its L1 channel ID.
+// If the L1 channel doesn't exist, it creates a mirror bridged defund objective.
+func (e *Engine) checkAndProcessL2Channel(chainEvent chainservice.Event, isChallengeRegistered bool) (types.Destination, error) {
+	// Check whether a challenge has been registered / cleared for the L2 channel, and then retrieve its L1 channel using an eth call to NitroAdjudicator contract
+	l1ChannelId, err := e.chain.GetL1ChannelFromL2(chainEvent.ChannelID())
+	if err != nil {
+		return types.Destination{}, err
+	}
+
+	if l1ChannelId.IsZero() {
+		return types.Destination{}, nil
+	}
+
+	_, ok := e.store.GetChannelById(l1ChannelId)
+	if ok {
+		return l1ChannelId, nil
+	}
+
+	// If channel doesn't exist and chain event is ChallengeRegistered on L2 then create a new mirror bridged defund objective
+	// This doesn't occur for actor who registered the challenge on L2
+	if isChallengeRegistered && !ok {
+		mbdfo, err := mirrorbridgeddefund.NewObjective(mirrorbridgeddefund.NewObjectiveRequest(l1ChannelId, state.SignedState{}, false), true, e.store.GetConsensusChannelById, true)
+		if err != nil {
+			return types.Destination{}, err
+		}
+
+		// Destroy the consensus channel to prevent it being used (Channel will now take over governance)
+		err = e.store.DestroyConsensusChannel(mbdfo.C.Id)
+		if err != nil {
+			return types.Destination{}, err
+		}
+
+		err = e.store.SetObjective(&mbdfo)
+		if err != nil {
+			return types.Destination{}, err
+		}
+
+		return l1ChannelId, nil
+	}
+
+	return types.Destination{}, nil
 }
 
 // handleObjectiveRequest handles an ObjectiveRequest (triggered by a client API call).
@@ -683,27 +739,44 @@ func (e *Engine) handlePaymentRequest(request PaymentRequest) (EngineEvent, erro
 }
 
 // handleCounterChallengeRequest handles a counter challenge request for the given channel.
-func (e *Engine) handleCounterChallengeRequest(request types.CounterChallengeRequest) error {
-	objective, err := e.store.GetObjectiveById(protocols.ObjectiveId(directdefund.ObjectivePrefix + request.ChannelId.String()))
-	if err != nil {
-		return err
-	}
-	obj, ok := objective.(*directdefund.Objective)
-
-	if !ok {
-		return fmt.Errorf("direct defund objective required")
-	}
+func (e *Engine) handleCounterChallengeRequest(request CounterChallengeRequest) error {
+	channelId := request.ChannelId
+	isCheckPoint := false
+	isChallenge := false
 
 	switch request.Action {
 	case types.Checkpoint:
-		obj.IsCheckpoint = true
+		isCheckPoint = true
 	case types.Challenge:
-		obj.IsChallenge = true
+		isChallenge = true
 	default:
 		return fmt.Errorf("unknown counter challenge action")
 	}
 
-	_, err = e.attemptProgress(objective)
+	obj, ok := e.store.GetObjectiveByChannelId(channelId)
+	if !ok {
+		return fmt.Errorf("objective to process the counter challenge request for channel Id %s could not be found", channelId.String())
+	}
+
+	switch objective := obj.(type) {
+	case *directdefund.Objective:
+		objective.IsCheckpoint = isCheckPoint
+		objective.IsChallenge = isChallenge
+
+	case *mirrorbridgeddefund.Objective:
+		if request.Payload.State().ChannelId().IsZero() {
+			return fmt.Errorf("invalid L2 signed state")
+		}
+
+		objective.L2SignedState = request.Payload
+		objective.IsCheckPoint = isCheckPoint
+		objective.IsChallenge = isChallenge
+
+	default:
+		return fmt.Errorf("unknown objective type %T", objective)
+	}
+
+	_, err := e.attemptProgress(obj)
 	if err != nil {
 		return err
 	}
@@ -896,29 +969,53 @@ func (e Engine) spawnConsensusChannelIfBridgedFundObjective(crankedObjective pro
 }
 
 // destroyObjectiveAndChannelIfChallengeCleared attempts to create and store a ConsensusChannel
-// derived from the supplied Objective if it is a directdefund.Objective and its challenge has been cleared.
+// derived from the supplied Objective if it is a directdefund.Objective or mirrorbridgeddefund.Objective and its challenge has been cleared.
 // If successful, the associated objective and channel will be destroyed.
 func (e Engine) destroyObjectiveAndChannelIfChallengeCleared(crankedObjective protocols.Objective) error {
-	dDfo, isDdfo := crankedObjective.(*directdefund.Objective)
+	var objectiveToDelete protocols.Objective
+	var consensusChannel *consensus_channel.ConsensusChannel
+	var isObjectiveFullyWithdrawn bool
 
-	if isDdfo && !dDfo.FullyWithdrawn() {
-		c, err := dDfo.CreateConsensusChannelFromChannel()
-		if err != nil {
-			return fmt.Errorf("could not create consensus channel for objective %s: %w", crankedObjective.Id(), err)
+	// TODO: Create interface for defund objectives
+	switch objective := crankedObjective.(type) {
+	case *directdefund.Objective:
+		if !objective.FullyWithdrawn() {
+			cc, err := objective.CreateConsensusChannelFromChannel()
+			if err != nil {
+				return fmt.Errorf("could not create consensus channel for objective %s: %w", crankedObjective.Id(), err)
+			}
+
+			objectiveToDelete = objective
+			consensusChannel = cc
+			isObjectiveFullyWithdrawn = true
 		}
 
-		err = e.store.SetConsensusChannel(c)
+	case *mirrorbridgeddefund.Objective:
+		if !objective.FullyWithdrawn() {
+			cc, err := objective.CreateConsensusChannelFromChannel()
+			if err != nil {
+				return fmt.Errorf("could not create consensus channel for objective %s: %w", crankedObjective.Id(), err)
+			}
+
+			objectiveToDelete = objective
+			consensusChannel = cc
+			isObjectiveFullyWithdrawn = true
+		}
+	}
+
+	if isObjectiveFullyWithdrawn {
+		err := e.store.SetConsensusChannel(consensusChannel)
 		if err != nil {
 			return fmt.Errorf("could not store consensus channel for objective %s: %w", crankedObjective.Id(), err)
 		}
 
-		err = e.store.DestroyObjective(dDfo.Id())
+		err = e.store.DestroyObjective(objectiveToDelete.Id())
 		if err != nil {
 			return fmt.Errorf("could not destroy objective %s: %w", crankedObjective.Id(), err)
 		}
 
 		// Destroy the channel since the consensus channel takes over governance:
-		err = e.store.DestroyChannel(c.Id)
+		err = e.store.DestroyChannel(consensusChannel.Id)
 		if err != nil {
 			return fmt.Errorf("could not destroy consensus channel for objective %s: %w", crankedObjective.Id(), err)
 		}
