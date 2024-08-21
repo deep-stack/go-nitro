@@ -60,6 +60,7 @@ export enum CounterChallengeAction {
 export type CounterChallengePayload = {
   ChannelId: string;
   Action: CounterChallengeAction;
+  StringifiedL2SignedState?: string;
 };
 
 export type CounterChallengeResult = {

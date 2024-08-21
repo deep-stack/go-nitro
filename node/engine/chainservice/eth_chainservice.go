@@ -83,7 +83,6 @@ type EthChainService struct {
 	eventTracker             *eventTracker
 	eventSub                 ethereum.Subscription
 	newBlockSub              ethereum.Subscription
-	newBlockChan             chan *ethTypes.Header
 }
 
 // MAX_QUERY_BLOCK_RANGE is the maximum range of blocks we query for events at once.
@@ -160,19 +159,11 @@ func newEthChainService(chain ethChain, startBlockNum uint64, na *NitroAdjudicat
 	tracker := NewEventTracker(startBlock)
 
 	// Use a buffered channel so we don't have to worry about blocking on writing to the channel.
-	ecs := EthChainService{chain, na, naAddress, caAddress, vpaAddress, txSigner, make(chan Event, 10), logger, ctx, cancelCtx, &sync.WaitGroup{}, tracker, nil, nil, nil}
+	ecs := EthChainService{chain, na, naAddress, caAddress, vpaAddress, txSigner, make(chan Event, 10), logger, ctx, cancelCtx, &sync.WaitGroup{}, tracker, nil, nil}
 	errChan, newBlockChan, eventChan, eventQuery, err := ecs.subscribeForLogs()
 	if err != nil {
 		return nil, err
 	}
-
-	newBlockSubChan := make(chan *ethTypes.Header)
-	_, err = ecs.chain.SubscribeNewHead(ecs.ctx, newBlockSubChan)
-	if err != nil {
-		return nil, err
-	}
-
-	ecs.newBlockChan = newBlockSubChan
 
 	// Prevent go routines from processing events before checkForMissedEvents completes
 	ecs.eventTracker.mu.Lock()
@@ -291,6 +282,12 @@ func (ecs *EthChainService) SendTransaction(tx protocols.ChainTransaction) error
 
 				approvalLogsChan := make(chan *Token.TokenApproval)
 
+				newBlockChan := make(chan *ethTypes.Header)
+				_, err = ecs.chain.SubscribeNewHead(ecs.ctx, newBlockChan)
+				if err != nil {
+					return err
+				}
+
 				approvalSubscription, err := token.WatchApproval(&bind.WatchOpts{Context: ecs.ctx}, approvalLogsChan, []common.Address{ecs.txSigner.From}, []common.Address{ecs.naAddress})
 				if err != nil {
 					return err
@@ -302,7 +299,7 @@ func (ecs *EthChainService) SendTransaction(tx protocols.ChainTransaction) error
 				}
 
 				// Get current block
-				currentBlock := <-ecs.newBlockChan
+				currentBlock := <-newBlockChan
 
 				isApproveTxRetried := false
 
@@ -320,7 +317,7 @@ func (ecs *EthChainService) SendTransaction(tx protocols.ChainTransaction) error
 						}
 					case err := <-approvalSubscription.Err():
 						return err
-					case newBlock := <-ecs.newBlockChan:
+					case newBlock := <-newBlockChan:
 						if (newBlock.Number.Int64() - currentBlock.Number.Int64()) > BLOCKS_WITHOUT_EVENT_THRESHOLD {
 							if isApproveTxRetried {
 								slog.Error("approve transaction was retried with higher gas and event Approval was not emitted till latest block", "txHash", retryApproveTxHash, "latestBlock", newBlock.Number.String())

@@ -140,14 +140,14 @@ func (nrs *NodeRpcServer) registerHandlers() (err error) {
 		case serde.CloseBridgeChannelRequestMethod:
 			return processRequest(nrs.BaseRpcServer, permSign, requestData, func(req bridgeddefund.ObjectiveRequest) (protocols.ObjectiveId, error) {
 				if DISABLE_BRIDGE_DEFUND {
-					return protocols.ObjectiveId(bridgeddefund.ObjectivePrefix + req.ChannelId.String()), fmt.Errorf("brided defund is currently disabled")
+					return protocols.ObjectiveId(bridgeddefund.ObjectivePrefix + req.ChannelId.String()), fmt.Errorf("bridged defund is currently disabled")
 				}
 				return nrs.node.CloseBridgeChannel(req.ChannelId)
 			})
 		case serde.MirrorBridgedDefundRequestMethod:
 			return processRequest(nrs.BaseRpcServer, permSign, requestData, func(req serde.MirrorBridgedDefundRequest) (protocols.ObjectiveId, error) {
 				if DISABLE_BRIDGE_DEFUND {
-					return protocols.ObjectiveId(bridgeddefund.ObjectivePrefix + req.ChannelId.String()), fmt.Errorf("brided defund is currently disabled")
+					return protocols.ObjectiveId(bridgeddefund.ObjectivePrefix + req.ChannelId.String()), fmt.Errorf("bridged defund is currently disabled")
 				}
 
 				var l2SignedState state.SignedState
@@ -199,7 +199,15 @@ func (nrs *NodeRpcServer) registerHandlers() (err error) {
 			})
 		case serde.CounterChallengeRequestMethod:
 			return processRequest(nrs.BaseRpcServer, permSign, requestData, func(req serde.CounterChallengeRequest) (serde.CounterChallengeRequest, error) {
-				nrs.node.CounterChallenge(req.ChannelId, req.Action)
+				var l2SignedState state.SignedState
+				if len(req.StringifiedL2SignedState) > 0 {
+					err := json.Unmarshal([]byte(req.StringifiedL2SignedState), &l2SignedState)
+					if err != nil {
+						return serde.CounterChallengeRequest{}, fmt.Errorf("error in unmarshalling signed state payload %w", err)
+					}
+				}
+
+				nrs.node.CounterChallenge(req.ChannelId, req.Action, l2SignedState)
 				return req, nil
 			})
 		case serde.ValidateVoucherRequestMethod:

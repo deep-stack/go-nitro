@@ -18,10 +18,11 @@ import (
 const ObjectivePrefix = "mirrorbridgeddefunding-"
 
 const (
-	WaitingForFinalization protocols.WaitingFor = "WaitingForFinalization"
-	WaitingForNothing      protocols.WaitingFor = "WaitingForNothing" // Finished
-	WaitingForWithdraw     protocols.WaitingFor = "WaitingForWithdraw"
-	WaitingForChallenge    protocols.WaitingFor = "WaitingForChallenge"
+	WaitingForFinalization     protocols.WaitingFor = "WaitingForFinalization"
+	WaitingForNothing          protocols.WaitingFor = "WaitingForNothing" // Finished
+	WaitingForWithdraw         protocols.WaitingFor = "WaitingForWithdraw"
+	WaitingForChallenge        protocols.WaitingFor = "WaitingForChallenge"
+	WaitingForChallengeCleared protocols.WaitingFor = "WaitingForChallengeCleared"
 )
 
 const (
@@ -36,12 +37,14 @@ const (
 
 // Objective is a cache of data computed by reading from the store. It stores (potentially) infinite data
 type Objective struct {
-	Status                        protocols.ObjectiveStatus
-	C                             *channel.Channel
-	L2SignedState                 state.SignedState
-	MirrorTransactionSubmitted    bool
-	IsChallenge                   bool
-	ChallengeTransactionSubmitted bool
+	Status                         protocols.ObjectiveStatus
+	C                              *channel.Channel
+	L2SignedState                  state.SignedState
+	MirrorTransactionSubmitted     bool
+	IsChallenge                    bool
+	IsCheckPoint                   bool
+	CheckpointTransactionSubmitted bool
+	ChallengeTransactionSubmitted  bool
 }
 
 // GetConsensusChannel describes functions which return a ConsensusChannel ledger channel for a channel id.
@@ -107,7 +110,7 @@ func (o *Objective) Crank(secretKey *[]byte) (protocols.Objective, protocols.Sid
 		return &updated, sideEffects, WaitingForNothing, protocols.ErrNotApproved
 	}
 
-	if updated.IsChallenge {
+	if updated.IsChallenge || updated.IsCheckPoint || updated.C.OnChain.ChannelMode != channel.Open {
 		return o.crankWithChallenge(updated, sideEffects, secretKey)
 	}
 
@@ -115,7 +118,7 @@ func (o *Objective) Crank(secretKey *[]byte) (protocols.Objective, protocols.Sid
 }
 
 func (o *Objective) crankWithChallenge(updated Objective, sideEffects protocols.SideEffects, secretKey *[]byte) (protocols.Objective, protocols.SideEffects, protocols.WaitingFor, error) {
-	if !updated.ChallengeTransactionSubmitted {
+	if updated.IsChallenge && !updated.ChallengeTransactionSubmitted {
 		// Update L1 state using L2 state to ensure off-chain balance reflects on-chain balance
 		updatedL1State, err := o.CreateL1StateBasedOnL2()
 		if err != nil {
@@ -136,17 +139,31 @@ func (o *Objective) crankWithChallenge(updated Objective, sideEffects protocols.
 		return &updated, sideEffects, WaitingForChallenge, nil
 	}
 
+	// Initiate checkpoint transaction
+	if updated.IsCheckPoint && !updated.CheckpointTransactionSubmitted {
+		checkpointTx := protocols.NewCheckpointTransaction(updated.C.Id, updated.L2SignedState, make([]state.SignedState, 0))
+		sideEffects.TransactionsToSubmit = append(sideEffects.TransactionsToSubmit, checkpointTx)
+		updated.CheckpointTransactionSubmitted = true
+		return &updated, sideEffects, WaitingForChallengeCleared, nil
+	}
+
 	// Wait for L2 channel to finalize
 	if updated.C.OnChain.ChannelMode == channel.Challenge {
 		return &updated, sideEffects, WaitingForFinalization, nil
 	}
 
-	if !updated.MirrorTransactionSubmitted {
+	// Mirror briged defund with challenge objective is complete after challenge is cleared
+	if updated.C.OnChain.ChannelMode == channel.Open {
+		updated.Status = protocols.Completed
+		return &updated, sideEffects, WaitingForNothing, nil
+	}
+
+	if updated.C.OnChain.ChannelMode == channel.Finalized && !updated.MirrorTransactionSubmitted && updated.C.OnChain.IsChallengeInitiatedByMe {
 		// Send MirrorTransferAll transaction
 		mirrorWithdrawAllTx := protocols.NewMirrorTransferAllTransaction(updated.OwnsChannel(), updated.L2SignedState)
 		updated.MirrorTransactionSubmitted = true
 		sideEffects.TransactionsToSubmit = append(sideEffects.TransactionsToSubmit, mirrorWithdrawAllTx)
-		return &updated, sideEffects, WaitingForFinalization, nil
+		return &updated, sideEffects, WaitingForWithdraw, nil
 	}
 
 	if !updated.FullyWithdrawn() {
@@ -154,6 +171,7 @@ func (o *Objective) crankWithChallenge(updated Objective, sideEffects protocols.
 		return &updated, sideEffects, WaitingForWithdraw, nil
 	}
 
+	updated.Status = protocols.Completed
 	return &updated, sideEffects, WaitingForNothing, nil
 }
 
@@ -264,7 +282,9 @@ func (o *Objective) clone() Objective {
 	clone.L2SignedState = o.L2SignedState
 	clone.MirrorTransactionSubmitted = o.MirrorTransactionSubmitted
 	clone.IsChallenge = o.IsChallenge
+	clone.IsCheckPoint = o.IsCheckPoint
 	clone.ChallengeTransactionSubmitted = o.ChallengeTransactionSubmitted
+	clone.CheckpointTransactionSubmitted = o.CheckpointTransactionSubmitted
 
 	return clone
 }
@@ -392,4 +412,50 @@ func (r ObjectiveRequest) WaitForObjectiveToStart() {
 // Id returns the objective id for the request.
 func (r ObjectiveRequest) Id(myAddress types.Address, chainId *big.Int) protocols.ObjectiveId {
 	return protocols.ObjectiveId(ObjectivePrefix + r.l1ChannelId.String())
+}
+
+// CreateConsensusChannelFromChannel creates a ConsensusChannel from the Objective by extracting signatures and a single asset outcome from the latest supported signed state.
+func (o *Objective) CreateConsensusChannelFromChannel() (*consensus_channel.ConsensusChannel, error) {
+	ledger := o.C
+
+	signedState, err := ledger.LatestSupportedSignedState()
+	if err != nil {
+		return nil, fmt.Errorf("could not get latest supported signed state")
+	}
+	leaderSig, err := signedState.GetParticipantSignature(uint(consensus_channel.Leader))
+	if err != nil {
+		return nil, fmt.Errorf("could not get leader signature: %w", err)
+	}
+	followerSig, err := signedState.GetParticipantSignature(uint(consensus_channel.Follower))
+	if err != nil {
+		return nil, fmt.Errorf("could not get follower signature: %w", err)
+	}
+	signatures := [2]state.Signature{leaderSig, followerSig}
+
+	if len(signedState.State().Outcome) != 1 {
+		return nil, fmt.Errorf("a consensus channel only supports a single asset")
+	}
+	assetExit := signedState.State().Outcome[0]
+	turnNum := signedState.State().TurnNum
+	outcome, err := consensus_channel.FromExit(assetExit)
+	if err != nil {
+		return nil, fmt.Errorf("could not create ledger outcome from channel exit: %w", err)
+	}
+
+	if ledger.MyIndex == uint(consensus_channel.Leader) {
+		con, err := consensus_channel.NewLeaderChannel(ledger.FixedPart, turnNum, outcome, signatures)
+		con.OnChainFunding = ledger.OnChain.Holdings.Clone() // Copy OnChain.Holdings so we don't lose this information
+		if err != nil {
+			return nil, fmt.Errorf("could not create consensus channel as leader: %w", err)
+		}
+		return &con, nil
+
+	} else {
+		con, err := consensus_channel.NewFollowerChannel(ledger.FixedPart, turnNum, outcome, signatures)
+		con.OnChainFunding = ledger.OnChain.Holdings.Clone() // Copy OnChain.Holdings so we don't lose this information
+		if err != nil {
+			return nil, fmt.Errorf("could not create consensus channel as follower: %w", err)
+		}
+		return &con, nil
+	}
 }

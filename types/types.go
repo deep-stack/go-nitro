@@ -39,8 +39,3 @@ const (
 	Checkpoint CounterChallengeAction = iota
 	Challenge
 )
-
-type CounterChallengeRequest struct {
-	ChannelId Destination
-	Action    CounterChallengeAction
-}
