@@ -430,6 +430,10 @@ func IsDirectFundObjective(id protocols.ObjectiveId) bool {
 	return strings.HasPrefix(string(id), ObjectivePrefix)
 }
 
+func (o *Objective) ResetTxSubmitted() {
+	o.transactionSubmitted = false
+}
+
 // ObjectiveRequest represents a request to create a new direct funding objective.
 type ObjectiveRequest struct {
 	CounterParty      types.Address

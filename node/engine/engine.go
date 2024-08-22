@@ -72,6 +72,7 @@ type Engine struct {
 	ObjectiveRequestsFromAPI        chan protocols.ObjectiveRequest
 	PaymentRequestsFromAPI          chan PaymentRequest
 	CounterChallengeRequestsFromAPI chan CounterChallengeRequest
+	RetryTxRequestFromAPI           chan types.RetryTxRequest
 
 	fromChain    <-chan chainservice.Event
 	fromMsg      <-chan protocols.Message
@@ -155,6 +156,7 @@ func New(vm *payments.VoucherManager, msg messageservice.MessageService, chain c
 	e.ObjectiveRequestsFromAPI = make(chan protocols.ObjectiveRequest)
 	e.PaymentRequestsFromAPI = make(chan PaymentRequest)
 	e.CounterChallengeRequestsFromAPI = make(chan CounterChallengeRequest)
+	e.RetryTxRequestFromAPI = make(chan types.RetryTxRequest)
 
 	e.fromChain = chain.EventFeed()
 	e.fromMsg = msg.P2PMessages()
@@ -217,6 +219,8 @@ func (e *Engine) run(ctx context.Context) {
 			err = e.handleSignRequest(signReq)
 		case counterChallengeReq := <-e.CounterChallengeRequestsFromAPI:
 			err = e.handleCounterChallengeRequest(counterChallengeReq)
+		case retryTxReq := <-e.RetryTxRequestFromAPI:
+			err = e.handleRetryTxRequest(retryTxReq)
 		case <-blockTicker.C:
 			blockNum := e.chain.GetLastConfirmedBlockNum()
 			err = e.store.SetLastBlockNumSeen(blockNum)
@@ -779,6 +783,35 @@ func (e *Engine) handleCounterChallengeRequest(request CounterChallengeRequest) 
 	_, err := e.attemptProgress(obj)
 	if err != nil {
 		return err
+	}
+
+	return nil
+}
+
+func (e *Engine) handleRetryTxRequest(request types.RetryTxRequest) error {
+	// Get objective from objective id
+	obj, err := e.store.GetObjectiveById(protocols.ObjectiveId(request.ObjectiveId))
+	if err != nil {
+		return err
+	}
+
+	// Based on objective type, send appropriate tx
+	switch objective := obj.(type) {
+	case *directfund.Objective:
+		objective.ResetTxSubmitted()
+
+		_, err = e.attemptProgress(objective)
+		if err != nil {
+			return err
+		}
+
+	case *directdefund.Objective:
+		objective.ResetWithDrawAllTxSubmitted()
+
+		_, err = e.attemptProgress(objective)
+		if err != nil {
+			return err
+		}
 	}
 
 	return nil

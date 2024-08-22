@@ -236,6 +236,34 @@ yargs(hideBin(process.argv))
     }
   )
   .command(
+    "retry-tx <objectiveId>",
+    "Retries transaction for given objective",
+    (yargsBuilder) => {
+      return yargsBuilder.positional("objectiveId", {
+        describe: "The id of the objective to send transaction for",
+        type: "string",
+        demandOption: true,
+      });
+    },
+
+    async (yargs) => {
+      const rpcPort = yargs.p;
+      const rpcHost = yargs.h;
+      const isSecure = yargs.s;
+
+      const rpcClient = await NitroRpcClient.CreateHttpNitroClient(
+        getRPCUrl(rpcHost, rpcPort),
+        isSecure
+      );
+
+      const id = await rpcClient.RetryTx(yargs.objectiveId);
+
+      console.log(`Transaction retried for objective ${id}`);
+      await rpcClient.Close();
+      process.exit(0);
+    }
+  )
+  .command(
     "direct-defund <channelId>",
     "Defunds a directly funded ledger channel",
     (yargsBuilder) => {

@@ -116,6 +116,12 @@ export type DirectFundRequest = JsonRpcRequest<
   "create_ledger_channel",
   DirectFundPayload
 >;
+export type RetryTxRequest = JsonRpcRequest<
+  "retry_tx",
+  {
+    ObjectiveId: string;
+  }
+>;
 export type PaymentRequest = JsonRpcRequest<"pay", PaymentPayload>;
 export type CounterChallengeRequest = JsonRpcRequest<
   "counter_challenge",
@@ -184,6 +190,7 @@ export type VirtualFundResponse = JsonRpcResponse<ObjectiveResponse>;
 export type VersionResponse = JsonRpcResponse<string>;
 export type GetAddressResponse = JsonRpcResponse<string>;
 export type DirectFundResponse = JsonRpcResponse<ObjectiveResponse>;
+export type RetryTxResponse = JsonRpcResponse<string>;
 export type DirectDefundResponse = JsonRpcResponse<string>;
 export type MirrorBridgedDefundResponse = JsonRpcResponse<string>;
 export type BridgedDefundResponse = JsonRpcResponse<string>;
@@ -202,6 +209,7 @@ export type ReceiveVoucherResponse = JsonRpcResponse<ReceiveVoucherResult>;
 export type RPCRequestAndResponses = {
   get_auth_token: [GetAuthTokenRequest, GetAuthTokenResponse];
   create_ledger_channel: [DirectFundRequest, DirectFundResponse];
+  retry_tx: [RetryTxRequest, RetryTxResponse];
   close_ledger_channel: [DirectDefundRequest, DirectDefundResponse];
   close_bridge_channel: [BridgedDefundRequest, BridgedDefundResponse];
   mirror_bridged_defund: [
