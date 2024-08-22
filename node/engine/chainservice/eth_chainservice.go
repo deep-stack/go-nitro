@@ -67,11 +67,6 @@ type ethChain interface {
 	TransactionSender(ctx context.Context, tx *ethTypes.Transaction, block common.Hash, index uint) (common.Address, error)
 }
 
-type TxDetails struct {
-	tx          *ethTypes.Transaction
-	isTxDropped bool
-}
-
 type DroppedEventInfo struct {
 	DroppedTxHash common.Hash
 	ChannelId     types.Destination
@@ -94,7 +89,7 @@ type EthChainService struct {
 	eventTracker             *eventTracker
 	eventSub                 ethereum.Subscription
 	newBlockSub              ethereum.Subscription
-	channelIdToSentTxs       map[types.Destination][]TxDetails
+	channelIdToSentTxs       map[types.Destination][]*ethTypes.Transaction
 }
 
 // MAX_QUERY_BLOCK_RANGE is the maximum range of blocks we query for events at once.
@@ -170,7 +165,7 @@ func newEthChainService(chain ethChain, startBlockNum uint64, na *NitroAdjudicat
 	}
 	tracker := NewEventTracker(startBlock)
 
-	channelIdToSentTxs := make(map[types.Destination][]TxDetails)
+	channelIdToSentTxs := make(map[types.Destination][]*ethTypes.Transaction)
 
 	// Use a buffered channel so we don't have to worry about blocking on writing to the channel.
 	ecs := EthChainService{chain, na, naAddress, caAddress, vpaAddress, txSigner, make(chan Event, 10), make(chan DroppedEventInfo, 10), logger, ctx, cancelCtx, &sync.WaitGroup{}, tracker, nil, nil, channelIdToSentTxs}
@@ -311,10 +306,7 @@ func (ecs *EthChainService) SendTransaction(tx protocols.ChainTransaction) error
 				return nil
 			}
 
-			ecs.channelIdToSentTxs[tx.ChannelId()] = append(ecs.channelIdToSentTxs[tx.ChannelId()], TxDetails{
-				depositTx,
-				false,
-			})
+			ecs.channelIdToSentTxs[tx.ChannelId()] = append(ecs.channelIdToSentTxs[tx.ChannelId()], depositTx)
 		}
 		return nil
 	case protocols.WithdrawAllTransaction:
@@ -677,8 +669,7 @@ func (ecs *EthChainService) updateEventTracker(errorChan chan<- error, block *Bl
 			// Set isTxDropped to true if tx is dropped
 			for channelId, txs := range ecs.channelIdToSentTxs {
 				for _, txDetails := range txs {
-					if txDetails.tx.Hash() == chainEvent.TxHash {
-						txDetails.isTxDropped = true
+					if txDetails.Hash() == chainEvent.TxHash {
 						ecs.droppedOut <- DroppedEventInfo{
 							chainEvent.TxHash,
 							channelId,

@@ -87,7 +87,7 @@ func newL2ChainService(chain ethChain, startBlockNum uint64, bridge *Bridge.Brid
 	}
 	tracker := NewEventTracker(startBlock)
 
-	channelIdToSentTxs := make(map[types.Destination][]TxDetails)
+	channelIdToSentTxs := make(map[types.Destination][]*ethTypes.Transaction)
 
 	// Use a buffered channel so we don't have to worry about blocking on writing to the channel.
 	ecs := EthChainService{chain, nil, common.Address{}, caAddress, vpaAddress, txSigner, make(chan Event, 10), make(chan DroppedEventInfo, 10), logger, ctx, cancelCtx, &sync.WaitGroup{}, tracker, nil, nil, channelIdToSentTxs}
