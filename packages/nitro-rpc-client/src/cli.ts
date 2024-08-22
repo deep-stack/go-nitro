@@ -204,7 +204,7 @@ yargs(hideBin(process.argv))
         isSecure
       );
       const droppedTxHash = await rpcClient.GetDroppedTx(objectiveId);
-      console.log("Event dropped for the tx hash: ", droppedTxHash);
+      console.log(droppedTxHash);
       await rpcClient.Close();
       process.exit(0);
     }

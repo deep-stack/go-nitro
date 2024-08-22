@@ -32,6 +32,8 @@ type NodeRpcServer struct {
 	paymentManager paymentsmanager.PaymentsManager
 }
 
+const droppedTxNotFoundErr = "not found"
+
 // newNodeRpcServerWithoutNotifications creates a new rpc server without notifications enabled
 func newNodeRpcServerWithoutNotifications(nitroNode *nitro.Node, trans transport.Responder) (*NodeRpcServer, error) {
 	baseRpcServer := NewBaseRpcServer(trans)
@@ -243,6 +245,10 @@ func (nrs *NodeRpcServer) registerHandlers() (err error) {
 			return processRequest(nrs.BaseRpcServer, permSign, requestData, func(req serde.GetDroppedTxRequest) (string, error) {
 				droppedTx, err := nrs.node.GetDroppedTxByObjectiveId(req.ObjectiveId)
 				if err != nil {
+					if err.Error() == droppedTxNotFoundErr {
+						returnMsg := "No events dropped for given objective Id: " + string(req.ObjectiveId)
+						return returnMsg, nil
+					}
 					return "", err
 				}
 
