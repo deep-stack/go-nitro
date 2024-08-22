@@ -6,6 +6,7 @@ import (
 	"log/slog"
 	"path/filepath"
 
+	"github.com/ethereum/go-ethereum/common"
 	"github.com/statechannels/go-nitro/channel"
 	"github.com/statechannels/go-nitro/channel/consensus_channel"
 	"github.com/statechannels/go-nitro/crypto"
@@ -40,6 +41,9 @@ type Store interface {
 	ReleaseChannelFromOwnership(types.Destination) error                         // Release channel from being owned by any objective
 	GetLastBlockNumSeen() (uint64, error)
 	SetLastBlockNumSeen(uint64) error
+
+	SetObjectiveIdToDroppedTxHash(protocols.ObjectiveId, common.Hash) error
+	GetDroppedTxHashByObjectiveId(protocols.ObjectiveId) (common.Hash, error)
 
 	ConsensusChannelStore
 	payments.VoucherStore

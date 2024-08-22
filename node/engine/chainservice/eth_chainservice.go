@@ -67,6 +67,16 @@ type ethChain interface {
 	TransactionSender(ctx context.Context, tx *ethTypes.Transaction, block common.Hash, index uint) (common.Address, error)
 }
 
+type TxDetails struct {
+	tx          *ethTypes.Transaction
+	isTxDropped bool
+}
+
+type DroppedEventInfo struct {
+	DroppedTxHash common.Hash
+	ChannelId     types.Destination
+}
+
 // eventTracker holds on to events in memory and dispatches an event after required number of confirmations
 type EthChainService struct {
 	chain                    ethChain
@@ -76,6 +86,7 @@ type EthChainService struct {
 	virtualPaymentAppAddress common.Address
 	txSigner                 *bind.TransactOpts
 	out                      chan Event
+	droppedOut               chan DroppedEventInfo
 	logger                   *slog.Logger
 	ctx                      context.Context
 	cancel                   context.CancelFunc
@@ -83,6 +94,7 @@ type EthChainService struct {
 	eventTracker             *eventTracker
 	eventSub                 ethereum.Subscription
 	newBlockSub              ethereum.Subscription
+	channelIdToSentTxs       map[types.Destination][]TxDetails
 }
 
 // MAX_QUERY_BLOCK_RANGE is the maximum range of blocks we query for events at once.
@@ -158,8 +170,10 @@ func newEthChainService(chain ethChain, startBlockNum uint64, na *NitroAdjudicat
 	}
 	tracker := NewEventTracker(startBlock)
 
+	channelIdToSentTxs := make(map[types.Destination][]TxDetails)
+
 	// Use a buffered channel so we don't have to worry about blocking on writing to the channel.
-	ecs := EthChainService{chain, na, naAddress, caAddress, vpaAddress, txSigner, make(chan Event, 10), logger, ctx, cancelCtx, &sync.WaitGroup{}, tracker, nil, nil}
+	ecs := EthChainService{chain, na, naAddress, caAddress, vpaAddress, txSigner, make(chan Event, 10), make(chan DroppedEventInfo, 10), logger, ctx, cancelCtx, &sync.WaitGroup{}, tracker, nil, nil, channelIdToSentTxs}
 	errChan, newBlockChan, eventChan, eventQuery, err := ecs.subscribeForLogs()
 	if err != nil {
 		return nil, err
@@ -290,12 +304,17 @@ func (ecs *EthChainService) SendTransaction(tx protocols.ChainTransaction) error
 				return err
 			}
 
-			_, err = ecs.na.Deposit(txOpts, tokenAddress, tx.ChannelId(), holdings, amount)
+			depositTx, err := ecs.na.Deposit(txOpts, tokenAddress, tx.ChannelId(), holdings, amount)
 			if err != nil {
 				// Return nil to not panic the node and log the error instead
 				slog.Error("error sending Deposit transaction", "error", err)
 				return nil
 			}
+
+			ecs.channelIdToSentTxs[tx.ChannelId()] = append(ecs.channelIdToSentTxs[tx.ChannelId()], TxDetails{
+				depositTx,
+				false,
+			})
 		}
 		return nil
 	case protocols.WithdrawAllTransaction:
@@ -654,6 +673,20 @@ func (ecs *EthChainService) updateEventTracker(errorChan chan<- error, block *Bl
 		}
 
 		if oldBlock.Hash() != chainEvent.BlockHash {
+
+			// Set isTxDropped to true if tx is dropped
+			for channelId, txs := range ecs.channelIdToSentTxs {
+				for _, txDetails := range txs {
+					if txDetails.tx.Hash() == chainEvent.TxHash {
+						txDetails.isTxDropped = true
+						ecs.droppedOut <- DroppedEventInfo{
+							chainEvent.TxHash,
+							channelId,
+						}
+					}
+				}
+			}
+
 			ecs.logger.Warn("dropping event because its block is no longer in the chain (possible re-org)", "blockNumber", chainEvent.BlockNumber, "blockHash", chainEvent.BlockHash)
 			continue
 		}
@@ -698,6 +731,10 @@ func (ecs *EthChainService) subscribeForLogs() (chan error, chan *ethTypes.Heade
 // EventFeed returns the out chan, and narrows the type so that external consumers may only receive on it.
 func (ecs *EthChainService) EventFeed() <-chan Event {
 	return ecs.out
+}
+
+func (ecs *EthChainService) DroppedEventFeed() <-chan DroppedEventInfo {
+	return ecs.droppedOut
 }
 
 func (ecs *EthChainService) GetConsensusAppAddress() types.Address {
