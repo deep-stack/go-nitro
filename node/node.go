@@ -8,6 +8,7 @@ import (
 	"runtime/debug"
 	"time"
 
+	"github.com/ethereum/go-ethereum/common"
 	"github.com/statechannels/go-nitro/channel/state"
 	"github.com/statechannels/go-nitro/channel/state/outcome"
 	"github.com/statechannels/go-nitro/internal/safesync"
@@ -360,6 +361,10 @@ func (n *Node) GetSignedState(id types.Destination) (state.SignedState, error) {
 	}
 
 	return consensusChannel.SupportedSignedState(), nil
+}
+
+func (n *Node) GetDroppedTxByObjectiveId(objectiveId protocols.ObjectiveId) (common.Hash, error) {
+	return n.store.GetDroppedTxHashByObjectiveId(objectiveId)
 }
 
 // Close stops the node from responding to any input.

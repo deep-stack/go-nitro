@@ -182,6 +182,33 @@ yargs(hideBin(process.argv))
       process.exit(0);
     }
   )
+  .command(
+    "get-dropped-tx <objectiveId>",
+    "Get the address of the Nitro RPC server",
+    (yargsBuilder) => {
+      return yargsBuilder.positional("objectiveId", {
+        describe: "The id of the channel to get dropped tx for",
+        type: "string",
+        demandOption: true,
+      });
+    },
+    async (yargs) => {
+      const rpcPort = yargs.p;
+      const rpcHost = yargs.h;
+      const isSecure = yargs.s;
+
+      const objectiveId = yargs.objectiveId
+
+      const rpcClient = await NitroRpcClient.CreateHttpNitroClient(
+        getRPCUrl(rpcHost, rpcPort),
+        isSecure
+      );
+      const droppedTxHash = await rpcClient.GetDroppedTx(objectiveId);
+      console.log("Event dropped for the tx hash: ", droppedTxHash);
+      await rpcClient.Close();
+      process.exit(0);
+    }
+  )
 
   .command(
     "direct-fund <counterparty>",

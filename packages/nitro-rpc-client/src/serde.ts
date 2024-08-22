@@ -179,6 +179,7 @@ export function getAndValidateResult<T extends RequestMethod>(
         (result: ObjectiveSchemaType) => result
       );
     case "retry_tx":
+    case "get_dropped_tx":
     case "get_auth_token":
     case "close_ledger_channel":
     case "close_bridge_channel":

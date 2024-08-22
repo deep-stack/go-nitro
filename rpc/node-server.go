@@ -239,6 +239,15 @@ func (nrs *NodeRpcServer) registerHandlers() (err error) {
 				nrs.node.RetryTx(req.ObjectiveId)
 				return req.ObjectiveId, nil
 			})
+		case serde.GetDroppedTxMethod:
+			return processRequest(nrs.BaseRpcServer, permSign, requestData, func(req serde.GetDroppedTxRequest) (string, error) {
+				droppedTx, err := nrs.node.GetDroppedTxByObjectiveId(req.ObjectiveId)
+				if err != nil {
+					return "", err
+				}
+
+				return droppedTx.String(), nil
+			})
 		default:
 			errRes := serde.NewJsonRpcErrorResponse(jsonrpcReq.Id, serde.MethodNotFoundError)
 			return marshalResponse(errRes)
