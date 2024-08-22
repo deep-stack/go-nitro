@@ -279,7 +279,7 @@ func (ds *DurableStore) GetDroppedTxHashByObjectiveId(objectiveId protocols.Obje
 		return common.Hash{}, err
 	}
 
-	hashBytes := []byte(hashJSON)
+	hashBytes := common.FromHex(hashJSON)
 
 	return common.BytesToHash(hashBytes), nil
 }
