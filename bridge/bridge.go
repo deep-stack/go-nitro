@@ -136,7 +136,7 @@ func (b *Bridge) Start(configOpts BridgeConfig) (nodeL1 *node.Node, nodeL2 *node
 	}
 
 	// Initialize nodes
-	nodeL1, storeL1, msgServiceL1, chainServiceL1, err := nodeutils.InitializeNode(chainOptsL1, storeOptsL1, messageOptsL1)
+	nodeL1, storeL1, msgServiceL1, chainServiceL1, err := nodeutils.InitializeNode(chainOptsL1, storeOptsL1, messageOptsL1, &NodeL1PermissivePolicy{})
 	if err != nil {
 		return nil, nil, nodeL1MultiAddress, nodeL2MultiAddress, err
 	}

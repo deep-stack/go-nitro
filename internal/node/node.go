@@ -11,7 +11,7 @@ import (
 	p2pms "github.com/statechannels/go-nitro/node/engine/messageservice/p2p-message-service"
 )
 
-func InitializeNode(chainOpts chainservice.ChainOpts, storeOpts store.StoreOpts, messageOpts p2pms.MessageOpts) (*node.Node, *store.Store, *p2pms.P2PMessageService, chainservice.ChainService, error) {
+func InitializeNode(chainOpts chainservice.ChainOpts, storeOpts store.StoreOpts, messageOpts p2pms.MessageOpts, policymaker engine.PolicyMaker) (*node.Node, *store.Store, *p2pms.P2PMessageService, chainservice.ChainService, error) {
 	ourStore, err := store.NewStore(storeOpts)
 	if err != nil {
 		return nil, nil, nil, nil, err
@@ -41,7 +41,7 @@ func InitializeNode(chainOpts chainservice.ChainOpts, storeOpts store.StoreOpts,
 		messageService,
 		ourChain,
 		ourStore,
-		&engine.PermissivePolicy{},
+		policymaker,
 	)
 
 	return &node, &ourStore, messageService, ourChain, nil

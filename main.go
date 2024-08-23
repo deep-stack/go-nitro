@@ -16,6 +16,7 @@ import (
 	nodeUtils "github.com/statechannels/go-nitro/internal/node"
 	"github.com/statechannels/go-nitro/internal/rpc"
 	"github.com/statechannels/go-nitro/node"
+	"github.com/statechannels/go-nitro/node/engine"
 	"github.com/statechannels/go-nitro/node/engine/chainservice"
 	p2pms "github.com/statechannels/go-nitro/node/engine/messageservice/p2p-message-service"
 	"github.com/statechannels/go-nitro/node/engine/store"
@@ -291,7 +292,7 @@ func main() {
 					CaAddress:          common.HexToAddress(caAddress),
 				}
 
-				node, _, _, _, err = nodeUtils.InitializeNode(chainOpts, storeOpts, messageOpts)
+				node, _, _, _, err = nodeUtils.InitializeNode(chainOpts, storeOpts, messageOpts, &engine.PermissivePolicy{})
 			}
 
 			logging.SetupDefaultLogger(os.Stdout, slog.LevelDebug)
