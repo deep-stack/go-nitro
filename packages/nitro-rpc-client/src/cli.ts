@@ -183,13 +183,17 @@ yargs(hideBin(process.argv))
     }
   )
   .command(
-    "get-objective <channelId>",
+    "get-objective <objectiveId>",
     "Get current status of objective with given objective ID",
     (yargsBuilder) => {
-      return yargsBuilder.positional("channelId", {
-        describe: "ID of the channel owned by objective",
+      return yargsBuilder.positional("objectiveId", {
+        describe: "ID of the objective",
         type: "string",
         demandOption: true,
+      }).option("l2", {
+        describe: "Whether to get status of corresponding objective on L2",
+        type: "boolean",
+        default: false,
       });
     },
     async (yargs) => {
@@ -197,13 +201,15 @@ yargs(hideBin(process.argv))
       const rpcHost = yargs.h;
       const isSecure = yargs.s;
 
-      const channelId = yargs.channelId;
+      const objectiveId = yargs.objectiveId;
+      const l2 = yargs.l2
+
 
       const rpcClient = await NitroRpcClient.CreateHttpNitroClient(
         getRPCUrl(rpcHost, rpcPort),
         isSecure
       );
-      const objectiveInfo = await rpcClient.GetObjective(channelId);
+      const objectiveInfo = await rpcClient.GetObjective(objectiveId, l2);
       console.log(objectiveInfo);
 
       await rpcClient.Close();

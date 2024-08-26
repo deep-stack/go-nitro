@@ -156,7 +156,8 @@ export type GetPaymentChannelsByLedgerRequest = JsonRpcRequest<
 export type GetObjectiveRequest = JsonRpcRequest<
   "get_objective",
   {
-    ChannelId: string;
+    ObjectiveId: string;
+    L2: boolean;
   }
 >;
 

@@ -362,6 +362,10 @@ func (n *Node) GetSignedState(id types.Destination) (state.SignedState, error) {
 	return consensusChannel.SupportedSignedState(), nil
 }
 
+func (n *Node) GetObjectiveById(objectiveId protocols.ObjectiveId) (protocols.Objective, error) {
+	return n.store.GetObjectiveById(objectiveId)
+}
+
 func (n *Node) GetObjectiveByChannelId(channelId types.Destination) (protocols.Objective, bool) {
 	return n.store.GetObjectiveByChannelId(channelId)
 }

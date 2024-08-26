@@ -430,6 +430,14 @@ func (b Bridge) GetL2ObjectiveByL1ChannelId(l1ChannelId types.Destination) (prot
 	return b.nodeL2.GetObjectiveByChannelId(l2ChannelId)
 }
 
+func (b Bridge) GetObjectiveById(objectiveId protocols.ObjectiveId, l2 bool) (protocols.Objective, error) {
+	if l2 {
+		return b.nodeL2.GetObjectiveById(objectiveId)
+	} else {
+		return b.nodeL1.GetObjectiveById(objectiveId)
+	}
+}
+
 func (b Bridge) GetAllL2Channels() ([]query.LedgerChannelInfo, error) {
 	return b.nodeL2.GetAllLedgerChannels()
 }

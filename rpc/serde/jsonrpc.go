@@ -100,7 +100,8 @@ type RetryTxRequest struct {
 }
 
 type GetObjectiveRequest struct {
-	ChannelId string
+	ObjectiveId protocols.ObjectiveId
+	L2          bool
 }
 
 type (
