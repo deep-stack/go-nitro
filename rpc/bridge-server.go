@@ -121,7 +121,7 @@ func (brs *BridgeRpcServer) registerHandlers() (err error) {
 			})
 		case serde.GetObjectiveMethod:
 			return processRequest(brs.BaseRpcServer, permSign, requestData, func(req serde.GetObjectiveRequest) (string, error) {
-				objective, ok := brs.bridge.GetL2ObjectiveByL1ChannelId(types.AddressToDestination(common.HexToAddress(req.ChannelId)))
+				objective, ok := brs.bridge.GetL2ObjectiveByL1ChannelId(types.Destination(common.HexToHash(req.ChannelId)))
 				if !ok {
 					return "", fmt.Errorf("Could not get objective on L2 for given channel ID %s ", req.ChannelId)
 				}
