@@ -140,11 +140,12 @@ export class NitroRpcClient implements RpcClientApi {
     counterParty: string,
     assetAddress: string,
     alphaAmount: number,
-    betaAmount: number
+    betaAmount: number,
+    challengeDuration: number
   ): Promise<ObjectiveResponse> {
     const payload: DirectFundPayload = {
       CounterParty: counterParty,
-      ChallengeDuration: 10,
+      ChallengeDuration: challengeDuration,
       Outcome: createOutcome(
         assetAddress,
         await this.GetAddress(),
@@ -287,6 +288,12 @@ export class NitroRpcClient implements RpcClientApi {
   ): Promise<PaymentChannelInfo[]> {
     return this.sendRequest("get_payment_channels_by_ledger", {
       LedgerId: ledgerId,
+    });
+  }
+
+  public async GetObjective(objectiveId: string): Promise<string> {
+    return this.sendRequest("get_objective", {
+      ObjectiveId: objectiveId,
     });
   }
 

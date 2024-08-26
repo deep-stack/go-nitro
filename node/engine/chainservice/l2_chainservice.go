@@ -14,9 +14,11 @@ import (
 	ethTypes "github.com/ethereum/go-ethereum/core/types"
 
 	"github.com/statechannels/go-nitro/internal/logging"
+	"github.com/statechannels/go-nitro/internal/safesync"
 	Bridge "github.com/statechannels/go-nitro/node/engine/chainservice/bridge"
 	chainutils "github.com/statechannels/go-nitro/node/engine/chainservice/utils"
 	"github.com/statechannels/go-nitro/protocols"
+	"github.com/statechannels/go-nitro/types"
 )
 
 type L2ChainOpts struct {
@@ -86,8 +88,28 @@ func newL2ChainService(chain ethChain, startBlockNum uint64, bridge *Bridge.Brid
 	}
 	tracker := NewEventTracker(startBlock)
 
+	sentTxToChannelIdMap := safesync.Map[types.Destination]{}
+
 	// Use a buffered channel so we don't have to worry about blocking on writing to the channel.
-	ecs := EthChainService{chain, nil, common.Address{}, caAddress, vpaAddress, txSigner, make(chan Event, 10), logger, ctx, cancelCtx, &sync.WaitGroup{}, tracker, nil, nil}
+	ecs := EthChainService{
+		chain,
+		nil,
+		common.Address{},
+		caAddress,
+		vpaAddress,
+		txSigner,
+		make(chan Event, 10),
+		make(chan protocols.DroppedEventInfo, 10),
+		logger,
+		ctx,
+		cancelCtx,
+		&sync.WaitGroup{},
+		tracker,
+		nil,
+		nil,
+		&sentTxToChannelIdMap,
+	}
+
 	l2cs := L2ChainService{&ecs, bridge, bridgeAddress}
 	errChan, newBlockChan, eventChan, eventQuery, err := l2cs.subscribeForLogs()
 	if err != nil {

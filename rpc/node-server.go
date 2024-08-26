@@ -239,6 +239,20 @@ func (nrs *NodeRpcServer) registerHandlers() (err error) {
 				nrs.node.RetryTx(req.ObjectiveId)
 				return req.ObjectiveId, nil
 			})
+		case serde.GetObjectiveMethod:
+			return processRequest(nrs.BaseRpcServer, permSign, requestData, func(req serde.GetDroppedEventRequest) (string, error) {
+				objective, err := nrs.node.GetObjectiveById(req.ObjectiveId)
+				if err != nil {
+					return "", err
+				}
+
+				marshalledObjective, err := objective.MarshalJSON()
+				if err != nil {
+					return "", err
+				}
+
+				return string(marshalledObjective), nil
+			})
 		default:
 			errRes := serde.NewJsonRpcErrorResponse(jsonrpcReq.Id, serde.MethodNotFoundError)
 			return marshalResponse(errRes)

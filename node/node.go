@@ -362,6 +362,10 @@ func (n *Node) GetSignedState(id types.Destination) (state.SignedState, error) {
 	return consensusChannel.SupportedSignedState(), nil
 }
 
+func (n *Node) GetObjectiveById(objectiveId protocols.ObjectiveId) (protocols.Objective, error) {
+	return n.store.GetObjectiveById(objectiveId)
+}
+
 // Close stops the node from responding to any input.
 func (n *Node) Close() error {
 	if err := n.engine.Close(); err != nil {

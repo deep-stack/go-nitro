@@ -50,7 +50,7 @@ const counterChallengeSchema = {
   properties: {
     ChannelId: { type: "string" },
     Action: { type: "int32" },
-    Payload: { type: "string" },
+    StringifiedL2SignedState: { type: "string" },
   },
 } as const;
 type CounterChallengeSchemaType = JTDDataType<typeof counterChallengeSchema>;
@@ -179,6 +179,7 @@ export function getAndValidateResult<T extends RequestMethod>(
         (result: ObjectiveSchemaType) => result
       );
     case "retry_tx":
+    case "get_objective":
     case "get_auth_token":
     case "close_ledger_channel":
     case "close_bridge_channel":

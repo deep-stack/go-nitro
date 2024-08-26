@@ -63,6 +63,8 @@ type Objective struct {
 
 	FundedChannels            map[types.Destination]*channel.Channel
 	GetVoucherIfAmountPresent func(channelId types.Destination) (*payments.VoucherInfo, bool) `json:"-"`
+
+	droppedEvent protocols.DroppedEventInfo
 }
 
 // isInConsensusOrFinalState returns true if the channel has a final state or latest state that is supported
@@ -579,8 +581,13 @@ func (o *Objective) clone() Objective {
 	clone.reclaimTransactionSubmitted = o.reclaimTransactionSubmitted
 	clone.GetVoucherIfAmountPresent = o.GetVoucherIfAmountPresent
 	clone.FundedChannels = o.FundedChannels
+	clone.droppedEvent = o.droppedEvent
 
 	return clone
+}
+
+func (o *Objective) SetDroppedEvent(droppedEventFromChain protocols.DroppedEventInfo) {
+	o.droppedEvent = droppedEventFromChain
 }
 
 // ObjectiveRequest represents a request to create a new direct defund objective.

@@ -45,6 +45,7 @@ type Objective struct {
 	myDepositTarget          types.Funds // I want to get the on chain holdings up to this much
 	fullyFundedThreshold     types.Funds // if the on chain holdings are equal
 	transactionSubmitted     bool        // whether a transition for the objective has been submitted or not
+	droppedEvent             protocols.DroppedEventInfo
 }
 
 // GetChannelByIdFunction specifies a function that can be used to retrieve channels from a store.
@@ -422,6 +423,7 @@ func (o *Objective) clone() Objective {
 	clone.myDepositTarget = o.myDepositTarget.Clone()
 	clone.fullyFundedThreshold = o.fullyFundedThreshold.Clone()
 	clone.transactionSubmitted = o.transactionSubmitted
+	clone.droppedEvent = o.droppedEvent
 	return clone
 }
 
@@ -432,6 +434,10 @@ func IsDirectFundObjective(id protocols.ObjectiveId) bool {
 
 func (o *Objective) ResetTxSubmitted() {
 	o.transactionSubmitted = false
+}
+
+func (o *Objective) SetDroppedEvent(droppedEventFromChain protocols.DroppedEventInfo) {
+	o.droppedEvent = droppedEventFromChain
 }
 
 // ObjectiveRequest represents a request to create a new direct funding objective.

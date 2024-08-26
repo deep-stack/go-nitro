@@ -17,6 +17,7 @@ import (
 
 	"github.com/statechannels/go-nitro/channel/state"
 	"github.com/statechannels/go-nitro/internal/logging"
+	"github.com/statechannels/go-nitro/internal/safesync"
 	NitroAdjudicator "github.com/statechannels/go-nitro/node/engine/chainservice/adjudicator"
 	Token "github.com/statechannels/go-nitro/node/engine/chainservice/erc20"
 	chainutils "github.com/statechannels/go-nitro/node/engine/chainservice/utils"
@@ -54,6 +55,15 @@ var topicsToWatch = []common.Hash{
 	statusUpdatedTopic,
 }
 
+var topicsToEventName = map[common.Hash]string{
+	concludedTopic:           "Concluded",
+	allocationUpdatedTopic:   "AllocationUpdated",
+	depositedTopic:           "Deposited",
+	challengeRegisteredTopic: "ChallengeRegistered",
+	challengeClearedTopic:    "ChallengeCleared",
+	reclaimedTopic:           "Reclaimed",
+}
+
 const (
 	MIN_BACKOFF_TIME = 1 * time.Second
 	MAX_BACKOFF_TIME = 5 * time.Minute
@@ -76,6 +86,7 @@ type EthChainService struct {
 	virtualPaymentAppAddress common.Address
 	txSigner                 *bind.TransactOpts
 	out                      chan Event
+	droppedEventOut          chan protocols.DroppedEventInfo
 	logger                   *slog.Logger
 	ctx                      context.Context
 	cancel                   context.CancelFunc
@@ -83,6 +94,7 @@ type EthChainService struct {
 	eventTracker             *eventTracker
 	eventSub                 ethereum.Subscription
 	newBlockSub              ethereum.Subscription
+	sentTxToChannelIdMap     *safesync.Map[types.Destination]
 }
 
 // MAX_QUERY_BLOCK_RANGE is the maximum range of blocks we query for events at once.
@@ -157,9 +169,25 @@ func newEthChainService(chain ethChain, startBlockNum uint64, na *NitroAdjudicat
 		Timestamp: block.Time(),
 	}
 	tracker := NewEventTracker(startBlock)
+	sentTxToChannelIdMap := safesync.Map[types.Destination]{}
 
 	// Use a buffered channel so we don't have to worry about blocking on writing to the channel.
-	ecs := EthChainService{chain, na, naAddress, caAddress, vpaAddress, txSigner, make(chan Event, 10), logger, ctx, cancelCtx, &sync.WaitGroup{}, tracker, nil, nil}
+	ecs := EthChainService{
+		chain,
+		na,
+		naAddress,
+		caAddress,
+		vpaAddress,
+		txSigner,
+		make(chan Event, 10),
+		make(chan protocols.DroppedEventInfo, 10),
+		logger, ctx, cancelCtx, &sync.WaitGroup{},
+		tracker,
+		nil,
+		nil,
+		&sentTxToChannelIdMap,
+	}
+
 	errChan, newBlockChan, eventChan, eventQuery, err := ecs.subscribeForLogs()
 	if err != nil {
 		return nil, err
@@ -269,18 +297,23 @@ func (ecs *EthChainService) defaultCallOpts() *bind.CallOpts {
 func (ecs *EthChainService) SendTransaction(tx protocols.ChainTransaction) error {
 	switch tx := tx.(type) {
 	case protocols.DepositTransaction:
+		var tokenApprovalLog ethTypes.Log
+
 		for tokenAddress, amount := range tx.Deposit {
 			txOpts := ecs.defaultTxOpts()
 			ethTokenAddress := common.Address{}
 			if tokenAddress == ethTokenAddress {
 				txOpts.Value = amount
 			} else {
+				// TODO: Move Approve tx to a separate switch case so that Approval event parsing can go through dispatchEvents flow
 				// If custom token is used instead of ETH, we need to approve token amount to be transferred from
-				err := ecs.handleApproveTx(tokenAddress, amount)
+				approvalLog, err := ecs.handleApproveTx(tokenAddress, amount)
 				if err != nil {
 					slog.Error(err.Error())
 					return nil
 				}
+
+				tokenApprovalLog = approvalLog
 			}
 
 			holdings, err := ecs.na.Holdings(&bind.CallOpts{}, tokenAddress, tx.ChannelId())
@@ -290,12 +323,31 @@ func (ecs *EthChainService) SendTransaction(tx protocols.ChainTransaction) error
 				return err
 			}
 
-			_, err = ecs.na.Deposit(txOpts, tokenAddress, tx.ChannelId(), holdings, amount)
+			depositTx, err := ecs.na.Deposit(txOpts, tokenAddress, tx.ChannelId(), holdings, amount)
 			if err != nil {
-				// Return nil to not panic the node and log the error instead
 				slog.Error("error sending Deposit transaction", "error", err)
+				if tokenApprovalLog.BlockNumber == 0 {
+					return nil
+				}
+
+				approvalBlock, err := ecs.GetBlockByNumber(big.NewInt(int64(tokenApprovalLog.BlockNumber)))
+				if err != nil {
+					slog.Error(err.Error())
+					return nil
+				}
+
+				if approvalBlock.Hash() != tokenApprovalLog.BlockHash {
+					ecs.droppedEventOut <- protocols.DroppedEventInfo{
+						TxHash:    tokenApprovalLog.TxHash,
+						ChannelId: tx.ChannelId(),
+						EventName: "Approval",
+					}
+				}
+				// Return nil to not panic the node and log the error instead
 				return nil
 			}
+
+			ecs.sentTxToChannelIdMap.Store(depositTx.Hash().String(), tx.ChannelId())
 		}
 		return nil
 	case protocols.WithdrawAllTransaction:
@@ -309,7 +361,9 @@ func (ecs *EthChainService) SendTransaction(tx protocols.ChainTransaction) error
 			VariablePart: nitroVariablePart,
 			Sigs:         nitroSignatures,
 		}
-		_, err := ecs.na.ConcludeAndTransferAllAssets(ecs.defaultTxOpts(), nitroFixedPart, candidate)
+
+		withdrawAllTx, err := ecs.na.ConcludeAndTransferAllAssets(ecs.defaultTxOpts(), nitroFixedPart, candidate)
+		ecs.sentTxToChannelIdMap.Store(withdrawAllTx.Hash().String(), tx.ChannelId())
 		return err
 	case protocols.ChallengeTransaction:
 		fp, candidate := NitroAdjudicator.ConvertSignedStateToFixedPartAndSignedVariablePart(tx.Candidate)
@@ -655,9 +709,25 @@ func (ecs *EthChainService) updateEventTracker(errorChan chan<- error, block *Bl
 
 		if oldBlock.Hash() != chainEvent.BlockHash {
 			ecs.logger.Warn("dropping event because its block is no longer in the chain (possible re-org)", "blockNumber", chainEvent.BlockNumber, "blockHash", chainEvent.BlockHash)
+
+			// Send info of dropped event to engine
+			channelId, exists := ecs.sentTxToChannelIdMap.Load(chainEvent.TxHash.String())
+			if !exists {
+				continue
+			}
+
+			ecs.droppedEventOut <- protocols.DroppedEventInfo{
+				TxHash:    chainEvent.TxHash,
+				ChannelId: channelId,
+				EventName: topicsToEventName[chainEvent.Topics[0]],
+			}
+
+			ecs.sentTxToChannelIdMap.Delete(chainEvent.TxHash.String())
+
 			continue
 		}
 
+		ecs.sentTxToChannelIdMap.Delete(chainEvent.TxHash.String())
 		eventsToDispatch = append(eventsToDispatch, chainEvent)
 	}
 	ecs.eventTracker.mu.Unlock()
@@ -698,6 +768,10 @@ func (ecs *EthChainService) subscribeForLogs() (chan error, chan *ethTypes.Heade
 // EventFeed returns the out chan, and narrows the type so that external consumers may only receive on it.
 func (ecs *EthChainService) EventFeed() <-chan Event {
 	return ecs.out
+}
+
+func (ecs *EthChainService) DroppedEventFeed() <-chan protocols.DroppedEventInfo {
+	return ecs.droppedEventOut
 }
 
 func (ecs *EthChainService) GetConsensusAppAddress() types.Address {
@@ -771,10 +845,10 @@ func (ecs *EthChainService) estimateGasForApproveTx(tokenAddress common.Address,
 	return estimatedGasLimit, nil
 }
 
-func (ecs *EthChainService) handleApproveTx(tokenAddress common.Address, amount *big.Int) error {
+func (ecs *EthChainService) handleApproveTx(tokenAddress common.Address, amount *big.Int) (ethTypes.Log, error) {
 	token, err := Token.NewToken(tokenAddress, ecs.chain)
 	if err != nil {
-		return err
+		return ethTypes.Log{}, err
 	}
 
 	approvalLogsChan := make(chan *Token.TokenApproval)
@@ -782,17 +856,17 @@ func (ecs *EthChainService) handleApproveTx(tokenAddress common.Address, amount 
 	newBlockChan := make(chan *ethTypes.Header)
 	_, err = ecs.chain.SubscribeNewHead(ecs.ctx, newBlockChan)
 	if err != nil {
-		return err
+		return ethTypes.Log{}, err
 	}
 
 	approvalSubscription, err := token.WatchApproval(&bind.WatchOpts{Context: ecs.ctx}, approvalLogsChan, []common.Address{ecs.txSigner.From}, []common.Address{ecs.naAddress})
 	if err != nil {
-		return err
+		return ethTypes.Log{}, err
 	}
 
 	approveTx, err := token.Approve(ecs.defaultTxOpts(), ecs.naAddress, amount)
 	if err != nil {
-		return err
+		return ethTypes.Log{}, err
 	}
 
 	// Get current block
@@ -804,21 +878,20 @@ func (ecs *EthChainService) handleApproveTx(tokenAddress common.Address, amount 
 	var retryApproveTxHash common.Hash
 
 	// Wait for the Approve transaction to be mined before continuing
-approvalEventListenerLoop:
 	for {
 		select {
 		case log := <-approvalLogsChan:
 			if log.Owner == ecs.txSigner.From {
 				approvalSubscription.Unsubscribe()
-				break approvalEventListenerLoop
+				return log.Raw, nil
 			}
 		case err := <-approvalSubscription.Err():
-			return err
+			return ethTypes.Log{}, err
 		case newBlock := <-newBlockChan:
 			if (newBlock.Number.Int64() - currentBlock.Number.Int64()) > BLOCKS_WITHOUT_EVENT_THRESHOLD {
 				if isApproveTxRetried {
 					err := fmt.Errorf("approve transaction was retried with higher gas and event Approval was not emitted till latest block, txHash: %s, latestBlock: %s", retryApproveTxHash, newBlock.Number.String())
-					return err
+					return ethTypes.Log{}, err
 				}
 
 				slog.Error("event Approval was not emitted", "approveTxHash", approveTx.Hash().String())
@@ -826,7 +899,7 @@ approvalEventListenerLoop:
 				// Estimate gas for new Approve transaction
 				estimatedGasLimit, err := ecs.estimateGasForApproveTx(tokenAddress, amount)
 				if err != nil {
-					return err
+					return ethTypes.Log{}, err
 				}
 
 				approveTxOpts := ecs.defaultTxOpts()
@@ -835,7 +908,7 @@ approvalEventListenerLoop:
 				approveTxOpts.GasLimit = uint64(float64(estimatedGasLimit) * GAS_LIMIT_MULTIPLIER)
 				reApproveTx, err := token.Approve(approveTxOpts, ecs.naAddress, amount)
 				if err != nil {
-					return err
+					return ethTypes.Log{}, err
 				}
 
 				isApproveTxRetried = true
@@ -846,6 +919,4 @@ approvalEventListenerLoop:
 			}
 		}
 	}
-
-	return nil
 }
