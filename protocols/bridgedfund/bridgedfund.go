@@ -38,7 +38,9 @@ func FundOnChainEffect(cId types.Destination, asset string, amount types.Funds) 
 type Objective struct {
 	Status               protocols.ObjectiveStatus
 	C                    *channel.Channel
-	transactionSubmitted bool // whether a transition for the objective has been submitted or not
+	transactionSubmitted bool // whether a transaction for the objective has been submitted or not
+
+	droppedEvent protocols.DroppedEventInfo
 }
 
 // GetChannelByIdFunction specifies a function that can be used to retrieve channels from a store.
@@ -359,11 +361,16 @@ func (o *Objective) clone() Objective {
 	clone := Objective{}
 	clone.Status = o.Status
 	clone.transactionSubmitted = o.transactionSubmitted
+	clone.droppedEvent = o.droppedEvent
 
 	cClone := o.C.Clone()
 	clone.C = cClone
 
 	return clone
+}
+
+func (o *Objective) SetDroppedEvent(droppedEventFromChain protocols.DroppedEventInfo) {
+	o.droppedEvent = droppedEventFromChain
 }
 
 // IsBridgedFundObjective inspects a objective id and returns true if the objective id is for a bridged fund objective.

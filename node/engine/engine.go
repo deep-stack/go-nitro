@@ -585,6 +585,12 @@ func (e *Engine) handleDroppedChainEvent(droppedEventInfo protocols.DroppedEvent
 		if err != nil {
 			return err
 		}
+	case *bridgedfund.Objective:
+		objective.SetDroppedEvent(droppedEventInfo)
+		err := e.store.SetObjective(objective)
+		if err != nil {
+			return err
+		}
 	}
 
 	return nil

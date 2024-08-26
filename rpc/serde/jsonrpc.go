@@ -99,8 +99,8 @@ type RetryTxRequest struct {
 	ObjectiveId protocols.ObjectiveId
 }
 
-type GetDroppedEventRequest struct {
-	ObjectiveId protocols.ObjectiveId
+type GetObjectiveRequest struct {
+	ChannelId string
 }
 
 type (
@@ -129,7 +129,7 @@ type RequestPayload interface {
 		ValidateVoucherRequest |
 		bridgeddefund.ObjectiveRequest |
 		RetryTxRequest |
-		GetDroppedEventRequest
+		GetObjectiveRequest
 }
 
 type NotificationPayload interface {

@@ -362,8 +362,24 @@ func (n *Node) GetSignedState(id types.Destination) (state.SignedState, error) {
 	return consensusChannel.SupportedSignedState(), nil
 }
 
-func (n *Node) GetObjectiveById(objectiveId protocols.ObjectiveId) (protocols.Objective, error) {
-	return n.store.GetObjectiveById(objectiveId)
+func (n *Node) GetObjectiveByChannelId(channelId types.Destination) (protocols.Objective, bool) {
+	return n.store.GetObjectiveByChannelId(channelId)
+}
+
+func (n *Node) GetObjectiveByCounterParty(counterparty types.Address) (protocols.Objective, error) {
+	c, ok := n.store.GetChannelByCounterparty(counterparty)
+
+	if !ok {
+		return nil, fmt.Errorf("could not find channel with given counterparty %s", counterparty.String())
+	}
+
+	objective, ok := n.store.GetObjectiveByChannelId(c.Id)
+
+	if !ok {
+		return nil, fmt.Errorf("could not find objective with given counterparty %s", counterparty.String())
+	}
+
+	return objective, nil
 }
 
 // Close stops the node from responding to any input.

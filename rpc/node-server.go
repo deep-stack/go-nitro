@@ -7,6 +7,7 @@ import (
 	"log/slog"
 	"math/big"
 
+	"github.com/ethereum/go-ethereum/common"
 	"github.com/statechannels/go-nitro/channel/state"
 	"github.com/statechannels/go-nitro/internal/logging"
 	nitro "github.com/statechannels/go-nitro/node"
@@ -240,10 +241,10 @@ func (nrs *NodeRpcServer) registerHandlers() (err error) {
 				return req.ObjectiveId, nil
 			})
 		case serde.GetObjectiveMethod:
-			return processRequest(nrs.BaseRpcServer, permSign, requestData, func(req serde.GetDroppedEventRequest) (string, error) {
-				objective, err := nrs.node.GetObjectiveById(req.ObjectiveId)
-				if err != nil {
-					return "", err
+			return processRequest(nrs.BaseRpcServer, permSign, requestData, func(req serde.GetObjectiveRequest) (string, error) {
+				objective, ok := nrs.node.GetObjectiveByChannelId(types.AddressToDestination(common.HexToAddress(req.ChannelId)))
+				if !ok {
+					return "", fmt.Errorf("Could not find objective for given channel ID")
 				}
 
 				marshalledObjective, err := objective.MarshalJSON()

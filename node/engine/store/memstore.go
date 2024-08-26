@@ -299,6 +299,29 @@ func (ms *MemStore) GetChannelsByParticipant(participant types.Address) ([]*chan
 	return toReturn, nil
 }
 
+func (ms *MemStore) GetChannelByCounterparty(counterparty types.Address) (c *channel.Channel, ok bool) {
+	ms.consensusChannels.Range(func(key string, chJSON []byte) bool {
+		var ch channel.Channel
+		err := json.Unmarshal(chJSON, &ch)
+		if err != nil {
+			return true // channel not found, continue looking
+		}
+
+		participants := ch.Participants
+		if len(participants) == 2 {
+			if participants[0] == counterparty || participants[1] == counterparty {
+				c = &ch
+				ok = true
+				return false // we have found the target channel: break the Range loop
+			}
+		}
+
+		return true // channel not found: continue looking
+	})
+
+	return
+}
+
 // GetConsensusChannelById returns a ConsensusChannel with the given channel id
 func (ms *MemStore) GetConsensusChannelById(id types.Destination) (channel *consensus_channel.ConsensusChannel, err error) {
 	chJSON, ok := ms.consensusChannels.Load(id.String())

@@ -5,6 +5,7 @@ import (
 	"fmt"
 	"log/slog"
 
+	"github.com/ethereum/go-ethereum/common"
 	"github.com/statechannels/go-nitro/bridge"
 	"github.com/statechannels/go-nitro/channel/state"
 	"github.com/statechannels/go-nitro/internal/logging"
@@ -13,6 +14,7 @@ import (
 	"github.com/statechannels/go-nitro/protocols/bridgeddefund"
 	"github.com/statechannels/go-nitro/rpc/serde"
 	"github.com/statechannels/go-nitro/rpc/transport"
+	"github.com/statechannels/go-nitro/types"
 )
 
 type BridgeRpcServer struct {
@@ -116,6 +118,20 @@ func (brs *BridgeRpcServer) registerHandlers() (err error) {
 				}
 
 				return brs.bridge.MirrorBridgedDefund(req.ChannelId, l2SignedState, req.IsChallenge)
+			})
+		case serde.GetObjectiveMethod:
+			return processRequest(brs.BaseRpcServer, permSign, requestData, func(req serde.GetObjectiveRequest) (string, error) {
+				objective, ok := brs.bridge.GetL2ObjectiveByL1ChannelId(types.AddressToDestination(common.HexToAddress(req.ChannelId)))
+				if !ok {
+					return "", fmt.Errorf("Could not get objective on L2 for given channel ID %s ", req.ChannelId)
+				}
+
+				marshalledObjective, err := objective.MarshalJSON()
+				if err != nil {
+					return "", err
+				}
+
+				return string(marshalledObjective), nil
 			})
 		default:
 			errRes := serde.NewJsonRpcErrorResponse(jsonrpcReq.Id, serde.MethodNotFoundError)

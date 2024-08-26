@@ -14,6 +14,7 @@ type jsonObjective struct {
 	Status                protocols.ObjectiveStatus
 	C                     types.Destination
 	TransactionSumbmitted bool
+	DroppedEvent          protocols.DroppedEventInfo
 }
 
 // MarshalJSON returns a JSON representation of the DirectFundObjective
@@ -24,6 +25,7 @@ func (o Objective) MarshalJSON() ([]byte, error) {
 		o.Status,
 		o.C.Id,
 		o.transactionSubmitted,
+		o.droppedEvent,
 	}
 	return json.Marshal(jsonDFO)
 }
@@ -48,6 +50,7 @@ func (o *Objective) UnmarshalJSON(data []byte) error {
 
 	o.Status = jsonDFO.Status
 	o.transactionSubmitted = jsonDFO.TransactionSumbmitted
+	o.droppedEvent = jsonDFO.DroppedEvent
 
 	return nil
 }
