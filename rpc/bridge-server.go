@@ -4,7 +4,9 @@ import (
 	"encoding/json"
 	"fmt"
 	"log/slog"
+	"strings"
 
+	"github.com/ethereum/go-ethereum/common"
 	"github.com/statechannels/go-nitro/bridge"
 	"github.com/statechannels/go-nitro/channel/state"
 	"github.com/statechannels/go-nitro/internal/logging"
@@ -13,6 +15,7 @@ import (
 	"github.com/statechannels/go-nitro/protocols/bridgeddefund"
 	"github.com/statechannels/go-nitro/rpc/serde"
 	"github.com/statechannels/go-nitro/rpc/transport"
+	"github.com/statechannels/go-nitro/types"
 )
 
 type BridgeRpcServer struct {
@@ -125,6 +128,23 @@ func (brs *BridgeRpcServer) registerHandlers() (err error) {
 				}
 
 				marshalledObjective, err := objective.MarshalJSON()
+				if err != nil {
+					return "", err
+				}
+
+				return string(marshalledObjective), nil
+			})
+		case serde.GetL2ObjectiveFromL1Method:
+			return processRequest(brs.BaseRpcServer, permSign, requestData, func(req serde.GetL2ObjectiveFromL1Request) (string, error) {
+				l1ChannelId := strings.Split(string(req.L1ObjectiveId), "-")[1]
+				l2ChannelId, _ := brs.bridge.GetL2ChannelIdByL1ChannelId(types.Destination(common.HexToHash(l1ChannelId)))
+				l2Objective, ok := brs.bridge.GetL2ObjectiveByChannelId(l2ChannelId)
+
+				if !ok {
+					return "", fmt.Errorf("Could not find L2 objective for given L1 objective ID")
+				}
+
+				marshalledObjective, err := l2Objective.MarshalJSON()
 				if err != nil {
 					return "", err
 				}

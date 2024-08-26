@@ -424,9 +424,7 @@ func (b Bridge) GetL2ChannelIdByL1ChannelId(l1ChannelId types.Destination) (l2Ch
 	return l2ChannelId, isCreated
 }
 
-func (b Bridge) GetL2ObjectiveByL1ChannelId(l1ChannelId types.Destination) (protocols.Objective, bool) {
-	l2ChannelId, _ := b.GetL2ChannelIdByL1ChannelId(l1ChannelId)
-
+func (b Bridge) GetL2ObjectiveByChannelId(l2ChannelId types.Destination) (protocols.Objective, bool) {
 	return b.nodeL2.GetObjectiveByChannelId(l2ChannelId)
 }
 

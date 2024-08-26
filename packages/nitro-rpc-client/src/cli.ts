@@ -186,15 +186,17 @@ yargs(hideBin(process.argv))
     "get-objective <objectiveId>",
     "Get current status of objective with given objective ID",
     (yargsBuilder) => {
-      return yargsBuilder.positional("objectiveId", {
-        describe: "ID of the objective",
-        type: "string",
-        demandOption: true,
-      }).option("l2", {
-        describe: "Whether to get status of corresponding objective on L2",
-        type: "boolean",
-        default: false,
-      });
+      return yargsBuilder
+        .positional("objectiveId", {
+          describe: "ID of the objective",
+          type: "string",
+          demandOption: true,
+        })
+        .option("l2", {
+          describe: "Whether to get status of corresponding objective on L2",
+          type: "boolean",
+          default: false,
+        });
     },
     async (yargs) => {
       const rpcPort = yargs.p;
@@ -202,8 +204,7 @@ yargs(hideBin(process.argv))
       const isSecure = yargs.s;
 
       const objectiveId = yargs.objectiveId;
-      const l2 = yargs.l2
-
+      const l2 = yargs.l2;
 
       const rpcClient = await NitroRpcClient.CreateHttpNitroClient(
         getRPCUrl(rpcHost, rpcPort),
@@ -216,7 +217,34 @@ yargs(hideBin(process.argv))
       process.exit(0);
     }
   )
+  .command(
+    "get-l2-objective-from-l1 <l1ObjectiveId>",
+    "Get current status of objective with given objective ID",
+    (yargsBuilder) => {
+      return yargsBuilder.positional("l1ObjectiveId", {
+        describe: "ID of the objective",
+        type: "string",
+        demandOption: true,
+      });
+    },
+    async (yargs) => {
+      const rpcPort = yargs.p;
+      const rpcHost = yargs.h;
+      const isSecure = yargs.s;
 
+      const l1ObjectiveId = yargs.l1ObjectiveId;
+
+      const rpcClient = await NitroRpcClient.CreateHttpNitroClient(
+        getRPCUrl(rpcHost, rpcPort),
+        isSecure
+      );
+      const objectiveInfo = await rpcClient.GetL2ObjectiveFromL1(l1ObjectiveId);
+      console.log(objectiveInfo);
+
+      await rpcClient.Close();
+      process.exit(0);
+    }
+  )
   .command(
     "direct-fund <counterparty>",
     "Creates a directly funded ledger channel",

@@ -161,6 +161,13 @@ export type GetObjectiveRequest = JsonRpcRequest<
   }
 >;
 
+export type GetL2ObjectiveFromL1Request = JsonRpcRequest<
+  "get_l2_objective_from_l1",
+  {
+    L1ObjectiveId: string;
+  }
+>;
+
 export type VersionRequest = JsonRpcRequest<"version", Record<string, never>>;
 export type DirectDefundRequest = JsonRpcRequest<
   "close_ledger_channel",
@@ -209,6 +216,7 @@ export type GetPaymentChannelsByLedgerResponse = JsonRpcResponse<
   PaymentChannelInfo[]
 >;
 export type GetObjectiveResponse = JsonRpcResponse<string>;
+export type GetL2ObjectiveFromL1Response = JsonRpcResponse<string>;
 export type CreateVoucherResponse = JsonRpcResponse<Voucher>;
 export type ReceiveVoucherResponse = JsonRpcResponse<ReceiveVoucherResult>;
 /**
@@ -247,6 +255,10 @@ export type RPCRequestAndResponses = {
     GetPaymentChannelsByLedgerResponse
   ];
   get_objective: [GetObjectiveRequest, GetObjectiveResponse];
+  get_l2_objective_from_l1: [
+    GetL2ObjectiveFromL1Request,
+    GetL2ObjectiveFromL1Response
+  ];
   create_voucher: [CreateVoucherRequest, CreateVoucherResponse];
   receive_voucher: [ReceiveVoucherRequest, ReceiveVoucherResponse];
 };
