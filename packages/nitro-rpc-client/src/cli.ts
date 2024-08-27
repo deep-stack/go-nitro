@@ -193,7 +193,7 @@ yargs(hideBin(process.argv))
           demandOption: true,
         })
         .option("l2", {
-          describe: "Whether to get status of corresponding objective on L2",
+          describe: "Whether the passed objective is on L2",
           type: "boolean",
           default: false,
         });

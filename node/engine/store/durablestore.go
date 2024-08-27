@@ -424,34 +424,6 @@ func (ds *DurableStore) GetChannelsByParticipant(participant types.Address) ([]*
 	return toReturn, nil
 }
 
-// Assume every channel will have 2 participants
-func (ps *DurableStore) GetChannelByCounterparty(counterparty types.Address) (c *channel.Channel, ok bool) {
-	err := ps.channels.View(func(tx *buntdb.Tx) error {
-		return tx.Ascend("", func(key, chJSON string) bool {
-			var ch channel.Channel
-			err := json.Unmarshal([]byte(chJSON), &ch)
-			if err != nil {
-				return true // channel not found, continue looking
-			}
-
-			participants := ch.Participants
-			if len(participants) == 2 {
-				if participants[0] == counterparty || participants[1] == counterparty {
-					c = &ch
-					ok = true
-					return false // we have found the target channel: break the Range loop
-				}
-			}
-
-			return true // channel not found: continue looking
-		})
-	})
-	if err != nil {
-		return nil, false
-	}
-	return
-}
-
 func (ds *DurableStore) GetAllConsensusChannels() ([]*consensus_channel.ConsensusChannel, error) {
 	toReturn := []*consensus_channel.ConsensusChannel{}
 	var unmarshErr error

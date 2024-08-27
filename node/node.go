@@ -370,22 +370,6 @@ func (n *Node) GetObjectiveByChannelId(channelId types.Destination) (protocols.O
 	return n.store.GetObjectiveByChannelId(channelId)
 }
 
-func (n *Node) GetObjectiveByCounterParty(counterparty types.Address) (protocols.Objective, error) {
-	c, ok := n.store.GetChannelByCounterparty(counterparty)
-
-	if !ok {
-		return nil, fmt.Errorf("could not find channel with given counterparty %s", counterparty.String())
-	}
-
-	objective, ok := n.store.GetObjectiveByChannelId(c.Id)
-
-	if !ok {
-		return nil, fmt.Errorf("could not find objective with given counterparty %s", counterparty.String())
-	}
-
-	return objective, nil
-}
-
 // Close stops the node from responding to any input.
 func (n *Node) Close() error {
 	if err := n.engine.Close(); err != nil {
