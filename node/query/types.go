@@ -3,6 +3,7 @@ package query
 import (
 	"github.com/ethereum/go-ethereum/common/hexutil"
 	"github.com/statechannels/go-nitro/channel"
+	"github.com/statechannels/go-nitro/payments"
 	"github.com/statechannels/go-nitro/types"
 )
 
@@ -27,9 +28,10 @@ type PaymentChannelBalance struct {
 
 // PaymentChannelInfo contains balance and status info about a payment channel
 type PaymentChannelInfo struct {
-	ID      types.Destination
-	Status  ChannelStatus
-	Balance PaymentChannelBalance
+	ID             types.Destination
+	Status         ChannelStatus
+	Balance        PaymentChannelBalance
+	LargestVoucher payments.Voucher
 }
 
 // LedgerChannelInfo contains balance and status info about a ledger channel
@@ -65,7 +67,7 @@ func (li LedgerChannelInfo) Equal(other LedgerChannelInfo) bool {
 
 // Equal returns true if the other PaymentChannelInfo is equal to this one
 func (pci PaymentChannelInfo) Equal(other PaymentChannelInfo) bool {
-	return pci.ID == other.ID && pci.Status == other.Status && pci.Balance.Equal(other.Balance)
+	return pci.ID == other.ID && pci.Status == other.Status && pci.Balance.Equal(other.Balance) && pci.LargestVoucher.Equal(&other.LargestVoucher)
 }
 
 // Equal returns true if the other PaymentChannelBalance is equal to this one

@@ -441,11 +441,11 @@ func (e *Engine) handleMessage(message protocols.Message) (EngineEvent, error) {
 		// Vouchers only count as payment channel updates if the channel is open.
 		if !c.FinalCompleted() {
 
-			paid, remaining, err := query.GetVoucherBalance(c.Id, e.vm)
+			paid, remaining, voucher, err := query.GetVoucherBalance(c.Id, e.vm)
 			if err != nil {
 				return EngineEvent{}, err
 			}
-			info, err := query.ConstructPaymentInfo(c, paid, remaining)
+			info, err := query.ConstructPaymentInfo(c, paid, remaining, voucher)
 			if err != nil {
 				return EngineEvent{}, err
 			}
@@ -950,11 +950,12 @@ func (e *Engine) generateNotifications(o protocols.Objective) (EngineEvent, erro
 		switch c := rel.(type) {
 		case *channel.VirtualChannel:
 			var paid, remaining *big.Int
+			var voucher payments.Voucher
 
 			if !c.FinalCompleted() {
 				// If the channel is open, we inspect vouchers for that channel to get the future resolvable balance
 				var err error
-				paid, remaining, err = query.GetVoucherBalance(c.Id, e.vm)
+				paid, remaining, voucher, err = query.GetVoucherBalance(c.Id, e.vm)
 				if err != nil {
 					return outgoing, err
 				}
@@ -964,7 +965,7 @@ func (e *Engine) generateNotifications(o protocols.Objective) (EngineEvent, erro
 				// the voucher balance due to a race condition https://github.com/statechannels/go-nitro/issues/1323
 				paid, remaining = c.GetPaidAndRemaining()
 			}
-			info, err := query.ConstructPaymentInfo(&c.Channel, paid, remaining)
+			info, err := query.ConstructPaymentInfo(&c.Channel, paid, remaining, voucher)
 			if err != nil {
 				return outgoing, err
 			}

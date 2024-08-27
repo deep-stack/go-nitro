@@ -109,7 +109,7 @@ func GetVirtualFundObjective(id types.Destination, store store.Store) (*virtualf
 
 // GetVoucherBalance returns the amount paid and remaining for a given channel based on vouchers received.
 // If not vouchers are received for the channel, it returns 0 for paid and remaining.
-func GetVoucherBalance(id types.Destination, vm *payments.VoucherManager) (paid, remaining *big.Int, err error) {
+func GetVoucherBalance(id types.Destination, vm *payments.VoucherManager) (paid, remaining *big.Int, voucher payments.Voucher, err error) {
 	paid, remaining = big.NewInt(0), big.NewInt(0)
 
 	if noVouchers := !vm.ChannelRegistered(id); noVouchers {
@@ -117,15 +117,20 @@ func GetVoucherBalance(id types.Destination, vm *payments.VoucherManager) (paid,
 	}
 	paid, err = vm.Paid(id)
 	if err != nil {
-		return nil, nil, err
+		return nil, nil, voucher, err
 	}
 
 	remaining, err = vm.Remaining(id)
 	if err != nil {
-		return nil, nil, err
+		return nil, nil, voucher, err
 	}
 
-	return paid, remaining, nil
+	voucherInfo, isVoucherFound := vm.GetVoucherIfAmountPresent(id)
+	if isVoucherFound {
+		voucher = voucherInfo.LargestVoucher
+	}
+
+	return paid, remaining, voucher, nil
 }
 
 // GetPaymentChannelInfo returns the PaymentChannelInfo for the given channel
@@ -138,12 +143,12 @@ func GetPaymentChannelInfo(id types.Destination, store store.Store, vm *payments
 	c, channelFound := store.GetChannelById(id)
 
 	if channelFound {
-		paid, remaining, err := GetVoucherBalance(id, vm)
+		paid, remaining, voucher, err := GetVoucherBalance(id, vm)
 		if err != nil {
 			return PaymentChannelInfo{}, err
 		}
 
-		return ConstructPaymentInfo(c, paid, remaining)
+		return ConstructPaymentInfo(c, paid, remaining, voucher)
 	}
 	return PaymentChannelInfo{}, fmt.Errorf("could not find channel with id %v", id)
 }
@@ -208,12 +213,12 @@ func GetPaymentChannelsByLedger(ledgerId types.Destination, s store.Store, vm *p
 
 	toReturn := []PaymentChannelInfo{}
 	for _, p := range paymentChannels {
-		paid, remaining, err := GetVoucherBalance(p.Id, vm)
+		paid, remaining, voucher, err := GetVoucherBalance(p.Id, vm)
 		if err != nil {
 			return []PaymentChannelInfo{}, err
 		}
 
-		info, err := ConstructPaymentInfo(p, paid, remaining)
+		info, err := ConstructPaymentInfo(p, paid, remaining, voucher)
 		if err != nil {
 			return []PaymentChannelInfo{}, err
 		}
@@ -273,7 +278,7 @@ func ConstructLedgerInfoFromChannel(c *channel.Channel, myAddress types.Address)
 	}, nil
 }
 
-func ConstructPaymentInfo(c *channel.Channel, paid, remaining *big.Int) (PaymentChannelInfo, error) {
+func ConstructPaymentInfo(c *channel.Channel, paid, remaining *big.Int, voucher payments.Voucher) (PaymentChannelInfo, error) {
 	status := getStatusFromChannel(c)
 	// ADR 0009 allows for intermediaries to exit the protocol before receiving all signed post funds
 	// So for intermediaries we return Open once they have signed their post fund state
@@ -293,8 +298,9 @@ func ConstructPaymentInfo(c *channel.Channel, paid, remaining *big.Int) (Payment
 	balance.RemainingFunds.ToInt().Set(remaining)
 
 	return PaymentChannelInfo{
-		ID:      c.Id,
-		Status:  status,
-		Balance: balance,
+		ID:             c.Id,
+		Status:         status,
+		Balance:        balance,
+		LargestVoucher: voucher,
 	}, nil
 }
