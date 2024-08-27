@@ -138,10 +138,15 @@ func (brs *BridgeRpcServer) registerHandlers() (err error) {
 			return processRequest(brs.BaseRpcServer, permSign, requestData, func(req serde.GetL2ObjectiveFromL1Request) (string, error) {
 				l1ChannelId := strings.Split(string(req.L1ObjectiveId), "-")[1]
 				l2ChannelId, _ := brs.bridge.GetL2ChannelIdByL1ChannelId(types.Destination(common.HexToHash(l1ChannelId)))
+
+				if l2ChannelId.IsZero() {
+					return "", fmt.Errorf("Given objective ID is incorrect")
+				}
+
 				l2Objective, ok := brs.bridge.GetL2ObjectiveByChannelId(l2ChannelId)
 
 				if !ok {
-					return "", fmt.Errorf("Could not find L2 objective for given L1 objective ID")
+					return "", fmt.Errorf("Corresponding L2 objective is either complete or does not exist")
 				}
 
 				marshalledObjective, err := l2Objective.MarshalJSON()

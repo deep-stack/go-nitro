@@ -28,7 +28,7 @@ const (
 	SignedStatePayload protocols.PayloadType = "SignedStatePayload"
 )
 
-const ObjectivePrefix = "bridgedfunding-"
+const ObjectivePrefix = "BridgedFunding-"
 
 func FundOnChainEffect(cId types.Destination, asset string, amount types.Funds) string {
 	return "deposit" + amount.String() + "into" + cId.String()
