@@ -15,6 +15,7 @@ import (
 	"github.com/statechannels/go-nitro/node/engine/messageservice"
 	p2pms "github.com/statechannels/go-nitro/node/engine/messageservice/p2p-message-service"
 	"github.com/statechannels/go-nitro/node/query"
+	"github.com/statechannels/go-nitro/payments"
 	"github.com/statechannels/go-nitro/protocols"
 	"github.com/statechannels/go-nitro/types"
 )
@@ -164,6 +165,7 @@ func RunIntegrationTestCase(tc TestCase, t *testing.T) {
 				virtualIds[i],
 				initialPaymentOutcome(*clientA.Address, *clientB.Address, asset),
 				query.Open,
+				payments.Voucher{},
 				clientA, clientB)
 		}
 
@@ -179,19 +181,23 @@ func RunIntegrationTestCase(tc TestCase, t *testing.T) {
 
 		t.Log("DEBUG: After making payments")
 
+		voucherMap := make(map[types.Destination]payments.Voucher)
 		// Wait for all the vouchers to be received by bob
 		for i := 0; i < len(virtualIds)*int(tc.NumOfPayments); i++ {
-			<-clientB.ReceivedVouchers()
+			voucher := <-clientB.ReceivedVouchers()
+			voucherMap[voucher.ChannelId] = voucher
 		}
 
 		t.Log("DEBUG: After waiting for vouchers")
 
 		// Check the payment channels have the correct outcome after the payments
 		for i := 0; i < len(virtualIds); i++ {
+			voucher := voucherMap[virtualIds[i]]
 			checkPaymentChannel(t,
 				virtualIds[i],
 				finalPaymentOutcome(*clientA.Address, *clientB.Address, asset, tc.NumOfPayments, 1),
 				query.Open,
+				voucher,
 				clientA, clientB)
 		}
 

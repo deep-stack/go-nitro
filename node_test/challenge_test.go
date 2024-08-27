@@ -17,6 +17,7 @@ import (
 	NitroAdjudicator "github.com/statechannels/go-nitro/node/engine/chainservice/adjudicator"
 	"github.com/statechannels/go-nitro/node/engine/store"
 	"github.com/statechannels/go-nitro/node/query"
+	"github.com/statechannels/go-nitro/payments"
 	"github.com/statechannels/go-nitro/protocols"
 	"github.com/statechannels/go-nitro/protocols/directdefund"
 	"github.com/statechannels/go-nitro/types"
@@ -328,7 +329,7 @@ func TestVirtualPaymentChannel(t *testing.T) {
 
 	// Wait for objective to complete
 	waitForObjectives(t, nodeA, nodeB, []node.Node{}, []protocols.ObjectiveId{virtualResponse.Id})
-	checkPaymentChannel(t, virtualResponse.ChannelId, virtualOutcome, query.Open, nodeA, nodeB)
+	checkPaymentChannel(t, virtualResponse.ChannelId, virtualOutcome, query.Open, payments.Voucher{}, nodeA, nodeB)
 
 	// Alice pays Bob
 	err := nodeA.Pay(virtualResponse.ChannelId, big.NewInt(payAmount))

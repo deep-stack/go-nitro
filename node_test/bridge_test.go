@@ -18,6 +18,7 @@ import (
 	NitroAdjudicator "github.com/statechannels/go-nitro/node/engine/chainservice/adjudicator"
 	"github.com/statechannels/go-nitro/node/engine/store"
 	"github.com/statechannels/go-nitro/node/query"
+	"github.com/statechannels/go-nitro/payments"
 	"github.com/statechannels/go-nitro/protocols"
 	"github.com/statechannels/go-nitro/protocols/mirrorbridgeddefund"
 	"github.com/statechannels/go-nitro/types"
@@ -84,7 +85,7 @@ func TestBridgedFund(t *testing.T) {
 		virtualOutcome := initialPaymentOutcome(*nodeAPrime.Address, bridgeAddress, types.Address{})
 		virtualResponse, _ := nodeAPrime.CreatePaymentChannel([]types.Address{}, bridgeAddress, uint32(tcL2.ChallengeDuration), virtualOutcome)
 		<-nodeAPrime.ObjectiveCompleteChan(virtualResponse.Id)
-		checkPaymentChannel(t, virtualResponse.ChannelId, virtualOutcome, query.Open, nodeAPrime)
+		checkPaymentChannel(t, virtualResponse.ChannelId, virtualOutcome, query.Open, payments.Voucher{}, nodeAPrime)
 
 		// APrime pays BPrime
 		err := nodeAPrime.Pay(virtualResponse.ChannelId, big.NewInt(payAmount))
@@ -728,7 +729,7 @@ func createL2VirtualChannel(t *testing.T, nodeAPrime node.Node, nodeBPrime node.
 	virtualResponse, _ := nodeBPrime.CreatePaymentChannel([]types.Address{}, *nodeAPrime.Address, uint32(tcL2.ChallengeDuration), virtualOutcome)
 	waitForObjectives(t, nodeBPrime, nodeAPrime, []node.Node{}, []protocols.ObjectiveId{virtualResponse.Id})
 
-	checkPaymentChannel(t, virtualResponse.ChannelId, virtualOutcome, query.Open, nodeBPrime, nodeAPrime)
+	checkPaymentChannel(t, virtualResponse.ChannelId, virtualOutcome, query.Open, payments.Voucher{}, nodeBPrime, nodeAPrime)
 
 	virtualChannel, _ := L2bridgeStore.GetChannelById(virtualResponse.ChannelId)
 

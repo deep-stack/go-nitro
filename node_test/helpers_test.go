@@ -304,9 +304,9 @@ func setupSharedInfra(tc TestCase) sharedTestInfrastructure {
 
 // checkPaymentChannel checks that the ledger channel has the expected outcome and status
 // It will fail if the channel does not exist
-func checkPaymentChannel(t *testing.T, id types.Destination, o outcome.Exit, status query.ChannelStatus, clients ...node.Node) {
+func checkPaymentChannel(t *testing.T, id types.Destination, o outcome.Exit, status query.ChannelStatus, voucher payments.Voucher, clients ...node.Node) {
 	for _, c := range clients {
-		expected := createPaychInfo(id, o, status, payments.Voucher{})
+		expected := createPaychInfo(id, o, status, voucher)
 		ledger, err := c.GetPaymentChannel(id)
 		if err != nil {
 			t.Fatal(err)
