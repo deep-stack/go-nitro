@@ -62,6 +62,7 @@ var topicsToEventName = map[common.Hash]string{
 	challengeRegisteredTopic: "ChallengeRegistered",
 	challengeClearedTopic:    "ChallengeCleared",
 	reclaimedTopic:           "Reclaimed",
+	statusUpdatedTopic:       "StatusUpdated",
 }
 
 const (

@@ -186,8 +186,43 @@ yargs(hideBin(process.argv))
     "get-objective <objectiveId>",
     "Get current status of objective with given objective ID",
     (yargsBuilder) => {
-      return yargsBuilder.positional("objectiveId", {
-        describe: "Id of the objective",
+      return yargsBuilder
+        .positional("objectiveId", {
+          describe: "ID of the objective",
+          type: "string",
+          demandOption: true,
+        })
+        .option("l2", {
+          describe: "Whether the passed objective is on L2",
+          type: "boolean",
+          default: false,
+        });
+    },
+    async (yargs) => {
+      const rpcPort = yargs.p;
+      const rpcHost = yargs.h;
+      const isSecure = yargs.s;
+
+      const objectiveId = yargs.objectiveId;
+      const l2 = yargs.l2;
+
+      const rpcClient = await NitroRpcClient.CreateHttpNitroClient(
+        getRPCUrl(rpcHost, rpcPort),
+        isSecure
+      );
+      const objectiveInfo = await rpcClient.GetObjective(objectiveId, l2);
+      console.log(objectiveInfo);
+
+      await rpcClient.Close();
+      process.exit(0);
+    }
+  )
+  .command(
+    "get-l2-objective-from-l1 <l1ObjectiveId>",
+    "Get current status of objective with given objective ID",
+    (yargsBuilder) => {
+      return yargsBuilder.positional("l1ObjectiveId", {
+        describe: "ID of the objective",
         type: "string",
         demandOption: true,
       });
@@ -197,13 +232,13 @@ yargs(hideBin(process.argv))
       const rpcHost = yargs.h;
       const isSecure = yargs.s;
 
-      const objectiveId = yargs.objectiveId;
+      const l1ObjectiveId = yargs.l1ObjectiveId;
 
       const rpcClient = await NitroRpcClient.CreateHttpNitroClient(
         getRPCUrl(rpcHost, rpcPort),
         isSecure
       );
-      const objectiveInfo = await rpcClient.GetObjective(objectiveId);
+      const objectiveInfo = await rpcClient.GetL2ObjectiveFromL1(l1ObjectiveId);
       console.log(objectiveInfo);
 
       await rpcClient.Close();
@@ -266,34 +301,6 @@ yargs(hideBin(process.argv))
       console.log(`Objective started ${Id}`);
       await rpcClient.WaitForLedgerChannelStatus(ChannelId, "Open");
       console.log(`Channel Open ${ChannelId}`);
-      await rpcClient.Close();
-      process.exit(0);
-    }
-  )
-  .command(
-    "retry-tx <objectiveId>",
-    "Retries transaction for given objective",
-    (yargsBuilder) => {
-      return yargsBuilder.positional("objectiveId", {
-        describe: "The id of the objective to send transaction for",
-        type: "string",
-        demandOption: true,
-      });
-    },
-
-    async (yargs) => {
-      const rpcPort = yargs.p;
-      const rpcHost = yargs.h;
-      const isSecure = yargs.s;
-
-      const rpcClient = await NitroRpcClient.CreateHttpNitroClient(
-        getRPCUrl(rpcHost, rpcPort),
-        isSecure
-      );
-
-      const id = await rpcClient.RetryTx(yargs.objectiveId);
-
-      console.log(`Transaction retried for objective ${id}`);
       await rpcClient.Close();
       process.exit(0);
     }
@@ -593,6 +600,34 @@ yargs(hideBin(process.argv))
         yargs.amount
       );
       console.log(paymentChannelInfo);
+      await rpcClient.Close();
+      process.exit(0);
+    }
+  )
+  .command(
+    "retry-tx <objectiveId>",
+    "Retries transaction for given objective",
+    (yargsBuilder) => {
+      return yargsBuilder.positional("objectiveId", {
+        describe: "The id of the objective to send transaction for",
+        type: "string",
+        demandOption: true,
+      });
+    },
+
+    async (yargs) => {
+      const rpcPort = yargs.p;
+      const rpcHost = yargs.h;
+      const isSecure = yargs.s;
+
+      const rpcClient = await NitroRpcClient.CreateHttpNitroClient(
+        getRPCUrl(rpcHost, rpcPort),
+        isSecure
+      );
+
+      const id = await rpcClient.RetryTx(yargs.objectiveId);
+
+      console.log(`Transaction retried for objective ${id}`);
       await rpcClient.Close();
       process.exit(0);
     }

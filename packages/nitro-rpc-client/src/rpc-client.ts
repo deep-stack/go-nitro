@@ -291,9 +291,16 @@ export class NitroRpcClient implements RpcClientApi {
     });
   }
 
-  public async GetObjective(objectiveId: string): Promise<string> {
+  public async GetObjective(objectiveId: string, l2: boolean): Promise<string> {
     return this.sendRequest("get_objective", {
       ObjectiveId: objectiveId,
+      L2: l2,
+    });
+  }
+
+  public async GetL2ObjectiveFromL1(l1ObjectiveId: string): Promise<string> {
+    return this.sendRequest("get_l2_objective_from_l1", {
+      L1ObjectiveId: l1ObjectiveId,
     });
   }
 

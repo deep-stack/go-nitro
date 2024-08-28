@@ -96,7 +96,7 @@ func (brs *BridgeRpcServer) registerHandlers() (err error) {
 					return "", err
 				}
 
-				marshalledState, err := json.Marshal(latestState)
+				marshalledState, err := latestState.MarshalJSON()
 				if err != nil {
 					return "", err
 				}
@@ -116,6 +116,39 @@ func (brs *BridgeRpcServer) registerHandlers() (err error) {
 				}
 
 				return brs.bridge.MirrorBridgedDefund(req.ChannelId, l2SignedState, req.IsChallenge)
+			})
+		case serde.RetryTxMethod:
+			return processRequest(brs.BaseRpcServer, permSign, requestData, func(req serde.RetryTxRequest) (protocols.ObjectiveId, error) {
+				err := brs.bridge.RetryTx(req.ObjectiveId)
+				return req.ObjectiveId, err
+			})
+		case serde.GetObjectiveMethod:
+			return processRequest(brs.BaseRpcServer, permSign, requestData, func(req serde.GetObjectiveRequest) (string, error) {
+				objective, err := brs.bridge.GetObjectiveById(req.ObjectiveId, req.L2)
+				if err != nil {
+					return "", err
+				}
+
+				marshalledObjective, err := objective.MarshalJSON()
+				if err != nil {
+					return "", err
+				}
+
+				return string(marshalledObjective), nil
+			})
+		case serde.GetL2ObjectiveFromL1Method:
+			return processRequest(brs.BaseRpcServer, permSign, requestData, func(req serde.GetL2ObjectiveFromL1Request) (string, error) {
+				l2Objective, err := brs.bridge.GetL2ObjectiveByL1ObjectiveId(req.L1ObjectiveId)
+				if err != nil {
+					return "", err
+				}
+
+				marshalledObjective, err := l2Objective.MarshalJSON()
+				if err != nil {
+					return "", err
+				}
+
+				return string(marshalledObjective), nil
 			})
 		default:
 			errRes := serde.NewJsonRpcErrorResponse(jsonrpcReq.Id, serde.MethodNotFoundError)

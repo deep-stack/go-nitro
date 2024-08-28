@@ -38,6 +38,7 @@ const (
 
 	// Bridge methods
 	GetAllL2ChannelsRequestMethod RequestMethod = "get_all_l2_channels"
+	GetL2ObjectiveFromL1Method    RequestMethod = "get_l2_objective_from_l1"
 
 	GetSignedStateMethod RequestMethod = "get_signed_state"
 
@@ -99,8 +100,13 @@ type RetryTxRequest struct {
 	ObjectiveId protocols.ObjectiveId
 }
 
-type GetDroppedEventRequest struct {
+type GetObjectiveRequest struct {
 	ObjectiveId protocols.ObjectiveId
+	L2          bool
+}
+
+type GetL2ObjectiveFromL1Request struct {
+	L1ObjectiveId protocols.ObjectiveId
 }
 
 type (
@@ -129,7 +135,8 @@ type RequestPayload interface {
 		ValidateVoucherRequest |
 		bridgeddefund.ObjectiveRequest |
 		RetryTxRequest |
-		GetDroppedEventRequest
+		GetObjectiveRequest |
+		GetL2ObjectiveFromL1Request
 }
 
 type NotificationPayload interface {

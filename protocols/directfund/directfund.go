@@ -325,6 +325,8 @@ func (o *Objective) Crank(secretKey *[]byte) (protocols.Objective, protocols.Sid
 	if !fundingComplete && safeToDeposit && amountToDeposit.IsNonZero() && !updated.transactionSubmitted {
 		deposit := protocols.NewDepositTransaction(updated.C.Id, amountToDeposit)
 		updated.transactionSubmitted = true
+		// Reset dropped event info as new tx is submitted
+		updated.droppedEvent = protocols.DroppedEventInfo{}
 		sideEffects.TransactionsToSubmit = append(sideEffects.TransactionsToSubmit, deposit)
 	}
 
@@ -438,6 +440,10 @@ func (o *Objective) ResetTxSubmitted() {
 
 func (o *Objective) SetDroppedEvent(droppedEventFromChain protocols.DroppedEventInfo) {
 	o.droppedEvent = droppedEventFromChain
+}
+
+func (o *Objective) GetDroppedEvent() protocols.DroppedEventInfo {
+	return o.droppedEvent
 }
 
 // ObjectiveRequest represents a request to create a new direct funding objective.

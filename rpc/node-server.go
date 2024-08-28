@@ -227,7 +227,7 @@ func (nrs *NodeRpcServer) registerHandlers() (err error) {
 					return "", err
 				}
 
-				marshalledState, err := json.Marshal(latestState)
+				marshalledState, err := latestState.MarshalJSON()
 				if err != nil {
 					return "", err
 				}
@@ -240,7 +240,7 @@ func (nrs *NodeRpcServer) registerHandlers() (err error) {
 				return req.ObjectiveId, nil
 			})
 		case serde.GetObjectiveMethod:
-			return processRequest(nrs.BaseRpcServer, permSign, requestData, func(req serde.GetDroppedEventRequest) (string, error) {
+			return processRequest(nrs.BaseRpcServer, permSign, requestData, func(req serde.GetObjectiveRequest) (string, error) {
 				objective, err := nrs.node.GetObjectiveById(req.ObjectiveId)
 				if err != nil {
 					return "", err
