@@ -4,6 +4,7 @@ import (
 	"context"
 	"fmt"
 	"log/slog"
+	"math/big"
 
 	"github.com/ethereum/go-ethereum/accounts/abi/bind"
 	"github.com/ethereum/go-ethereum/common"
@@ -11,9 +12,11 @@ import (
 	ethcrypto "github.com/ethereum/go-ethereum/crypto"
 	"github.com/ethereum/go-ethereum/ethclient"
 	"github.com/ethereum/go-ethereum/rpc"
+	"github.com/statechannels/go-nitro/crypto"
 	NitroAdjudicator "github.com/statechannels/go-nitro/node/engine/chainservice/adjudicator"
 	Bridge "github.com/statechannels/go-nitro/node/engine/chainservice/bridge"
 	ConsensusApp "github.com/statechannels/go-nitro/node/engine/chainservice/consensusapp"
+	Token "github.com/statechannels/go-nitro/node/engine/chainservice/erc20"
 	VirtualPaymentApp "github.com/statechannels/go-nitro/node/engine/chainservice/virtualpaymentapp"
 	"github.com/statechannels/go-nitro/types"
 )
@@ -23,6 +26,7 @@ type ContractAddresses struct {
 	VpaAddress    common.Address
 	CaAddress     common.Address
 	BridgeAddress common.Address
+	TokenAddress  common.Address
 }
 
 // ConnectToChain connects to the chain at the given url and returns a client and a transactor.
@@ -84,6 +88,18 @@ func DeployContracts(ctx context.Context, ethClient *ethclient.Client, txSubmitt
 		VpaAddress: vpa,
 		CaAddress:  ca,
 	}, nil
+}
+
+func TransferToken(ethClient *ethclient.Client, tokenBinding *Token.Token, txSubmitter *bind.TransactOpts, recipientAccountPks []string, initialTokenBalance int64) error {
+	for _, chainPk := range recipientAccountPks {
+		accountAddress := crypto.GetAddressFromSecretKeyBytes(common.Hex2Bytes(chainPk))
+		_, err := tokenBinding.Transfer(txSubmitter, accountAddress, big.NewInt(initialTokenBalance))
+		if err != nil {
+			return err
+		}
+	}
+
+	return nil
 }
 
 func DeployL2Contract(ctx context.Context, ethClient *ethclient.Client, txSubmitter *bind.TransactOpts) (common.Address, error) {

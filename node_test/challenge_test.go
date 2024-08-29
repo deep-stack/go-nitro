@@ -10,11 +10,14 @@ import (
 	"github.com/statechannels/go-nitro/channel"
 	"github.com/statechannels/go-nitro/channel/state"
 	"github.com/statechannels/go-nitro/channel/state/outcome"
+	"github.com/statechannels/go-nitro/crypto"
 	"github.com/statechannels/go-nitro/internal/testactors"
 	"github.com/statechannels/go-nitro/internal/testhelpers"
 	"github.com/statechannels/go-nitro/node"
 	"github.com/statechannels/go-nitro/node/engine/chainservice"
 	NitroAdjudicator "github.com/statechannels/go-nitro/node/engine/chainservice/adjudicator"
+	Token "github.com/statechannels/go-nitro/node/engine/chainservice/erc20"
+
 	"github.com/statechannels/go-nitro/node/engine/store"
 	"github.com/statechannels/go-nitro/node/query"
 	"github.com/statechannels/go-nitro/protocols"
@@ -33,6 +36,7 @@ func TestChallenge(t *testing.T) {
 		Participants: []TestParticipant{
 			{StoreType: MemStore, Actor: testactors.Alice},
 			{StoreType: MemStore, Actor: testactors.Bob},
+			{StoreType: MemStore, Actor: testactors.Irene},
 		},
 	}
 
@@ -42,6 +46,11 @@ func TestChallenge(t *testing.T) {
 	infra := setupSharedInfra(testCase)
 	defer infra.Close(t)
 
+	tokenBinding, err := Token.NewToken(infra.anvilChain.ContractAddresses.TokenAddress, infra.anvilChain.EthClient)
+	if err != nil {
+		t.Fatal(err)
+	}
+
 	// Create go-nitro nodes
 	nodeA, _, _, storeA, _ := setupIntegrationNode(testCase, testCase.Participants[0], infra, []string{}, dataFolder)
 	defer nodeA.Close()
@@ -49,11 +58,12 @@ func TestChallenge(t *testing.T) {
 	defer nodeB.Close()
 
 	// Create ledger channel
-	ledgerChannel := openLedgerChannel(t, nodeA, nodeB, types.Address{}, uint32(testCase.ChallengeDuration))
+	ledgerChannel := openLedgerChannel(t, nodeA, nodeB, infra.anvilChain.ContractAddresses.TokenAddress, uint32(testCase.ChallengeDuration))
 
 	// Check balance of node
-	balanceNodeA, _ := infra.anvilChain.GetAccountBalance(testCase.Participants[0].Address())
-	balanceNodeB, _ := infra.anvilChain.GetAccountBalance(testCase.Participants[1].Address())
+	balanceNodeA, _ := tokenBinding.BalanceOf(nil, testCase.Participants[0].Address())
+	balanceNodeB, _ := tokenBinding.BalanceOf(nil, testCase.Participants[1].Address())
+
 	t.Log("Balance of Alice", balanceNodeA, "\nBalance of Bob", balanceNodeB)
 	testhelpers.Assert(t, balanceNodeA.Int64() == 0, "Balance of Alice should be zero")
 	testhelpers.Assert(t, balanceNodeB.Int64() == 0, "Balance of Bob should be zero")
@@ -81,8 +91,8 @@ func TestChallenge(t *testing.T) {
 	<-chB
 
 	// Check assets are liquidated
-	balanceNodeA, _ = infra.anvilChain.GetAccountBalance(testCase.Participants[0].Address())
-	balanceNodeB, _ = infra.anvilChain.GetAccountBalance(testCase.Participants[1].Address())
+	balanceNodeA, _ = tokenBinding.BalanceOf(nil, testCase.Participants[0].Address())
+	balanceNodeB, _ = tokenBinding.BalanceOf(nil, testCase.Participants[1].Address())
 	t.Log("Balance of Alice", balanceNodeA, "\nBalance of Bob", balanceNodeB)
 	// Assert balance equals ledger channel deposit since no payment has been made
 	testhelpers.Assert(t, balanceNodeA.Cmp(big.NewInt(ledgerChannelDeposit)) == 0, "Balance of Alice (%v) should be equal to ledgerChannelDeposit (%v)", balanceNodeA, ledgerChannelDeposit)
@@ -100,6 +110,7 @@ func TestCheckpoint(t *testing.T) {
 		Participants: []TestParticipant{
 			{StoreType: MemStore, Actor: testactors.Alice},
 			{StoreType: MemStore, Actor: testactors.Bob},
+			{StoreType: MemStore, Actor: testactors.Irene},
 		},
 	}
 
@@ -109,6 +120,11 @@ func TestCheckpoint(t *testing.T) {
 	infra := setupSharedInfra(testCase)
 	defer infra.Close(t)
 
+	tokenBinding, err := Token.NewToken(infra.anvilChain.ContractAddresses.TokenAddress, infra.anvilChain.EthClient)
+	if err != nil {
+		t.Fatal(err)
+	}
+
 	// Create go-nitro nodes
 	nodeA, _, _, storeA, _ := setupIntegrationNode(testCase, testCase.Participants[0], infra, []string{}, dataFolder)
 	defer nodeA.Close()
@@ -116,9 +132,12 @@ func TestCheckpoint(t *testing.T) {
 	defer nodeB.Close()
 
 	// Create ledger channel and check balance of node
-	ledgerChannel := openLedgerChannel(t, nodeA, nodeB, types.Address{}, uint32(testCase.ChallengeDuration))
-	balanceNodeA, _ := infra.anvilChain.GetAccountBalance(testCase.Participants[0].Address())
-	balanceNodeB, _ := infra.anvilChain.GetAccountBalance(testCase.Participants[1].Address())
+	ledgerChannel := openLedgerChannel(t, nodeA, nodeB, infra.anvilChain.ContractAddresses.TokenAddress, uint32(testCase.ChallengeDuration))
+
+	// Check balance of node
+	balanceNodeA, _ := tokenBinding.BalanceOf(nil, testCase.Participants[0].Address())
+	balanceNodeB, _ := tokenBinding.BalanceOf(nil, testCase.Participants[1].Address())
+
 	t.Log("Balance of Alice", balanceNodeA, "\nBalance of Bob", balanceNodeB)
 	testhelpers.Assert(t, balanceNodeA.Int64() == 0, "Balance of Alice should be zero")
 	testhelpers.Assert(t, balanceNodeB.Int64() == 0, "Balance of Bob should be zero")
@@ -191,8 +210,8 @@ func TestCheckpoint(t *testing.T) {
 	<-chB
 
 	// Check assets are liquidated
-	balanceNodeA, _ = infra.anvilChain.GetAccountBalance(testCase.Participants[0].Address())
-	balanceNodeB, _ = infra.anvilChain.GetAccountBalance(testCase.Participants[1].Address())
+	balanceNodeA, _ = tokenBinding.BalanceOf(nil, testCase.Participants[0].Address())
+	balanceNodeB, _ = tokenBinding.BalanceOf(nil, testCase.Participants[1].Address())
 	t.Log("Balance of Alice", balanceNodeA, "\nBalance of Bob", balanceNodeB)
 	// Alice's balance is determined by subtracting amount paid from her ledger deposit, while Bob's balance is calculated by adding his ledger deposit to the amount received
 	testhelpers.Assert(t, balanceNodeA.Cmp(big.NewInt(ledgerChannelDeposit-payAmount)) == 0, "Balance of Alice (%v) should be equal to (%v)", balanceNodeA, ledgerChannelDeposit-payAmount)
@@ -210,6 +229,7 @@ func TestCounterChallenge(t *testing.T) {
 		Participants: []TestParticipant{
 			{StoreType: MemStore, Actor: testactors.Alice},
 			{StoreType: MemStore, Actor: testactors.Bob},
+			{StoreType: MemStore, Actor: testactors.Irene},
 		},
 	}
 
@@ -219,6 +239,11 @@ func TestCounterChallenge(t *testing.T) {
 	infra := setupSharedInfra(testCase)
 	defer infra.Close(t)
 
+	tokenBinding, err := Token.NewToken(infra.anvilChain.ContractAddresses.TokenAddress, infra.anvilChain.EthClient)
+	if err != nil {
+		t.Fatal(err)
+	}
+
 	// Create go-nitro nodes
 	nodeA, _, _, storeA, _ := setupIntegrationNode(testCase, testCase.Participants[0], infra, []string{}, dataFolder)
 	defer nodeA.Close()
@@ -226,9 +251,11 @@ func TestCounterChallenge(t *testing.T) {
 	defer nodeB.Close()
 
 	// Create ledger channel and check balance of node
-	ledgerChannel := openLedgerChannel(t, nodeA, nodeB, types.Address{}, uint32(testCase.ChallengeDuration))
-	balanceNodeA, _ := infra.anvilChain.GetAccountBalance(testCase.Participants[0].Address())
-	balanceNodeB, _ := infra.anvilChain.GetAccountBalance(testCase.Participants[1].Address())
+	ledgerChannel := openLedgerChannel(t, nodeA, nodeB, infra.anvilChain.ContractAddresses.TokenAddress, uint32(testCase.ChallengeDuration))
+
+	// Check balance of node
+	balanceNodeA, _ := tokenBinding.BalanceOf(nil, testCase.Participants[0].Address())
+	balanceNodeB, _ := tokenBinding.BalanceOf(nil, testCase.Participants[1].Address())
 	t.Log("Balance of Alice", balanceNodeA, "\nBalance of Bob", balanceNodeB)
 	testhelpers.Assert(t, balanceNodeA.Int64() == 0, "Balance of Alice should be zero")
 	testhelpers.Assert(t, balanceNodeB.Int64() == 0, "Balance of Bob should be zero")
@@ -282,8 +309,8 @@ func TestCounterChallenge(t *testing.T) {
 	<-chB
 
 	// Check assets are liquidated
-	balanceNodeA, _ = infra.anvilChain.GetAccountBalance(testCase.Participants[0].Address())
-	balanceNodeB, _ = infra.anvilChain.GetAccountBalance(testCase.Participants[1].Address())
+	balanceNodeA, _ = tokenBinding.BalanceOf(nil, testCase.Participants[0].Address())
+	balanceNodeB, _ = tokenBinding.BalanceOf(nil, testCase.Participants[1].Address())
 	t.Log("Balance of Alice", balanceNodeA, "\nBalance of Bob", balanceNodeB)
 	// Alice's balance is determined by subtracting amount paid from her ledger deposit, while Bob's balance is calculated by adding his ledger deposit to the amount received
 	testhelpers.Assert(t, balanceNodeA.Cmp(big.NewInt(ledgerChannelDeposit-payAmount)) == 0, "Balance of Alice (%v) should be equal to (%v)", balanceNodeA, ledgerChannelDeposit-payAmount)
@@ -554,6 +581,7 @@ func TestVirtualPaymentChannelWithObjective(t *testing.T) {
 	defer nodeB.Close()
 
 	// Create ledger channel and virtual fund
+	// TODO: Custom tokens are not being used since reclaim method does not support them
 	ledgerChannel := openLedgerChannel(t, nodeB, nodeA, types.Address{}, uint32(testCase.ChallengeDuration))
 	// Check balance of node
 	balanceNodeA, _ := infra.anvilChain.GetAccountBalance(testCase.Participants[0].Address())
@@ -596,4 +624,8 @@ func TestVirtualPaymentChannelWithObjective(t *testing.T) {
 	t.Log("Balance of Alice", balanceNodeA, "\nBalance of Bob", balanceNodeB)
 	testhelpers.Assert(t, balanceNodeA.Cmp(big.NewInt(int64(ledgerChannelDeposit+paymentAmount))) == 0, "Balance of Alice (%v) should be equal to ledgerChannelDeposit (%v)", balanceNodeA, ledgerChannelDeposit+paymentAmount)
 	testhelpers.Assert(t, balanceNodeB.Cmp(big.NewInt(int64(ledgerChannelDeposit-paymentAmount))) == 0, "Balance of Bob (%v) should be equal to ledgerChannelDeposit (%v)", balanceNodeB, ledgerChannelDeposit-paymentAmount)
+}
+
+func GetEthereumAddress(chainPk string) types.Address {
+	return crypto.GetAddressFromSecretKeyBytes(common.Hex2Bytes(chainPk))
 }
