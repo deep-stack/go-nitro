@@ -8,7 +8,12 @@ import yargs from "yargs/yargs";
 import { hideBin } from "yargs/helpers";
 
 import { NitroRpcClient } from "./rpc-client";
-import { compactJson, getRPCUrl, logOutChannelUpdates } from "./utils";
+import {
+  compactJson,
+  prettyJson,
+  getRPCUrl,
+  logOutChannelUpdates,
+} from "./utils";
 import { CounterChallengeAction } from "./types";
 import { ZERO_ETHEREUM_ADDRESS } from "./constants";
 
@@ -87,9 +92,7 @@ yargs(hideBin(process.argv))
         isSecure
       );
       const ledgers = await rpcClient.GetAllLedgerChannels();
-      for (const ledger of ledgers) {
-        console.log(`${compactJson(ledger)}`);
-      }
+      console.log(prettyJson(ledgers));
       await rpcClient.Close();
       process.exit(0);
     }
@@ -108,9 +111,7 @@ yargs(hideBin(process.argv))
         isSecure
       );
       const ledgers = await rpcClient.GetAllL2Channels();
-      for (const ledger of ledgers) {
-        console.log(`${compactJson(ledger)}`);
-      }
+      console.log(prettyJson(ledgers));
       await rpcClient.Close();
       process.exit(0);
     }
@@ -628,6 +629,32 @@ yargs(hideBin(process.argv))
       const id = await rpcClient.RetryTx(yargs.objectiveId);
 
       console.log(`Transaction retried for objective ${id}`);
+      await rpcClient.Close();
+      process.exit(0);
+    }
+  )
+  .command(
+    "get-voucher <channelId>",
+    "Get largest voucher paid/received on the payment channel",
+    (yargsBuilder) => {
+      return yargsBuilder.positional("channelId", {
+        describe: "The channel ID of the payment channel",
+        type: "string",
+        demandOption: true,
+      });
+    },
+    async (yargs) => {
+      const rpcPort = yargs.p;
+      const rpcHost = yargs.h;
+      const isSecure = yargs.s;
+
+      const rpcClient = await NitroRpcClient.CreateHttpNitroClient(
+        getRPCUrl(rpcHost, rpcPort),
+        isSecure
+      );
+
+      const voucher = await rpcClient.GetVoucher(yargs.channelId);
+      console.log(voucher);
       await rpcClient.Close();
       process.exit(0);
     }

@@ -116,9 +116,10 @@ export async function logOutChannelUpdates(rpcClient: NitroRpcClient) {
   );
 }
 
-function prettyJson(obj: unknown): string {
-  return JSON.stringify(obj, null, 2);
+export function prettyJson(obj: unknown): string {
+  return JSONbig.stringify(obj, null, 2);
 }
+
 export function compactJson(obj: unknown): string {
   return JSONbig.stringify(obj, null, 0);
 }
