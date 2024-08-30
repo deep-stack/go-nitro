@@ -246,6 +246,34 @@ yargs(hideBin(process.argv))
       process.exit(0);
     }
   )
+  .command(
+    "get-pending-bridge-txs <channelId>",
+    "Get current status of objective with given objective ID",
+    (yargsBuilder) => {
+      return yargsBuilder.positional("channelId", {
+        describe: "Channel ID to get events for",
+        type: "string",
+        demandOption: true,
+      });
+    },
+    async (yargs) => {
+      const rpcPort = yargs.p;
+      const rpcHost = yargs.h;
+      const isSecure = yargs.s;
+
+      const channelId = yargs.channelId;
+
+      const rpcClient = await NitroRpcClient.CreateHttpNitroClient(
+        getRPCUrl(rpcHost, rpcPort),
+        isSecure
+      );
+      const pendingBridgeTxs = await rpcClient.GetPendingBridgeTxs(channelId);
+      console.log(pendingBridgeTxs);
+
+      await rpcClient.Close();
+      process.exit(0);
+    }
+  )
 
   .command(
     "direct-fund <counterparty>",
@@ -606,7 +634,7 @@ yargs(hideBin(process.argv))
     }
   )
   .command(
-    "retry-tx <objectiveId>",
+    "retry-objective-tx <objectiveId>",
     "Retries transaction for given objective",
     (yargsBuilder) => {
       return yargsBuilder.positional("objectiveId", {
@@ -626,9 +654,37 @@ yargs(hideBin(process.argv))
         isSecure
       );
 
-      const id = await rpcClient.RetryTx(yargs.objectiveId);
+      const id = await rpcClient.RetryObjectiveTx(yargs.objectiveId);
 
       console.log(`Transaction retried for objective ${id}`);
+      await rpcClient.Close();
+      process.exit(0);
+    }
+  )
+  .command(
+    "retry-tx <txHash>",
+    "Retries transaction with given transaction hash",
+    (yargsBuilder) => {
+      return yargsBuilder.positional("txHash", {
+        describe: "Hash of transaction to retry",
+        type: "string",
+        demandOption: true,
+      });
+    },
+
+    async (yargs) => {
+      const rpcPort = yargs.p;
+      const rpcHost = yargs.h;
+      const isSecure = yargs.s;
+
+      const rpcClient = await NitroRpcClient.CreateHttpNitroClient(
+        getRPCUrl(rpcHost, rpcPort),
+        isSecure
+      );
+
+      const txHash = await rpcClient.RetryTx(yargs.txHash);
+
+      console.log(`Transaction with hash ${txHash} retried`);
       await rpcClient.Close();
       process.exit(0);
     }

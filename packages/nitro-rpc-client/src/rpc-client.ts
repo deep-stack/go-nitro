@@ -160,8 +160,12 @@ export class NitroRpcClient implements RpcClientApi {
     return this.sendRequest("create_ledger_channel", payload);
   }
 
-  public async RetryTx(objectiveId: string): Promise<string> {
-    return this.sendRequest("retry_tx", { ObjectiveId: objectiveId });
+  public async RetryObjectiveTx(objectiveId: string): Promise<string> {
+    return this.sendRequest("retry_objective_tx", { ObjectiveId: objectiveId });
+  }
+
+  public async RetryTx(txHash: string): Promise<string> {
+    return this.sendRequest("retry_tx", { TxHash: txHash });
   }
 
   public async CreatePaymentChannel(
@@ -308,6 +312,12 @@ export class NitroRpcClient implements RpcClientApi {
   public async GetL2ObjectiveFromL1(l1ObjectiveId: string): Promise<string> {
     return this.sendRequest("get_l2_objective_from_l1", {
       L1ObjectiveId: l1ObjectiveId,
+    });
+  }
+
+  public async GetPendingBridgeTxs(channelId: string): Promise<string> {
+    return this.sendRequest("get_pending_bridge_txs", {
+      ChannelId: channelId,
     });
   }
 

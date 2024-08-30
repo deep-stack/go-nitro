@@ -18,6 +18,7 @@ type Event interface {
 	ChannelID() types.Destination
 	Block() Block
 	TxIndex() uint
+	TxHash() common.Hash
 }
 
 // commonEvent declares fields shared by all chain events
@@ -25,6 +26,7 @@ type commonEvent struct {
 	channelID types.Destination
 	block     Block
 	txIndex   uint
+	txHash    common.Hash
 }
 
 func (ce commonEvent) ChannelID() types.Destination {
@@ -37,6 +39,10 @@ func (ce commonEvent) Block() Block {
 
 func (ce commonEvent) TxIndex() uint {
 	return ce.txIndex
+}
+
+func (ce commonEvent) TxHash() common.Hash {
+	return ce.txHash
 }
 
 type assetAndAmount struct {
@@ -96,9 +102,10 @@ func NewChallengeRegisteredEvent(
 	sigs []state.Signature,
 	finalizesAt *big.Int,
 	isInitiatedByMe bool,
+	txhash common.Hash,
 ) ChallengeRegisteredEvent {
 	return ChallengeRegisteredEvent{
-		commonEvent: commonEvent{channelID: channelId, block: block, txIndex: txIndex},
+		commonEvent: commonEvent{channelID: channelId, block: block, txIndex: txIndex, txHash: txhash},
 		candidate: state.VariablePart{
 			AppData: variablePart.AppData,
 			Outcome: variablePart.Outcome,
@@ -146,12 +153,12 @@ func (cr ChallengeRegisteredEvent) String() string {
 	return "Challenge registered for Channel " + cr.channelID.String() + " at Block " + fmt.Sprint(cr.block.BlockNum)
 }
 
-func NewDepositedEvent(channelId types.Destination, block Block, txIndex uint, assetAddress common.Address, nowHeld *big.Int) DepositedEvent {
-	return DepositedEvent{commonEvent{channelId, block, txIndex}, assetAddress, nowHeld}
+func NewDepositedEvent(channelId types.Destination, block Block, txIndex uint, assetAddress common.Address, nowHeld *big.Int, txhash common.Hash) DepositedEvent {
+	return DepositedEvent{commonEvent{channelId, block, txIndex, txhash}, assetAddress, nowHeld}
 }
 
-func NewAllocationUpdatedEvent(channelId types.Destination, block Block, txIndex uint, assetAddress common.Address, assetAmount *big.Int) AllocationUpdatedEvent {
-	return AllocationUpdatedEvent{commonEvent{channelId, block, txIndex}, assetAndAmount{AssetAddress: assetAddress, AssetAmount: assetAmount}}
+func NewAllocationUpdatedEvent(channelId types.Destination, block Block, txIndex uint, assetAddress common.Address, assetAmount *big.Int, txhash common.Hash) AllocationUpdatedEvent {
+	return AllocationUpdatedEvent{commonEvent{channelId, block, txIndex, txhash}, assetAndAmount{AssetAddress: assetAddress, AssetAmount: assetAmount}}
 }
 
 type ChallengeClearedEvent struct {
@@ -163,8 +170,8 @@ func (cc ChallengeClearedEvent) String() string {
 	return "Challenge cleared for Channel " + cc.channelID.String() + " at Block " + fmt.Sprint(cc.block.BlockNum)
 }
 
-func NewChallengeClearedEvent(channelId types.Destination, block Block, txIndex uint, newTurnNumRecord *big.Int) ChallengeClearedEvent {
-	return ChallengeClearedEvent{commonEvent: commonEvent{channelID: channelId, block: block, txIndex: txIndex}, newTurnNumRecord: newTurnNumRecord}
+func NewChallengeClearedEvent(channelId types.Destination, block Block, txIndex uint, newTurnNumRecord *big.Int, txhash common.Hash) ChallengeClearedEvent {
+	return ChallengeClearedEvent{commonEvent: commonEvent{channelID: channelId, block: block, txIndex: txIndex, txHash: txhash}, newTurnNumRecord: newTurnNumRecord}
 }
 
 type ReclaimedEvent struct {
@@ -176,18 +183,40 @@ func (re ReclaimedEvent) String() string {
 	return "Reclaim event for Channel " + re.channelID.String() + " at Block " + fmt.Sprint(re.block.BlockNum)
 }
 
+type AssetMapUpdatedEvent struct {
+	commonEvent
+	L1AssetAddress, L2AssetAddress common.Address
+}
+
+func (amue AssetMapUpdatedEvent) String() string {
+	return "Asset map updated event at Block " + fmt.Sprint(amue.block.BlockNum)
+}
+
+type L2ToL1MapUpdated struct {
+	commonEvent
+	l1ChannelId, l2ChannelId types.Destination
+}
+
+func (l2l1mue L2ToL1MapUpdated) String() string {
+	return "L2ToL1 map updated event at Block " + fmt.Sprint(l2l1mue.block.BlockNum)
+}
+
 // ChainEventHandler describes an objective that can handle chain events
 type ChainEventHandler interface {
 	UpdateWithChainEvent(event Event) (protocols.Objective, error)
 }
 
 type ChainService interface {
-	// EventFeed returns a chan for receiving events from the chain service.
+	// EventEngineFeed returns a chan for receiving events from the chain service
+	EventEngineFeed() <-chan Event
+	// EventFeed returns a chan for receiving bridge events from the chain service
 	EventFeed() <-chan Event
-	// Dropped event feed returns a chan for catching dropped events from chain service
+	// Dropped event engine feed returns a chan for catching dropped events from chain service used by engine
+	DroppedEventEngineFeed() <-chan protocols.DroppedEventInfo
+	// TODO: Add comment
 	DroppedEventFeed() <-chan protocols.DroppedEventInfo
 	// SendTransaction is for sending transactions with the chain service
-	SendTransaction(protocols.ChainTransaction) error
+	SendTransaction(protocols.ChainTransaction) (*ethTypes.Transaction, error)
 	// GetConsensusAppAddress returns the address of a deployed ConsensusApp (for ledger channels)
 	GetConsensusAppAddress() types.Address
 	// GetVirtualPaymentAppAddress returns the address of a deployed VirtualPaymentApp

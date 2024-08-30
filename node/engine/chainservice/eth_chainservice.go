@@ -43,6 +43,8 @@ var (
 	challengeRegisteredTopic = naAbi.Events["ChallengeRegistered"].ID
 	challengeClearedTopic    = naAbi.Events["ChallengeCleared"].ID
 	reclaimedTopic           = naAbi.Events["Reclaimed"].ID
+	L2ToL1MapUpdatedTopic    = naAbi.Events["L2ToL1MapUpdated"].ID
+	AssetsMapUpdatedTopic    = naAbi.Events["AssetsMapUpdated"].ID
 )
 
 var topicsToWatch = []common.Hash{
@@ -53,6 +55,8 @@ var topicsToWatch = []common.Hash{
 	challengeClearedTopic,
 	reclaimedTopic,
 	statusUpdatedTopic,
+	L2ToL1MapUpdatedTopic,
+	AssetsMapUpdatedTopic,
 }
 
 var topicsToEventName = map[common.Hash]string{
@@ -63,6 +67,8 @@ var topicsToEventName = map[common.Hash]string{
 	challengeClearedTopic:    "ChallengeCleared",
 	reclaimedTopic:           "Reclaimed",
 	statusUpdatedTopic:       "StatusUpdated",
+	L2ToL1MapUpdatedTopic:    "L2ToL1MapUpdated",
+	AssetsMapUpdatedTopic:    "AssetsMapUpdated",
 }
 
 const (
@@ -86,7 +92,9 @@ type EthChainService struct {
 	consensusAppAddress      common.Address
 	virtualPaymentAppAddress common.Address
 	txSigner                 *bind.TransactOpts
-	out                      chan Event
+	eventEngineOut           chan Event
+	eventOut                 chan Event
+	droppedEventEngineOut    chan protocols.DroppedEventInfo
 	droppedEventOut          chan protocols.DroppedEventInfo
 	logger                   *slog.Logger
 	ctx                      context.Context
@@ -181,6 +189,8 @@ func newEthChainService(chain ethChain, startBlockNum uint64, na *NitroAdjudicat
 		vpaAddress,
 		txSigner,
 		make(chan Event, 10),
+		make(chan Event, 10),
+		make(chan protocols.DroppedEventInfo, 10),
 		make(chan protocols.DroppedEventInfo, 10),
 		logger, ctx, cancelCtx, &sync.WaitGroup{},
 		tracker,
@@ -295,7 +305,7 @@ func (ecs *EthChainService) defaultCallOpts() *bind.CallOpts {
 }
 
 // SendTransaction sends the transaction and blocks until it has been submitted.
-func (ecs *EthChainService) SendTransaction(tx protocols.ChainTransaction) error {
+func (ecs *EthChainService) SendTransaction(tx protocols.ChainTransaction) (*ethTypes.Transaction, error) {
 	switch tx := tx.(type) {
 	case protocols.DepositTransaction:
 		var tokenApprovalLog ethTypes.Log
@@ -310,8 +320,7 @@ func (ecs *EthChainService) SendTransaction(tx protocols.ChainTransaction) error
 				// If custom token is used instead of ETH, we need to approve token amount to be transferred from
 				approvalLog, err := ecs.handleApproveTx(tokenAddress, amount)
 				if err != nil {
-					slog.Error(err.Error())
-					return nil
+					return nil, err
 				}
 
 				tokenApprovalLog = approvalLog
@@ -321,36 +330,39 @@ func (ecs *EthChainService) SendTransaction(tx protocols.ChainTransaction) error
 			ecs.logger.Debug("existing holdings", "holdings", holdings)
 
 			if err != nil {
-				return err
+				return nil, err
 			}
 
 			depositTx, err := ecs.na.Deposit(txOpts, tokenAddress, tx.ChannelId(), holdings, amount)
 			if err != nil {
-				slog.Error("error sending Deposit transaction", "error", err)
-				if tokenApprovalLog.BlockNumber == 0 {
-					return nil
+				// Check if `Approve` tx was confirmed when custom token is used
+				if tokenAddress != ethTokenAddress {
+					return nil, err
 				}
 
 				approvalBlock, err := ecs.GetBlockByNumber(big.NewInt(int64(tokenApprovalLog.BlockNumber)))
 				if err != nil {
-					slog.Error(err.Error())
-					return nil
+					return nil, err
 				}
 
 				if approvalBlock.Hash() != tokenApprovalLog.BlockHash {
-					ecs.droppedEventOut <- protocols.DroppedEventInfo{
+					ecs.droppedEventEngineOut <- protocols.DroppedEventInfo{
 						TxHash:    tokenApprovalLog.TxHash,
 						ChannelId: tx.ChannelId(),
 						EventName: "Approval",
 					}
+
+					return nil, nil
 				}
 				// Return nil to not panic the node and log the error instead
-				return nil
+				return nil, err
 			}
 
 			ecs.sentTxToChannelIdMap.Store(depositTx.Hash().String(), tx.ChannelId())
 		}
-		return nil
+
+		// TODO: Handle multiple depositTx
+		return nil, nil
 	case protocols.WithdrawAllTransaction:
 		signedState := tx.SignedState.State()
 		signatures := tx.SignedState.Signatures()
@@ -365,51 +377,60 @@ func (ecs *EthChainService) SendTransaction(tx protocols.ChainTransaction) error
 
 		withdrawAllTx, err := ecs.na.ConcludeAndTransferAllAssets(ecs.defaultTxOpts(), nitroFixedPart, candidate)
 		ecs.sentTxToChannelIdMap.Store(withdrawAllTx.Hash().String(), tx.ChannelId())
-		return err
+		return withdrawAllTx, err
 	case protocols.ChallengeTransaction:
 		fp, candidate := NitroAdjudicator.ConvertSignedStateToFixedPartAndSignedVariablePart(tx.Candidate)
 		proof := NitroAdjudicator.ConvertSignedStatesToProof(tx.Proof)
 		challengerSig := NitroAdjudicator.ConvertSignature(tx.ChallengerSig)
-		_, err := ecs.na.Challenge(ecs.defaultTxOpts(), fp, proof, candidate, challengerSig)
-		return err
+		challengeTx, err := ecs.na.Challenge(ecs.defaultTxOpts(), fp, proof, candidate, challengerSig)
+		return challengeTx, err
 	case protocols.CheckpointTransaction:
 		fp, candidate := NitroAdjudicator.ConvertSignedStateToFixedPartAndSignedVariablePart(tx.Candidate)
 		proof := NitroAdjudicator.ConvertSignedStatesToProof(tx.Proof)
-		_, err := ecs.na.Checkpoint(ecs.defaultTxOpts(), fp, proof, candidate)
-		return err
+		checkpointTx, err := ecs.na.Checkpoint(ecs.defaultTxOpts(), fp, proof, candidate)
+		return checkpointTx, err
 	case protocols.TransferAllTransaction:
 		transferState := tx.TransferState.State()
 		channelId := transferState.ChannelId()
 		stateHash, err := transferState.Hash()
 		if err != nil {
-			return err
+			return nil, err
 		}
 
 		nitroVariablePart := NitroAdjudicator.ConvertVariablePart(transferState.VariablePart())
 
-		_, er := ecs.na.TransferAllAssets(ecs.defaultTxOpts(), channelId, nitroVariablePart.Outcome, stateHash)
-		return er
+		transferAllTx, er := ecs.na.TransferAllAssets(ecs.defaultTxOpts(), channelId, nitroVariablePart.Outcome, stateHash)
+		return transferAllTx, er
 	case protocols.ReclaimTransaction:
-		_, err := ecs.na.Reclaim(ecs.defaultTxOpts(), tx.ReclaimArgs)
-		return err
+		reclaimTx, err := ecs.na.Reclaim(ecs.defaultTxOpts(), tx.ReclaimArgs)
+		return reclaimTx, err
 	case protocols.MirrorTransferAllTransaction:
 		transferState := tx.TransferState.State()
 		channelId := transferState.ChannelId()
 		stateHash, err := transferState.Hash()
 		if err != nil {
-			return err
+			return nil, err
 		}
 
 		nitroVariablePart := NitroAdjudicator.ConvertVariablePart(transferState.VariablePart())
 
-		_, er := ecs.na.MirrorTransferAllAssets(ecs.defaultTxOpts(), channelId, nitroVariablePart.Outcome, stateHash)
-		return er
+		mirrorTransferAllTx, err := ecs.na.MirrorTransferAllAssets(ecs.defaultTxOpts(), channelId, nitroVariablePart.Outcome, stateHash)
+		return mirrorTransferAllTx, err
 	case protocols.SetL2ToL1Transaction:
-		_, err := ecs.na.SetL2ToL1(ecs.defaultTxOpts(), tx.ChannelId(), tx.MirrorChannelId)
-		return err
+		setL2ToL1Tx, err := ecs.na.SetL2ToL1(ecs.defaultTxOpts(), tx.ChannelId(), tx.MirrorChannelId)
+		if err != nil {
+			return nil, err
+		}
+
+		ecs.sentTxToChannelIdMap.Store(setL2ToL1Tx.Hash().String(), tx.ChannelId())
+		return setL2ToL1Tx, nil
 	case protocols.SetL2ToL1AssetAddressTransaction:
-		_, err := ecs.na.SetL2ToL1AssetAddress(ecs.defaultTxOpts(), tx.L1AssetAddress, tx.L2AssetAddress)
-		return err
+		setL2ToL1AssetAddressTx, err := ecs.na.SetL2ToL1AssetAddress(ecs.defaultTxOpts(), tx.L1AssetAddress, tx.L2AssetAddress)
+		if err != nil {
+			return nil, err
+		}
+
+		return setL2ToL1AssetAddressTx, nil
 	case protocols.MirrorWithdrawAllTransaction:
 		signedState := tx.SignedState.State()
 		signatures := tx.SignedState.Signatures()
@@ -421,10 +442,10 @@ func (ecs *EthChainService) SendTransaction(tx protocols.ChainTransaction) error
 			VariablePart: nitroVariablePart,
 			Sigs:         nitroSignatures,
 		}
-		_, err := ecs.na.MirrorConcludeAndTransferAllAssets(ecs.defaultTxOpts(), nitroFixedPart, candidate)
-		return err
+		MirrorWithdrawAllTx, err := ecs.na.MirrorConcludeAndTransferAllAssets(ecs.defaultTxOpts(), nitroFixedPart, candidate)
+		return MirrorWithdrawAllTx, err
 	default:
-		return fmt.Errorf("unexpected transaction type %T", tx)
+		return nil, fmt.Errorf("unexpected transaction type %T", tx)
 	}
 }
 
@@ -454,8 +475,8 @@ func (ecs *EthChainService) dispatchChainEvents(logs []ethTypes.Log) error {
 				return fmt.Errorf("error in ParseDeposited: %w", err)
 			}
 
-			event := NewDepositedEvent(nad.Destination, Block{BlockNum: l.BlockNumber, Timestamp: block.Time()}, l.TxIndex, nad.Asset, nad.DestinationHoldings)
-			ecs.out <- event
+			event := NewDepositedEvent(nad.Destination, Block{BlockNum: l.BlockNumber, Timestamp: block.Time()}, l.TxIndex, nad.Asset, nad.DestinationHoldings, l.TxHash)
+			ecs.eventEngineOut <- event
 
 		case allocationUpdatedTopic:
 			ecs.logger.Debug("Processing AllocationUpdated event")
@@ -472,8 +493,8 @@ func (ecs *EthChainService) dispatchChainEvents(logs []ethTypes.Log) error {
 				return fmt.Errorf("error in TransactionByHash: %w", err)
 			}
 
-			event := NewAllocationUpdatedEvent(au.ChannelId, Block{BlockNum: l.BlockNumber, Timestamp: block.Time()}, l.TxIndex, au.Asset, au.FinalHoldings)
-			ecs.out <- event
+			event := NewAllocationUpdatedEvent(au.ChannelId, Block{BlockNum: l.BlockNumber, Timestamp: block.Time()}, l.TxIndex, au.Asset, au.FinalHoldings, l.TxHash)
+			ecs.eventEngineOut <- event
 
 		case concludedTopic:
 			ecs.logger.Debug("Processing Concluded event")
@@ -482,8 +503,8 @@ func (ecs *EthChainService) dispatchChainEvents(logs []ethTypes.Log) error {
 				return fmt.Errorf("error in ParseConcluded: %w", err)
 			}
 
-			event := ConcludedEvent{commonEvent: commonEvent{channelID: ce.ChannelId, block: Block{BlockNum: l.BlockNumber, Timestamp: block.Time()}}}
-			ecs.out <- event
+			event := ConcludedEvent{commonEvent: commonEvent{channelID: ce.ChannelId, block: Block{BlockNum: l.BlockNumber, Timestamp: block.Time()}, txIndex: l.TxIndex, txHash: l.TxHash}}
+			ecs.eventEngineOut <- event
 
 		case challengeRegisteredTopic:
 			ecs.logger.Debug("Processing Challenge Registered event")
@@ -519,16 +540,18 @@ func (ecs *EthChainService) dispatchChainEvents(logs []ethTypes.Log) error {
 				},
 				NitroAdjudicator.ConvertBindingsSignaturesToSignatures(cr.Candidate.Sigs),
 				cr.FinalizesAt,
-				isInitiatedByMe)
-			ecs.out <- event
+				isInitiatedByMe,
+				l.TxHash,
+			)
+			ecs.eventEngineOut <- event
 		case challengeClearedTopic:
 			ecs.logger.Debug("Processing Challenge Cleared event")
 			cp, err := ecs.na.ParseChallengeCleared(l)
 			if err != nil {
 				return fmt.Errorf("error in ParseCheckpointed: %w", err)
 			}
-			event := NewChallengeClearedEvent(cp.ChannelId, Block{BlockNum: l.BlockNumber, Timestamp: block.Time()}, l.TxIndex, cp.NewTurnNumRecord)
-			ecs.out <- event
+			event := NewChallengeClearedEvent(cp.ChannelId, Block{BlockNum: l.BlockNumber, Timestamp: block.Time()}, l.TxIndex, cp.NewTurnNumRecord, l.TxHash)
+			ecs.eventEngineOut <- event
 
 		case reclaimedTopic:
 			ecs.logger.Debug("Processing Reclaimed event")
@@ -537,8 +560,40 @@ func (ecs *EthChainService) dispatchChainEvents(logs []ethTypes.Log) error {
 				return fmt.Errorf("error in ParseReclaimed: %w", err)
 			}
 
-			event := ReclaimedEvent{commonEvent: commonEvent{channelID: ce.ChannelId, block: Block{BlockNum: l.BlockNumber, Timestamp: block.Time()}, txIndex: l.TxIndex}}
-			ecs.out <- event
+			event := ReclaimedEvent{commonEvent: commonEvent{channelID: ce.ChannelId, block: Block{BlockNum: l.BlockNumber, Timestamp: block.Time()}, txIndex: l.TxIndex, txHash: l.TxHash}}
+			ecs.eventEngineOut <- event
+
+		case AssetsMapUpdatedTopic:
+			ecs.logger.Debug("Processing asset map updated event")
+
+			assetMapUpdatedEvent, err := ecs.na.ParseAssetsMapUpdated(l)
+			if err != nil {
+				return fmt.Errorf("error in ParseAssetsMapUpdated: %w", err)
+			}
+
+			event := AssetMapUpdatedEvent{commonEvent: commonEvent{block: Block{BlockNum: l.BlockNumber, Timestamp: block.Time()}, txIndex: l.TxIndex, txHash: l.TxHash}, L1AssetAddress: assetMapUpdatedEvent.L1AssetAddress, L2AssetAddress: assetMapUpdatedEvent.L2AssetAddress}
+
+			// Use non-blocking send incase no-one is listening
+			select {
+			case ecs.eventOut <- event:
+			default:
+			}
+
+		case L2ToL1MapUpdatedTopic:
+			ecs.logger.Debug("Processing l2 to l1 map updated event")
+
+			channelMapUpdatedEvent, err := ecs.na.ParseL2ToL1MapUpdated(l)
+			if err != nil {
+				return fmt.Errorf("error in ParseL2ToL1MapUpdated: %w", err)
+			}
+
+			event := L2ToL1MapUpdated{commonEvent: commonEvent{block: Block{BlockNum: l.BlockNumber, Timestamp: block.Time()}, txIndex: l.TxIndex, txHash: l.TxHash}, l1ChannelId: channelMapUpdatedEvent.L1ChannelId, l2ChannelId: channelMapUpdatedEvent.L2ChannelId}
+
+			// Use non-blocking send incase no-one is listening
+			select {
+			case ecs.eventOut <- event:
+			default:
+			}
 
 		default:
 			ecs.logger.Info("Ignoring unknown chain event topic", "topic", l.Topics[0].String())
@@ -717,10 +772,20 @@ func (ecs *EthChainService) updateEventTracker(errorChan chan<- error, block *Bl
 				continue
 			}
 
-			ecs.droppedEventOut <- protocols.DroppedEventInfo{
+			ecs.droppedEventEngineOut <- protocols.DroppedEventInfo{
 				TxHash:    chainEvent.TxHash,
 				ChannelId: channelId,
 				EventName: topicsToEventName[chainEvent.Topics[0]],
+			}
+
+			// Use non-blocking send incase no-one is listening
+			select {
+			case ecs.droppedEventOut <- protocols.DroppedEventInfo{
+				TxHash:    chainEvent.TxHash,
+				ChannelId: channelId,
+				EventName: topicsToEventName[chainEvent.Topics[0]],
+			}:
+			default:
 			}
 
 			ecs.sentTxToChannelIdMap.Delete(chainEvent.TxHash.String())
@@ -766,13 +831,13 @@ func (ecs *EthChainService) subscribeForLogs() (chan error, chan *ethTypes.Heade
 	return errorChan, newBlockChan, eventChan, eventQuery, nil
 }
 
-// EventFeed returns the out chan, and narrows the type so that external consumers may only receive on it.
-func (ecs *EthChainService) EventFeed() <-chan Event {
-	return ecs.out
+// EventEngineFeed returns the out chan, and narrows the type so that external consumers may only receive on it.
+func (ecs *EthChainService) EventEngineFeed() <-chan Event {
+	return ecs.eventEngineOut
 }
 
-func (ecs *EthChainService) DroppedEventFeed() <-chan protocols.DroppedEventInfo {
-	return ecs.droppedEventOut
+func (ecs *EthChainService) DroppedEventEngineFeed() <-chan protocols.DroppedEventInfo {
+	return ecs.droppedEventEngineOut
 }
 
 func (ecs *EthChainService) GetConsensusAppAddress() types.Address {
@@ -920,4 +985,16 @@ func (ecs *EthChainService) handleApproveTx(tokenAddress common.Address, amount 
 			}
 		}
 	}
+}
+
+func (ecs *EthChainService) GetChain() ethChain {
+	return ecs.chain
+}
+
+func (ecs *EthChainService) DroppedEventFeed() <-chan protocols.DroppedEventInfo {
+	return ecs.droppedEventOut
+}
+
+func (ecs *EthChainService) EventFeed() <-chan Event {
+	return ecs.eventOut
 }

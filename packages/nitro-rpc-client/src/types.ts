@@ -116,10 +116,16 @@ export type DirectFundRequest = JsonRpcRequest<
   "create_ledger_channel",
   DirectFundPayload
 >;
+export type RetryObjectiveTxRequest = JsonRpcRequest<
+  "retry_objective_tx",
+  {
+    ObjectiveId: string;
+  }
+>;
 export type RetryTxRequest = JsonRpcRequest<
   "retry_tx",
   {
-    ObjectiveId: string;
+    TxHash: string;
   }
 >;
 export type PaymentRequest = JsonRpcRequest<"pay", PaymentPayload>;
@@ -162,6 +168,13 @@ export type GetObjectiveRequest = JsonRpcRequest<
   {
     ObjectiveId: string;
     L2: boolean;
+  }
+>;
+
+export type GetPendingBridgeTxsRequest = JsonRpcRequest<
+  "get_pending_bridge_txs",
+  {
+    ChannelId: string;
   }
 >;
 
@@ -210,6 +223,7 @@ export type VirtualFundResponse = JsonRpcResponse<ObjectiveResponse>;
 export type VersionResponse = JsonRpcResponse<string>;
 export type GetAddressResponse = JsonRpcResponse<string>;
 export type DirectFundResponse = JsonRpcResponse<ObjectiveResponse>;
+export type RetryObjectiveTxResponse = JsonRpcResponse<string>;
 export type RetryTxResponse = JsonRpcResponse<string>;
 export type DirectDefundResponse = JsonRpcResponse<string>;
 export type MirrorBridgedDefundResponse = JsonRpcResponse<string>;
@@ -222,6 +236,7 @@ export type GetPaymentChannelsByLedgerResponse = JsonRpcResponse<
 >;
 export type GetObjectiveResponse = JsonRpcResponse<string>;
 export type GetL2ObjectiveFromL1Response = JsonRpcResponse<string>;
+export type GetPendingBridgeTxsResponse = JsonRpcResponse<string>;
 export type CreateVoucherResponse = JsonRpcResponse<Voucher>;
 export type ReceiveVoucherResponse = JsonRpcResponse<ReceiveVoucherResult>;
 /**
@@ -231,6 +246,7 @@ export type ReceiveVoucherResponse = JsonRpcResponse<ReceiveVoucherResult>;
 export type RPCRequestAndResponses = {
   get_auth_token: [GetAuthTokenRequest, GetAuthTokenResponse];
   create_ledger_channel: [DirectFundRequest, DirectFundResponse];
+  retry_objective_tx: [RetryObjectiveTxRequest, RetryObjectiveTxResponse];
   retry_tx: [RetryTxRequest, RetryTxResponse];
   close_ledger_channel: [DirectDefundRequest, DirectDefundResponse];
   close_bridge_channel: [BridgedDefundRequest, BridgedDefundResponse];
@@ -264,6 +280,10 @@ export type RPCRequestAndResponses = {
   get_l2_objective_from_l1: [
     GetL2ObjectiveFromL1Request,
     GetL2ObjectiveFromL1Response
+  ];
+  get_pending_bridge_txs: [
+    GetPendingBridgeTxsRequest,
+    GetPendingBridgeTxsResponse
   ];
   create_voucher: [CreateVoucherRequest, CreateVoucherResponse];
   receive_voucher: [ReceiveVoucherRequest, ReceiveVoucherResponse];

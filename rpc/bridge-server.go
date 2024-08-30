@@ -117,10 +117,15 @@ func (brs *BridgeRpcServer) registerHandlers() (err error) {
 
 				return brs.bridge.MirrorBridgedDefund(req.ChannelId, l2SignedState, req.IsChallenge)
 			})
-		case serde.RetryTxMethod:
-			return processRequest(brs.BaseRpcServer, permSign, requestData, func(req serde.RetryTxRequest) (protocols.ObjectiveId, error) {
-				err := brs.bridge.RetryTx(req.ObjectiveId)
+		case serde.RetryObjectiveTxMethod:
+			return processRequest(brs.BaseRpcServer, permSign, requestData, func(req serde.RetryObjectiveTxRequest) (protocols.ObjectiveId, error) {
+				err := brs.bridge.RetryObjectiveTx(req.ObjectiveId)
 				return req.ObjectiveId, err
+			})
+		case serde.RetryTxMethod:
+			return processRequest(brs.BaseRpcServer, permSign, requestData, func(req serde.RetryTxRequest) (string, error) {
+				err := brs.bridge.RetryTx(req.TxHash)
+				return req.TxHash.String(), err
 			})
 		case serde.GetObjectiveMethod:
 			return processRequest(brs.BaseRpcServer, permSign, requestData, func(req serde.GetObjectiveRequest) (string, error) {
@@ -149,6 +154,20 @@ func (brs *BridgeRpcServer) registerHandlers() (err error) {
 				}
 
 				return string(marshalledObjective), nil
+			})
+		case serde.GetPendingBridgeTxsMethod:
+			return processRequest(brs.BaseRpcServer, permSign, requestData, func(req serde.GetPendingBridgeTxsRequest) (string, error) {
+				pendingBridgeTxs := brs.bridge.GetPendingBridgeTxs(req.ChannelId)
+				if err != nil {
+					return "", err
+				}
+
+				marshalledPendingBridgeTxs, err := json.Marshal(pendingBridgeTxs)
+				if err != nil {
+					return "", err
+				}
+
+				return string(marshalledPendingBridgeTxs), nil
 			})
 		default:
 			errRes := serde.NewJsonRpcErrorResponse(jsonrpcReq.Id, serde.MethodNotFoundError)

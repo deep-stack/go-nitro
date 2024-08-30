@@ -23,8 +23,9 @@ func NewMockChainService(chain *MockChain, address common.Address) *MockChainSer
 }
 
 // SendTransaction responds to the given tx.
-func (mc *MockChainService) SendTransaction(tx protocols.ChainTransaction) error {
-	return mc.chain.SubmitTransaction(tx)
+func (mc *MockChainService) SendTransaction(tx protocols.ChainTransaction) (*ethTypes.Transaction, error) {
+	err := mc.chain.SubmitTransaction(tx)
+	return nil, err
 }
 
 // GetConsensusAppAddress returns the zero address, since the mock chain will not run any application logic.
@@ -45,12 +46,20 @@ func (mc *MockChainService) GetL1AssetAddressFromL2(l2AssetAddress common.Addres
 	return common.Address{}, nil
 }
 
-func (mc *MockChainService) EventFeed() <-chan Event {
+func (mc *MockChainService) EventEngineFeed() <-chan Event {
 	return mc.eventFeed
+}
+
+func (mc *MockChainService) DroppedEventEngineFeed() <-chan protocols.DroppedEventInfo {
+	return make(<-chan protocols.DroppedEventInfo)
 }
 
 func (mc *MockChainService) DroppedEventFeed() <-chan protocols.DroppedEventInfo {
 	return make(<-chan protocols.DroppedEventInfo)
+}
+
+func (mc *MockChainService) EventFeed() <-chan Event {
+	return nil
 }
 
 func (mc *MockChainService) GetChainId() (*big.Int, error) {

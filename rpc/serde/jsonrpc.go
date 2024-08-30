@@ -40,12 +40,14 @@ const (
 	// Bridge methods
 	GetAllL2ChannelsRequestMethod RequestMethod = "get_all_l2_channels"
 	GetL2ObjectiveFromL1Method    RequestMethod = "get_l2_objective_from_l1"
+	GetPendingBridgeTxsMethod     RequestMethod = "get_pending_bridge_txs"
 
 	GetSignedStateMethod RequestMethod = "get_signed_state"
 
 	// Chain reorgs workaround methods
-	GetObjectiveMethod RequestMethod = "get_objective"
-	RetryTxMethod      RequestMethod = "retry_tx"
+	GetObjectiveMethod     RequestMethod = "get_objective"
+	RetryObjectiveTxMethod RequestMethod = "retry_objective_tx"
+	RetryTxMethod          RequestMethod = "retry_tx"
 )
 
 type NotificationMethod string
@@ -100,8 +102,12 @@ type ValidateVoucherRequest struct {
 	Signer      common.Address
 	Value       uint64
 }
-type RetryTxRequest struct {
+type RetryObjectiveTxRequest struct {
 	ObjectiveId protocols.ObjectiveId
+}
+
+type RetryTxRequest struct {
+	TxHash common.Hash
 }
 
 type GetObjectiveRequest struct {
@@ -111,6 +117,10 @@ type GetObjectiveRequest struct {
 
 type GetL2ObjectiveFromL1Request struct {
 	L1ObjectiveId protocols.ObjectiveId
+}
+
+type GetPendingBridgeTxsRequest struct {
+	ChannelId types.Destination
 }
 
 type (
@@ -139,9 +149,11 @@ type RequestPayload interface {
 		CounterChallengeRequest |
 		ValidateVoucherRequest |
 		bridgeddefund.ObjectiveRequest |
+		RetryObjectiveTxRequest |
 		RetryTxRequest |
 		GetObjectiveRequest |
-		GetL2ObjectiveFromL1Request
+		GetL2ObjectiveFromL1Request |
+		GetPendingBridgeTxsRequest
 }
 
 type NotificationPayload interface {

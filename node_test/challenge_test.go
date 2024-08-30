@@ -426,13 +426,13 @@ func TestVirtualPaymentChannel(t *testing.T) {
 	// Bob calls challenge method on virtual channel
 	virtualChallengerSig, _ := NitroAdjudicator.SignChallengeMessage(signedVirtualState.State(), tc.Participants[1].PrivateKey)
 	virtualChallengeTx := protocols.NewChallengeTransaction(virtualResponse.ChannelId, signedVirtualState, []state.SignedState{signedPostFundState}, virtualChallengerSig)
-	err = chainServiceB.SendTransaction(virtualChallengeTx)
+	_, err = chainServiceB.SendTransaction(virtualChallengeTx)
 	if err != nil {
 		t.Error(err)
 	}
 
 	// Listen for challenge registered event
-	event := waitForEvent(t, testChainService.EventFeed(), chainservice.ChallengeRegisteredEvent{})
+	event := waitForEvent(t, testChainService.EventEngineFeed(), chainservice.ChallengeRegisteredEvent{})
 	t.Log("Challenge registed event received", event)
 	challengeRegisteredEvent, ok := event.(chainservice.ChallengeRegisteredEvent)
 	testhelpers.Assert(t, ok, "Expected challenge registered event")
@@ -444,13 +444,13 @@ func TestVirtualPaymentChannel(t *testing.T) {
 	// Bob calls challenge method on ledger channel
 	challengerSig, _ := NitroAdjudicator.SignChallengeMessage(signedLedgerState.State(), tc.Participants[1].PrivateKey)
 	challengeTx := protocols.NewChallengeTransaction(ledgerChannel, signedLedgerState, make([]state.SignedState, 0), challengerSig)
-	err = chainServiceB.SendTransaction(challengeTx)
+	_, err = chainServiceB.SendTransaction(challengeTx)
 	if err != nil {
 		t.Error(err)
 	}
 
 	// Listen for challenge registered event
-	event = waitForEvent(t, testChainService.EventFeed(), chainservice.ChallengeRegisteredEvent{})
+	event = waitForEvent(t, testChainService.EventEngineFeed(), chainservice.ChallengeRegisteredEvent{})
 	t.Log("Challenge registed event received", event)
 	challengeRegisteredEvent, ok = event.(chainservice.ChallengeRegisteredEvent)
 	testhelpers.Assert(t, ok, "Expected challenge registered event")
@@ -481,13 +481,13 @@ func TestVirtualPaymentChannel(t *testing.T) {
 	}
 
 	reclaimTx := protocols.NewReclaimTransaction(ledgerChannel, reclaimArgs)
-	err = chainServiceB.SendTransaction(reclaimTx)
+	_, err = chainServiceB.SendTransaction(reclaimTx)
 	if err != nil {
 		t.Error(err)
 	}
 
 	// Listen for reclaimed event
-	event = waitForEvent(t, testChainService.EventFeed(), chainservice.ReclaimedEvent{})
+	event = waitForEvent(t, testChainService.EventEngineFeed(), chainservice.ReclaimedEvent{})
 	_, ok = event.(chainservice.ReclaimedEvent)
 	testhelpers.Assert(t, ok, "Expected reclaimed event")
 
@@ -522,12 +522,12 @@ func TestVirtualPaymentChannel(t *testing.T) {
 
 	// Bob calls transferAllAssets method
 	transferTx := protocols.NewTransferAllTransaction(ledgerChannel, signedConstructedState)
-	err = chainServiceB.SendTransaction(transferTx)
+	_, err = chainServiceB.SendTransaction(transferTx)
 
 	testhelpers.Assert(t, err == nil, "Expected assets liquidated")
 
 	// Listen for allocation updated event
-	event = waitForEvent(t, testChainService.EventFeed(), chainservice.AllocationUpdatedEvent{})
+	event = waitForEvent(t, testChainService.EventEngineFeed(), chainservice.AllocationUpdatedEvent{})
 	_, ok = event.(chainservice.AllocationUpdatedEvent)
 	testhelpers.Assert(t, ok, "Expected allocation updated event")
 

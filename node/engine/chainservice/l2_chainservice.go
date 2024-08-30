@@ -99,6 +99,8 @@ func newL2ChainService(chain ethChain, startBlockNum uint64, bridge *Bridge.Brid
 		vpaAddress,
 		txSigner,
 		make(chan Event, 10),
+		make(chan Event, 10),
+		make(chan protocols.DroppedEventInfo, 10),
 		make(chan protocols.DroppedEventInfo, 10),
 		logger,
 		ctx,
@@ -128,14 +130,18 @@ func newL2ChainService(chain ethChain, startBlockNum uint64, bridge *Bridge.Brid
 	return &l2cs, nil
 }
 
-func (l2cs *L2ChainService) SendTransaction(tx protocols.ChainTransaction) error {
+func (l2cs *L2ChainService) SendTransaction(tx protocols.ChainTransaction) (*ethTypes.Transaction, error) {
 	switch tx := tx.(type) {
 	case protocols.UpdateMirroredChannelStatesTransaction:
 		updateMirroredChannelStatesTx, err := l2cs.bridge.UpdateMirroredChannelStates(l2cs.defaultTxOpts(), tx.ChannelId(), tx.StateHash, tx.OutcomeBytes, tx.Amount, tx.Asset)
+		if err != nil {
+			return nil, err
+		}
+
 		l2cs.sentTxToChannelIdMap.Store(updateMirroredChannelStatesTx.Hash().String(), tx.ChannelId())
-		return err
+		return updateMirroredChannelStatesTx, nil
 	default:
-		return fmt.Errorf("unexpected transaction type %T", tx)
+		return nil, fmt.Errorf("unexpected transaction type %T", tx)
 	}
 }
 
@@ -377,10 +383,20 @@ func (l2cs *L2ChainService) updateEventTracker(errorChan chan<- error, block *Bl
 				continue
 			}
 
-			l2cs.droppedEventOut <- protocols.DroppedEventInfo{
+			l2cs.droppedEventEngineOut <- protocols.DroppedEventInfo{
 				TxHash:    chainEvent.TxHash,
 				ChannelId: channelId,
 				EventName: topicsToEventName[chainEvent.Topics[0]],
+			}
+
+			// Use non-blocking send incase no-one is listening
+			select {
+			case l2cs.droppedEventOut <- protocols.DroppedEventInfo{
+				TxHash:    chainEvent.TxHash,
+				ChannelId: channelId,
+				EventName: topicsToEventName[chainEvent.Topics[0]],
+			}:
+			default:
 			}
 
 			l2cs.sentTxToChannelIdMap.Delete(chainEvent.TxHash.String())
@@ -388,6 +404,7 @@ func (l2cs *L2ChainService) updateEventTracker(errorChan chan<- error, block *Bl
 			continue
 		}
 
+		l2cs.sentTxToChannelIdMap.Delete(chainEvent.TxHash.String())
 		eventsToDispatch = append(eventsToDispatch, chainEvent)
 	}
 	l2cs.eventTracker.mu.Unlock()
@@ -416,14 +433,18 @@ func (l2cs *L2ChainService) dispatchChainEvents(logs []ethTypes.Log) error {
 				return fmt.Errorf("error in ParseStatusUpdated: %w", err)
 			}
 
-			event := StatusUpdatedEvent{StateHash: sue.StateHash, commonEvent: commonEvent{channelID: sue.ChannelId, block: Block{BlockNum: l.BlockNumber, Timestamp: block.Time()}, txIndex: l.TxIndex}}
-			l2cs.out <- event
+			event := StatusUpdatedEvent{StateHash: sue.StateHash, commonEvent: commonEvent{channelID: sue.ChannelId, block: Block{BlockNum: l.BlockNumber, Timestamp: block.Time()}, txIndex: l.TxIndex, txHash: l.TxHash}}
+			l2cs.eventEngineOut <- event
 		default:
 			l2cs.logger.Info("Ignoring unknown chain event topic", "topic", l.Topics[0].String())
 
 		}
 	}
 	return nil
+}
+
+func (l2cs *L2ChainService) DroppedEventEngineFeed() <-chan protocols.DroppedEventInfo {
+	return l2cs.droppedEventEngineOut
 }
 
 func (l2cs *L2ChainService) DroppedEventFeed() <-chan protocols.DroppedEventInfo {

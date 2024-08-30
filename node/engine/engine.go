@@ -75,7 +75,7 @@ type Engine struct {
 	ObjectiveRequestsFromAPI        chan protocols.ObjectiveRequest
 	PaymentRequestsFromAPI          chan PaymentRequest
 	CounterChallengeRequestsFromAPI chan CounterChallengeRequest
-	RetryTxRequestFromAPI           chan types.RetryTxRequest
+	RetryObjectiveTxRequestFromAPI  chan types.RetryObjectiveTxRequest
 
 	fromChain             <-chan chainservice.Event
 	droppedEventFromChain <-chan protocols.DroppedEventInfo
@@ -160,10 +160,10 @@ func New(vm *payments.VoucherManager, msg messageservice.MessageService, chain c
 	e.ObjectiveRequestsFromAPI = make(chan protocols.ObjectiveRequest)
 	e.PaymentRequestsFromAPI = make(chan PaymentRequest)
 	e.CounterChallengeRequestsFromAPI = make(chan CounterChallengeRequest)
-	e.RetryTxRequestFromAPI = make(chan types.RetryTxRequest)
+	e.RetryObjectiveTxRequestFromAPI = make(chan types.RetryObjectiveTxRequest)
 
-	e.fromChain = chain.EventFeed()
-	e.droppedEventFromChain = chain.DroppedEventFeed()
+	e.fromChain = chain.EventEngineFeed()
+	e.droppedEventFromChain = chain.DroppedEventEngineFeed()
 	e.fromMsg = msg.P2PMessages()
 	e.signRequests = msg.SignRequests()
 
@@ -226,8 +226,8 @@ func (e *Engine) run(ctx context.Context) {
 			err = e.handleSignRequest(signReq)
 		case counterChallengeReq := <-e.CounterChallengeRequestsFromAPI:
 			err = e.handleCounterChallengeRequest(counterChallengeReq)
-		case retryTxReq := <-e.RetryTxRequestFromAPI:
-			err = e.handleRetryTxRequest(retryTxReq)
+		case retryObjectiveTxReq := <-e.RetryObjectiveTxRequestFromAPI:
+			err = e.handleRetryObjectiveTxRequest(retryObjectiveTxReq)
 		case <-blockTicker.C:
 			blockNum := e.chain.GetLastConfirmedBlockNum()
 			err = e.store.SetLastBlockNumSeen(blockNum)
@@ -827,7 +827,7 @@ func (e *Engine) handleCounterChallengeRequest(request CounterChallengeRequest) 
 	return nil
 }
 
-func (e *Engine) handleRetryTxRequest(request types.RetryTxRequest) error {
+func (e *Engine) handleRetryObjectiveTxRequest(request types.RetryObjectiveTxRequest) error {
 	// Get objective from objective id
 	obj, err := e.store.GetObjectiveById(protocols.ObjectiveId(request.ObjectiveId))
 	if err != nil {
@@ -895,7 +895,7 @@ func (e *Engine) executeSideEffects(sideEffects protocols.SideEffects) error {
 	for _, tx := range sideEffects.TransactionsToSubmit {
 		e.logger.Info("Sending chain transaction", "channel", tx.ChannelId().String())
 
-		err := e.chain.SendTransaction(tx)
+		_, err := e.chain.SendTransaction(tx)
 		if err != nil {
 			return err
 		}
