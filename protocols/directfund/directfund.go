@@ -322,7 +322,13 @@ func (o *Objective) Crank(secretKey *[]byte) (protocols.Objective, protocols.Sid
 		return &updated, sideEffects, WaitingForMyTurnToFund, nil
 	}
 
+	// TODO: Remove transactionSubmitted from objective
 	if !fundingComplete && safeToDeposit && amountToDeposit.IsNonZero() && !updated.transactionSubmitted {
+		// TODO:
+		// Loop through amountToDeposit
+		// Check approveTxSubmitted map if custom token and not submitted the send approve tx
+		// Check depositTxSUbmitted map if not submitted then send deposit tx
+
 		deposit := protocols.NewDepositTransaction(updated.C.Id, amountToDeposit)
 		updated.transactionSubmitted = true
 		// Reset dropped event info as new tx is submitted

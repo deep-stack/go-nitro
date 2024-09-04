@@ -310,6 +310,7 @@ func (ecs *EthChainService) defaultCallOpts() *bind.CallOpts {
 func (ecs *EthChainService) SendTransaction(tx protocols.ChainTransaction) (*ethTypes.Transaction, error) {
 	switch tx := tx.(type) {
 	case protocols.DepositTransaction:
+		// TODO: Send Deposit transaction for single asset
 		var tokenApprovalLog ethTypes.Log
 
 		for tokenAddress, amount := range tx.Deposit {
@@ -620,6 +621,11 @@ func (ecs *EthChainService) dispatchChainEvents(logs []ethTypes.Log) error {
 			ae, err := token.ParseApproval(l)
 			if err != nil {
 				return fmt.Errorf("error in ParseApproval: %w", err)
+			}
+
+			// Process approval event only if i am the owner and nitro adjudicator is the spendor
+			if ae.Owner != ecs.txSigner.From && ae.Spender != ecs.naAddress {
+				return nil
 			}
 
 			event := ApprovalEvent{commonEvent: commonEvent{block: Block{BlockNum: l.BlockNumber, Timestamp: block.Time()}, txIndex: l.TxIndex, txHash: l.TxHash}, TokenAddress: l.Address, Owner: ae.Owner, Spender: ae.Spender}
