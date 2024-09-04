@@ -183,6 +183,18 @@ func (re ReclaimedEvent) String() string {
 	return "Reclaim event for Channel " + re.channelID.String() + " at Block " + fmt.Sprint(re.block.BlockNum)
 }
 
+type ApprovalEvent struct {
+	commonEvent
+	TokenAddress common.Address
+	Owner        common.Address
+	Spender      common.Address
+	Value        *big.Int
+}
+
+func (ae ApprovalEvent) String() string {
+	return "ApprovalEvent event for " + ae.TokenAddress.String() + " at Block " + fmt.Sprint(ae.block.BlockNum)
+}
+
 type AssetMapUpdatedEvent struct {
 	commonEvent
 	L1AssetAddress, L2AssetAddress common.Address

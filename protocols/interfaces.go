@@ -38,6 +38,16 @@ func NewDepositTransaction(channelId types.Destination, deposit types.Funds) Dep
 	return DepositTransaction{ChainTransaction: ChainTransactionBase{channelId: channelId}, Deposit: deposit}
 }
 
+type ApproveTransaction struct {
+	ChainTransaction
+	TokenAddress common.Address
+	Amount       *big.Int
+}
+
+func NewApproveTransaction(channelId types.Destination, tokenAddress common.Address, amount *big.Int) ApproveTransaction {
+	return ApproveTransaction{ChainTransaction: ChainTransactionBase{channelId: channelId}, TokenAddress: tokenAddress, Amount: amount}
+}
+
 type WithdrawAllTransaction struct {
 	ChainTransaction
 	SignedState state.SignedState

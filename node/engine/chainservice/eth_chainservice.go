@@ -37,14 +37,16 @@ type ChainOpts struct {
 
 var (
 	naAbi, _                 = NitroAdjudicator.NitroAdjudicatorMetaData.GetAbi()
+	tokenAbi, _              = Token.TokenMetaData.GetAbi()
 	concludedTopic           = naAbi.Events["Concluded"].ID
 	allocationUpdatedTopic   = naAbi.Events["AllocationUpdated"].ID
 	depositedTopic           = naAbi.Events["Deposited"].ID
 	challengeRegisteredTopic = naAbi.Events["ChallengeRegistered"].ID
 	challengeClearedTopic    = naAbi.Events["ChallengeCleared"].ID
 	reclaimedTopic           = naAbi.Events["Reclaimed"].ID
-	L2ToL1MapUpdatedTopic    = naAbi.Events["L2ToL1MapUpdated"].ID
-	AssetsMapUpdatedTopic    = naAbi.Events["AssetsMapUpdated"].ID
+	l2ToL1MapUpdatedTopic    = naAbi.Events["L2ToL1MapUpdated"].ID
+	assetsMapUpdatedTopic    = naAbi.Events["AssetsMapUpdated"].ID
+	approvalTopic            = tokenAbi.Events["Approval"].ID
 )
 
 var topicsToWatch = []common.Hash{
@@ -55,8 +57,8 @@ var topicsToWatch = []common.Hash{
 	challengeClearedTopic,
 	reclaimedTopic,
 	statusUpdatedTopic,
-	L2ToL1MapUpdatedTopic,
-	AssetsMapUpdatedTopic,
+	l2ToL1MapUpdatedTopic,
+	assetsMapUpdatedTopic,
 }
 
 var topicsToEventName = map[common.Hash]string{
@@ -67,8 +69,8 @@ var topicsToEventName = map[common.Hash]string{
 	challengeClearedTopic:    "ChallengeCleared",
 	reclaimedTopic:           "Reclaimed",
 	statusUpdatedTopic:       "StatusUpdated",
-	L2ToL1MapUpdatedTopic:    "L2ToL1MapUpdated",
-	AssetsMapUpdatedTopic:    "AssetsMapUpdated",
+	l2ToL1MapUpdatedTopic:    "L2ToL1MapUpdated",
+	assetsMapUpdatedTopic:    "AssetsMapUpdated",
 }
 
 const (
@@ -444,6 +446,18 @@ func (ecs *EthChainService) SendTransaction(tx protocols.ChainTransaction) (*eth
 		}
 		MirrorWithdrawAllTx, err := ecs.na.MirrorConcludeAndTransferAllAssets(ecs.defaultTxOpts(), nitroFixedPart, candidate)
 		return MirrorWithdrawAllTx, err
+	case protocols.ApproveTransaction:
+		token, err := Token.NewToken(tx.TokenAddress, ecs.chain)
+		if err != nil {
+			return nil, err
+		}
+
+		approveTx, err := token.Approve(ecs.defaultTxOpts(), ecs.naAddress, tx.Amount)
+		if err != nil {
+			return nil, err
+		}
+
+		return approveTx, nil
 	default:
 		return nil, fmt.Errorf("unexpected transaction type %T", tx)
 	}
@@ -563,7 +577,7 @@ func (ecs *EthChainService) dispatchChainEvents(logs []ethTypes.Log) error {
 			event := ReclaimedEvent{commonEvent: commonEvent{channelID: ce.ChannelId, block: Block{BlockNum: l.BlockNumber, Timestamp: block.Time()}, txIndex: l.TxIndex, txHash: l.TxHash}}
 			ecs.eventEngineOut <- event
 
-		case AssetsMapUpdatedTopic:
+		case assetsMapUpdatedTopic:
 			ecs.logger.Debug("Processing asset map updated event")
 
 			assetMapUpdatedEvent, err := ecs.na.ParseAssetsMapUpdated(l)
@@ -579,7 +593,7 @@ func (ecs *EthChainService) dispatchChainEvents(logs []ethTypes.Log) error {
 			default:
 			}
 
-		case L2ToL1MapUpdatedTopic:
+		case l2ToL1MapUpdatedTopic:
 			ecs.logger.Debug("Processing l2 to l1 map updated event")
 
 			channelMapUpdatedEvent, err := ecs.na.ParseL2ToL1MapUpdated(l)
@@ -594,6 +608,22 @@ func (ecs *EthChainService) dispatchChainEvents(logs []ethTypes.Log) error {
 			case ecs.eventOut <- event:
 			default:
 			}
+
+		case approvalTopic:
+			ecs.logger.Debug("Processing Approval event")
+
+			token, err := Token.NewToken(l.Address, ecs.chain)
+			if err != nil {
+				return err
+			}
+
+			ae, err := token.ParseApproval(l)
+			if err != nil {
+				return fmt.Errorf("error in ParseApproval: %w", err)
+			}
+
+			event := ApprovalEvent{commonEvent: commonEvent{block: Block{BlockNum: l.BlockNumber, Timestamp: block.Time()}, txIndex: l.TxIndex, txHash: l.TxHash}, TokenAddress: l.Address, Owner: ae.Owner, Spender: ae.Spender}
+			ecs.eventEngineOut <- event
 
 		default:
 			ecs.logger.Info("Ignoring unknown chain event topic", "topic", l.Topics[0].String())
