@@ -8,6 +8,7 @@ import (
 	"math/big"
 	"strings"
 
+	"github.com/ethereum/go-ethereum/common"
 	"github.com/statechannels/go-nitro/channel"
 	"github.com/statechannels/go-nitro/channel/consensus_channel"
 	"github.com/statechannels/go-nitro/channel/state"
@@ -46,6 +47,8 @@ type Objective struct {
 	fullyFundedThreshold     types.Funds // if the on chain holdings are equal
 	transactionSubmitted     bool        // whether a transition for the objective has been submitted or not
 	droppedEvent             protocols.DroppedEventInfo
+	approveTxSubmitted       map[common.Address]bool
+	depositTxSubmitted       map[common.Address]bool
 }
 
 // GetChannelByIdFunction specifies a function that can be used to retrieve channels from a store.

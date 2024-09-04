@@ -309,6 +309,28 @@ func (ecs *EthChainService) defaultCallOpts() *bind.CallOpts {
 // SendTransaction sends the transaction and blocks until it has been submitted.
 func (ecs *EthChainService) SendTransaction(tx protocols.ChainTransaction) (*ethTypes.Transaction, error) {
 	switch tx := tx.(type) {
+
+	case protocols.DepositTransaction2:
+		txOpts := ecs.defaultTxOpts()
+		ethTokenAddress := common.Address{}
+
+		if tx.Address == ethTokenAddress {
+			txOpts.Value = tx.Amount
+		}
+
+		holdings, err := ecs.na.Holdings(&bind.CallOpts{}, tx.Address, tx.ChannelId())
+		if err != nil {
+			return nil, err
+		}
+		ecs.logger.Debug("existing holdings", "holdings", holdings)
+
+		depositTx, err := ecs.na.Deposit(txOpts, tx.Address, tx.ChannelId(), holdings, tx.Amount)
+		if err != nil {
+			return nil, err
+		}
+
+		return depositTx, nil
+
 	case protocols.DepositTransaction:
 		// TODO: Send Deposit transaction for single asset
 		var tokenApprovalLog ethTypes.Log
