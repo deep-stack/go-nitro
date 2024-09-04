@@ -427,6 +427,85 @@ The on-chain component of Nitro (i.e. the solidity contracts) are housed in the 
   Result: 1000050
   ```
 
+## Steps to retry dropped txs
+
+### Direct fund
+
+- Check status of direct-fund objective
+
+  ```bash
+  nitro-rpc-client get-objective <Objective ID> -p <RPC port of the L1 node>
+
+  # Expected output:
+  # {"Status":1,"C":"0xb08b6c111e9d0b0cb0ad31274132ac7e7542242e2a80201d9e9e5a2e78fe197d","MyDepositSafetyThreshold":{"0xcf7ed3acca5a467e9e704c703e8d87f634fb0fc9":0},"MyDepositTarget":{"0xcf7ed3acca5a467e9e704c703e8d87f634fb0fc9":1000000},"FullyFundedThreshold":{"0xcf7ed3acca5a467e9e704c703e8d87f634fb0fc9":2000000},"TransactionSumbmitted":true,"DroppedTx":{"DroppedTxHash":"0x339079c724690c6b99e15b5f04fc4e36ccdab30a83602734057c4e2f6fd04afe","ChannelId":"0xb08b6c111e9d0b0cb0ad31274132ac7e7542242e2a80201d9e9e5a2e78fe197d","EventName":"Deposited"}}
+  ```
+
+  - This will give you status of the objective, with dropped tx details if any
+
+  - In the dropped tx details, you should see the trasaction that was dropped along with its `hash`, `channel ID`, and the `Event` associated with that tx
+
+- You can retry the dropped tx using
+
+  ```bash
+  nitro-rpc-client retry-objective-tx <Objective ID> -p <RPC port of L1 node>
+  ```
+
+### Bridged fund
+
+- To check status of bridged-fund objective, you either need objective Id of corresponding direct-fund objective (L1 objective) or objective ID of bridged-fund objective (L2 objective)
+
+  - Using corresponding direct-fund objective (L1 objective)
+
+    ```bash
+    nitro-rpc-client get-l2-objective-from-l1 <L1 Objective ID> -p <RPC port of the bridge>
+    ```
+
+  - Using objective ID of bridged-fund
+
+    ```bash
+    nitro-rpc-client get-objective <Objective ID> --l2 true -p <RPC port of the bridge>
+    ```
+
+    ```bash
+    nitro-rpc-client get-objective <Objective ID> -p <RPC port of L2 node>
+    ```
+
+  - This will give you status of the objective, with dropped tx details if any
+
+- You can retry the dropped tx using
+
+  ```bash
+  nitro-rpc-client retry-objective-tx <Objective ID> -p <RPC port of the L2 node / bridge>
+  ```
+
+### Non-objective bridge txs
+
+- Some txs that are performed by bridge are not part of any objective
+
+- These txs are stored against channel ID
+
+- To see if these txs are confirmed or not, we can query bridge to get the pending txs
+
+  ```bash
+  nitro-rpc-client get-pending-bridge-txs <Channel ID> -p <RPC port of the bridge>
+  ```
+
+- Txs are stored against both L1 and L2 channel IDs so please check both channels see if any txs are pending
+
+- If these txs fail, bridge retries them until retry tx threshold has been met
+
+  - if there are any txs with `isDropped: false`, that means they are not auto retried by bridge just yet
+
+- If there are any txs with `isDropped: true`, it means these txs failed even after auto retry
+
+- The `get-pending-txs` command will output pending txs details along with their tx hash
+
+- To manually retry txs that failed after auto retry, use
+
+  ```bash
+  nitro-rpc-client retry-tx <Tx hash of the failed tx> -p <RPC port of the bridge>
+  ```
+
 ## License
 
 Dual-licensed under [MIT](https://opensource.org/licenses/MIT) + [Apache 2.0](http://www.apache.org/licenses/LICENSE-2.0)
