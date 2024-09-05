@@ -309,85 +309,6 @@ func (ecs *EthChainService) defaultCallOpts() *bind.CallOpts {
 // SendTransaction sends the transaction and blocks until it has been submitted.
 func (ecs *EthChainService) SendTransaction(tx protocols.ChainTransaction) (*ethTypes.Transaction, error) {
 	switch tx := tx.(type) {
-
-	case protocols.DepositTransaction2:
-		txOpts := ecs.defaultTxOpts()
-		ethTokenAddress := common.Address{}
-
-		if tx.Address == ethTokenAddress {
-			txOpts.Value = tx.Amount
-		}
-
-		holdings, err := ecs.na.Holdings(&bind.CallOpts{}, tx.Address, tx.ChannelId())
-		if err != nil {
-			return nil, err
-		}
-		ecs.logger.Debug("existing holdings", "holdings", holdings)
-
-		depositTx, err := ecs.na.Deposit(txOpts, tx.Address, tx.ChannelId(), holdings, tx.Amount)
-		if err != nil {
-			return nil, err
-		}
-
-		return depositTx, nil
-
-	case protocols.DepositTransaction:
-		// TODO: Send Deposit transaction for single asset
-		var tokenApprovalLog ethTypes.Log
-
-		for tokenAddress, amount := range tx.Deposit {
-			txOpts := ecs.defaultTxOpts()
-			ethTokenAddress := common.Address{}
-			if tokenAddress == ethTokenAddress {
-				txOpts.Value = amount
-			} else {
-				// TODO: Move Approve tx to a separate switch case so that Approval event parsing can go through dispatchEvents flow
-				// If custom token is used instead of ETH, we need to approve token amount to be transferred from
-				approvalLog, err := ecs.handleApproveTx(tokenAddress, amount)
-				if err != nil {
-					return nil, err
-				}
-
-				tokenApprovalLog = approvalLog
-			}
-
-			holdings, err := ecs.na.Holdings(&bind.CallOpts{}, tokenAddress, tx.ChannelId())
-			ecs.logger.Debug("existing holdings", "holdings", holdings)
-
-			if err != nil {
-				return nil, err
-			}
-
-			depositTx, err := ecs.na.Deposit(txOpts, tokenAddress, tx.ChannelId(), holdings, amount)
-			if err != nil {
-				// Check if `Approve` tx was confirmed when custom token is used
-				if tokenAddress != ethTokenAddress {
-					return nil, err
-				}
-
-				approvalBlock, err := ecs.GetBlockByNumber(big.NewInt(int64(tokenApprovalLog.BlockNumber)))
-				if err != nil {
-					return nil, err
-				}
-
-				if approvalBlock.Hash() != tokenApprovalLog.BlockHash {
-					ecs.droppedEventEngineOut <- protocols.DroppedEventInfo{
-						TxHash:    tokenApprovalLog.TxHash,
-						ChannelId: tx.ChannelId(),
-						EventName: "Approval",
-					}
-
-					return nil, nil
-				}
-				// Return nil to not panic the node and log the error instead
-				return nil, err
-			}
-
-			ecs.sentTxToChannelIdMap.Store(depositTx.Hash().String(), tx.ChannelId())
-		}
-
-		// TODO: Handle multiple depositTx
-		return nil, nil
 	case protocols.WithdrawAllTransaction:
 		signedState := tx.SignedState.State()
 		signatures := tx.SignedState.Signatures()
@@ -480,7 +401,31 @@ func (ecs *EthChainService) SendTransaction(tx protocols.ChainTransaction) (*eth
 			return nil, err
 		}
 
+		ecs.sentTxToChannelIdMap.Store(approveTx.Hash().String(), tx.ChannelId())
 		return approveTx, nil
+
+	case protocols.CustomTransaction:
+		txOpts := ecs.defaultTxOpts()
+		ethTokenAddress := common.Address{}
+
+		if tx.Address == ethTokenAddress {
+			txOpts.Value = tx.Amount
+		}
+
+		holdings, err := ecs.na.Holdings(&bind.CallOpts{}, tx.Address, tx.ChannelId())
+		if err != nil {
+			return nil, err
+		}
+		ecs.logger.Debug("existing holdings", "holdings", holdings)
+
+		depositTx, err := ecs.na.Deposit(txOpts, tx.Address, tx.ChannelId(), holdings, tx.Amount)
+		if err != nil {
+			return nil, err
+		}
+
+		ecs.sentTxToChannelIdMap.Store(depositTx.Hash().String(), tx.ChannelId())
+		return depositTx, nil
+
 	default:
 		return nil, fmt.Errorf("unexpected transaction type %T", tx)
 	}

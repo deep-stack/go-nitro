@@ -15,6 +15,7 @@ import (
 
 type OnChainData struct {
 	Holdings                 types.Funds
+	ApprovedAssets           map[common.Address]*big.Int
 	Outcome                  outcome.Exit
 	StateHash                common.Hash
 	FinalizesAt              *big.Int
@@ -67,6 +68,7 @@ func New(s state.State, myIndex uint, channelType ChannelType) (*Channel, error)
 	}
 	c.MyIndex = myIndex
 	c.OnChain.Holdings = make(types.Funds)
+	c.OnChain.ApprovedAssets = make(map[common.Address]*big.Int)
 	c.OnChain.FinalizesAt = big.NewInt(0)
 	c.OnChain.IsChallengeInitiatedByMe = false
 	c.OnChain.ChannelMode = Open
@@ -152,6 +154,7 @@ func (c *Channel) Clone() *Channel {
 	}
 	d.FixedPart = c.FixedPart.Clone()
 	d.OnChain.Holdings = c.OnChain.Holdings
+	d.OnChain.ApprovedAssets = c.OnChain.ApprovedAssets
 	d.OnChain.FinalizesAt = c.OnChain.FinalizesAt
 	d.OnChain.ChannelMode = c.OnChain.ChannelMode
 	d.OnChain.StateHash = c.OnChain.StateHash
@@ -369,6 +372,8 @@ func (c *Channel) UpdateWithChainEvent(event chainservice.Event) (*Channel, erro
 		// TODO: update OnChain.StateHash and OnChain.Outcome
 	case chainservice.DepositedEvent:
 		c.OnChain.Holdings[e.Asset] = e.NowHeld
+	case chainservice.ApprovalEvent:
+		c.OnChain.ApprovedAssets[e.TokenAddress] = e.Value
 	case chainservice.ConcludedEvent:
 		break // TODO: update OnChain.StateHash and OnChain.Outcome
 	case chainservice.ChallengeRegisteredEvent:

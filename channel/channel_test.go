@@ -392,6 +392,7 @@ func TestSerde(t *testing.T) {
 		},
 		OnChain: OnChainData{
 			Holdings:                 types.Funds{},
+			ApprovedAssets:           make(map[common.Address]*big.Int),
 			StateHash:                common.Hash{},
 			Outcome:                  outcome.Exit{},
 			FinalizesAt:              common.Big0,

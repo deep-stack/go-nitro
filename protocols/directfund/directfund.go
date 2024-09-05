@@ -45,9 +45,7 @@ type Objective struct {
 	myDepositSafetyThreshold types.Funds // if the on chain holdings are equal to this amount it is safe for me to deposit
 	myDepositTarget          types.Funds // I want to get the on chain holdings up to this much
 	fullyFundedThreshold     types.Funds // if the on chain holdings are equal
-	transactionSubmitted     bool        // whether a transition for the objective has been submitted or not
 	droppedEvent             protocols.DroppedEventInfo
-	approveTxSubmitted       map[common.Address]bool
 	depositTxSubmitted       map[common.Address]bool
 }
 
@@ -92,6 +90,8 @@ func NewObjective(request ObjectiveRequest, preApprove bool, myAddress types.Add
 	if err != nil {
 		return Objective{}, fmt.Errorf("could not create new objective: %w", err)
 	}
+
+	objective.depositTxSubmitted = make(map[common.Address]bool)
 	return objective, nil
 }
 
@@ -175,7 +175,7 @@ func ConstructFromPayload(
 		types.AddressToDestination(myAddress),
 	)
 	init.myDepositTarget = init.myDepositSafetyThreshold.Add(myAllocatedAmount)
-
+	init.depositTxSubmitted = make(map[common.Address]bool)
 	return init, nil
 }
 
@@ -325,21 +325,32 @@ func (o *Objective) Crank(secretKey *[]byte) (protocols.Objective, protocols.Sid
 		return &updated, sideEffects, WaitingForMyTurnToFund, nil
 	}
 
-	// TODO: Remove transactionSubmitted from objective
-	if !fundingComplete && safeToDeposit && amountToDeposit.IsNonZero() && !updated.transactionSubmitted {
-		// TODO:
-		// Loop through amountToDeposit
-		// Check approveTxSubmitted map if custom token and not submitted the send approve tx
-		// Check depositTxSUbmitted map if not submitted then send deposit tx
+	if !fundingComplete && safeToDeposit && amountToDeposit.IsNonZero() {
+		for assetAddress, amount := range amountToDeposit {
+			ethTokenAddress := common.Address{}
+			_, isAssetApproved := updated.C.OnChain.ApprovedAssets[assetAddress]
+			isDepositTxSubmitted := updated.depositTxSubmitted[assetAddress]
 
-		deposit := protocols.NewDepositTransaction(updated.C.Id, amountToDeposit)
-		updated.transactionSubmitted = true
-		// Reset dropped event info as new tx is submitted
-		updated.droppedEvent = protocols.DroppedEventInfo{}
-		sideEffects.TransactionsToSubmit = append(sideEffects.TransactionsToSubmit, deposit)
+			// Handle asset approval if it's not the ETH token and not already approved
+			if assetAddress != ethTokenAddress && !isAssetApproved {
+				approvetx := protocols.NewApproveTransaction(updated.C.Id, assetAddress, amount)
+				sideEffects.TransactionsToSubmit = append(sideEffects.TransactionsToSubmit, approvetx)
+			}
+
+			// Determine if a deposit transaction should be submitted
+			shouldSubmitDeposit := !isDepositTxSubmitted && ((assetAddress == ethTokenAddress) || (assetAddress != ethTokenAddress && isAssetApproved))
+			if shouldSubmitDeposit {
+				fmt.Println("SUBMIT DEPOSIT")
+				depositTx := protocols.NewCustomTransaction(updated.C.Id, assetAddress, amount)
+				sideEffects.TransactionsToSubmit = append(sideEffects.TransactionsToSubmit, depositTx)
+				updated.depositTxSubmitted[assetAddress] = true
+			}
+		}
 	}
 
 	if !fundingComplete {
+		fmt.Println("RETURN CRANK")
+
 		return &updated, sideEffects, WaitingForCompleteFunding, nil
 	}
 
@@ -433,7 +444,7 @@ func (o *Objective) clone() Objective {
 	clone.myDepositSafetyThreshold = o.myDepositSafetyThreshold.Clone()
 	clone.myDepositTarget = o.myDepositTarget.Clone()
 	clone.fullyFundedThreshold = o.fullyFundedThreshold.Clone()
-	clone.transactionSubmitted = o.transactionSubmitted
+	clone.depositTxSubmitted = o.depositTxSubmitted
 	clone.droppedEvent = o.droppedEvent
 	return clone
 }
@@ -444,7 +455,7 @@ func IsDirectFundObjective(id protocols.ObjectiveId) bool {
 }
 
 func (o *Objective) ResetTxSubmitted() {
-	o.transactionSubmitted = false
+	o.depositTxSubmitted = make(map[common.Address]bool)
 }
 
 func (o *Objective) SetDroppedEvent(droppedEventFromChain protocols.DroppedEventInfo) {

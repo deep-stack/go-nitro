@@ -29,14 +29,14 @@ func (cct ChainTransactionBase) ChannelId() types.Destination {
 	return cct.channelId
 }
 
-type DepositTransaction2 struct {
+type CustomTransaction struct {
 	ChainTransaction
 	Address common.Address
 	Amount  *big.Int
 }
 
-func NewDepositTransaction2(channelId types.Destination, address common.Address, amount *big.Int) DepositTransaction2 {
-	return DepositTransaction2{ChainTransaction: ChainTransactionBase{channelId: channelId}, Address: address, Amount: amount}
+func NewCustomTransaction(channelId types.Destination, address common.Address, amount *big.Int) CustomTransaction {
+	return CustomTransaction{ChainTransaction: ChainTransactionBase{channelId: channelId}, Address: address, Amount: amount}
 }
 
 type DepositTransaction struct {

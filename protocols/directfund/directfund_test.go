@@ -207,6 +207,7 @@ func TestCrank(t *testing.T) {
 			}),
 		},
 	}
+	s.depositTxSubmitted[testState.Outcome[0].Asset] = true
 	// END test data preparation
 
 	// Assert that cranking an unapproved objective returns an error
@@ -252,7 +253,7 @@ func TestCrank(t *testing.T) {
 	o.C.OnChain.Holdings[testState.Outcome[0].Asset] = testState.Outcome[0].Allocations[0].Amount
 	updated, sideEffects, waitingFor, err := o.Crank(&alice.PrivateKey)
 
-	if !updated.(*Objective).transactionSubmitted {
+	if !updated.(*Objective).depositTxSubmitted[testState.Outcome[0].Asset] {
 		t.Fatalf("Expected transactionSubmitted flag to be set to true")
 	}
 	if err != nil {

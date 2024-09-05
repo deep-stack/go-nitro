@@ -3,6 +3,7 @@ package directfund
 import (
 	"encoding/json"
 
+	"github.com/ethereum/go-ethereum/common"
 	"github.com/statechannels/go-nitro/channel"
 	"github.com/statechannels/go-nitro/protocols"
 	"github.com/statechannels/go-nitro/types"
@@ -18,8 +19,8 @@ type jsonObjective struct {
 	MyDepositSafetyThreshold types.Funds
 	MyDepositTarget          types.Funds
 	FullyFundedThreshold     types.Funds
-	TransactionSumbmitted    bool
 	DroppedEvent             protocols.DroppedEventInfo
+	DepositTxSubmitted       map[common.Address]bool
 }
 
 // MarshalJSON returns a JSON representation of the DirectFundObjective
@@ -33,8 +34,8 @@ func (o Objective) MarshalJSON() ([]byte, error) {
 		o.myDepositSafetyThreshold,
 		o.myDepositTarget,
 		o.fullyFundedThreshold,
-		o.transactionSubmitted,
 		o.droppedEvent,
+		o.depositTxSubmitted,
 	}
 	return json.Marshal(jsonDFO)
 }
@@ -61,7 +62,7 @@ func (o *Objective) UnmarshalJSON(data []byte) error {
 	o.fullyFundedThreshold = jsonDFO.FullyFundedThreshold
 	o.myDepositTarget = jsonDFO.MyDepositTarget
 	o.myDepositSafetyThreshold = jsonDFO.MyDepositSafetyThreshold
-	o.transactionSubmitted = jsonDFO.TransactionSumbmitted
+	o.depositTxSubmitted = jsonDFO.DepositTxSubmitted
 	o.droppedEvent = jsonDFO.DroppedEvent
 
 	return nil
