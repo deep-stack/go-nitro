@@ -132,6 +132,15 @@ const receiveVoucherSchema = {
 
 type ReceiveVoucherSchemaType = JTDDataType<typeof receiveVoucherSchema>;
 
+const getNodeInfoSchema = {
+  properties: {
+    SCAddress: { type: "string" },
+    MessageServicePeerId: { type: "string" },
+  },
+} as const;
+
+type GetNodeInfoSchemaType = JTDDataType<typeof getNodeInfoSchema>;
+
 type ResponseSchema =
   | typeof objectiveSchema
   | typeof stringSchema
@@ -142,7 +151,8 @@ type ResponseSchema =
   | typeof paymentSchema
   | typeof voucherSchema
   | typeof receiveVoucherSchema
-  | typeof counterChallengeSchema;
+  | typeof counterChallengeSchema
+  | typeof getNodeInfoSchema;
 
 type ResponseSchemaType =
   | ObjectiveSchemaType
@@ -154,7 +164,8 @@ type ResponseSchemaType =
   | PaymentSchemaType
   | VoucherSchemaType
   | ReceiveVoucherSchemaType
-  | CounterChallengeSchemaType;
+  | CounterChallengeSchemaType
+  | GetNodeInfoSchemaType;
 
 /**
  * Validates that the response is a valid JSON RPC response with a valid result
@@ -259,7 +270,12 @@ export function getAndValidateResult<T extends RequestMethod>(
           Signature: result.Signature,
         })
       );
-
+    case "get_node_info":
+      return validateAndConvertResult(
+        getNodeInfoSchema,
+        result,
+        (result: GetNodeInfoSchemaType) => result
+      );
     default:
       throw new Error(`Unknown method: ${method}`);
   }

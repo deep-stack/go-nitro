@@ -617,3 +617,8 @@ func (b *Bridge) GetPendingBridgeTxs(channelId types.Destination) []PendingTx {
 
 	return foundPendingTx
 }
+
+func (b *Bridge) GetNodeInfo() types.NodeInfo {
+	// State channel address and message service peer ID for both the L1 and L2 nodes are same because the same private key is being used for both nodes
+	return b.nodeL1.GetNodeInfo()
+}
