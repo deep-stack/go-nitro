@@ -57,6 +57,7 @@ const (
 	ObjectiveCompleted    NotificationMethod = "objective_completed"
 	LedgerChannelUpdated  NotificationMethod = "ledger_channel_updated"
 	PaymentChannelUpdated NotificationMethod = "payment_channel_updated"
+	MirrorChannelCreated  NotificationMethod = "mirror_channel_created"
 )
 
 type NotificationOrRequest interface {
@@ -160,7 +161,8 @@ type RequestPayload interface {
 type NotificationPayload interface {
 	protocols.ObjectiveId |
 		query.PaymentChannelInfo |
-		query.LedgerChannelInfo
+		query.LedgerChannelInfo |
+		types.Destination
 }
 
 type Params[T RequestPayload | NotificationPayload] struct {
@@ -200,7 +202,8 @@ type ResponsePayload interface {
 		payments.ReceiveVoucherSummary |
 		CounterChallengeRequest |
 		ValidateVoucherResponse |
-		types.NodeInfo
+		types.NodeInfo |
+		types.Destination
 }
 
 type JsonRpcSuccessResponse[T ResponsePayload] struct {

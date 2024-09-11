@@ -16,6 +16,7 @@ import (
 	"github.com/statechannels/go-nitro/node/query"
 	"github.com/statechannels/go-nitro/payments"
 	"github.com/statechannels/go-nitro/protocols"
+	"github.com/statechannels/go-nitro/protocols/bridgeddefund"
 	"github.com/statechannels/go-nitro/protocols/directdefund"
 	"github.com/statechannels/go-nitro/protocols/directfund"
 	"github.com/statechannels/go-nitro/protocols/virtualdefund"
@@ -81,12 +82,17 @@ type RpcClientApi interface {
 	PaymentChannelUpdatesChan(paymentChannelId types.Destination) <-chan query.PaymentChannelInfo
 
 	ValidateVoucher(voucherHash common.Hash, signerAddress common.Address, value uint64) (serde.ValidateVoucherResponse, error)
+
+	CloseBridgeChannel(id types.Destination) (protocols.ObjectiveId, error)
+
+	CreatedMirrorChannel() <-chan types.Destination
 }
 
 // rpcClient is the implementation
 type rpcClient struct {
 	transport             transport.Requester
 	completedObjectives   *safesync.Map[chan struct{}]
+	createdMirrorChannels chan types.Destination
 	ledgerChannelUpdates  *safesync.Map[chan query.LedgerChannelInfo]
 	paymentChannelUpdates *safesync.Map[chan query.PaymentChannelInfo]
 	cancel                context.CancelFunc
@@ -130,6 +136,8 @@ func NewRpcClient(trans transport.Requester) (RpcClientApi, error) {
 	if err != nil {
 		return nil, err
 	}
+
+	c.createdMirrorChannels = make(chan types.Destination)
 	c.routineTracker.Add(1)
 	go c.subscribeToNotifications(ctx, notificationChan)
 
@@ -235,6 +243,12 @@ func (rc *rpcClient) CloseLedgerChannel(id types.Destination, isChallenge bool) 
 	return waitForAuthorizedRequest[directdefund.ObjectiveRequest, protocols.ObjectiveId](rc, serde.CloseLedgerChannelRequestMethod, objReq)
 }
 
+func (rc *rpcClient) CloseBridgeChannel(id types.Destination) (protocols.ObjectiveId, error) {
+	objReq := bridgeddefund.NewObjectiveRequest(id)
+
+	return waitForAuthorizedRequest[bridgeddefund.ObjectiveRequest, protocols.ObjectiveId](rc, serde.CloseBridgeChannelRequestMethod, objReq)
+}
+
 // Pay uses the specified channel to pay the specified amount
 func (rc *rpcClient) Pay(id types.Destination, amount uint64) (serde.PaymentRequest, error) {
 	pReq := serde.PaymentRequest{Amount: amount, Channel: id}
@@ -289,8 +303,20 @@ func (rc *rpcClient) subscribeToNotifications(ctx context.Context, notificationC
 				}
 				c, _ := rc.paymentChannelUpdates.LoadOrStore(string(rpcRequest.Params.Payload.ID.String()), make(chan query.PaymentChannelInfo, 100))
 				c <- rpcRequest.Params.Payload
-			}
+			case serde.MirrorChannelCreated:
+				rpcRequest := serde.JsonRpcSpecificRequest[types.Destination]{}
+				err := json.Unmarshal(data, &rpcRequest)
+				rc.logger.Debug("Received notification", "method", method, "data", rpcRequest)
+				if err != nil {
+					panic(err)
+				}
 
+				// use a nonblocking send in case no one is listening
+				select {
+				case rc.createdMirrorChannels <- rpcRequest.Params.Payload:
+				default:
+				}
+			}
 		}
 	}
 }
@@ -389,4 +415,8 @@ func getNotificationMethod(raw []byte) (serde.NotificationMethod, error) {
 		return "", fmt.Errorf("method not found in notification")
 	}
 	return serde.NotificationMethod(method), nil
+}
+
+func (rc *rpcClient) CreatedMirrorChannel() <-chan types.Destination {
+	return rc.createdMirrorChannels
 }

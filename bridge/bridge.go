@@ -45,10 +45,10 @@ type L1ToL2AssetConfig struct {
 }
 
 type SentTx struct {
-	Tx           protocols.ChainTransaction `json:"tx"`
-	NumOfRetries uint                       `json:"num_of_retries"`
-	IsDropped    bool                       `json:"is_dropped"`
-	IsL2         bool                       `json:"is_l2"`
+	Tx                  protocols.ChainTransaction `json:"tx"`
+	NumOfRetries        uint                       `json:"num_of_retries"`
+	IsRetryLimitReached bool                       `json:"is_retry_limit_reached"`
+	IsL2                bool                       `json:"is_l2"`
 }
 
 type PendingTx struct {
@@ -67,11 +67,11 @@ type Bridge struct {
 	storeL2        store.Store
 	chainServiceL2 chainservice.ChainService
 
-	cancel                  context.CancelFunc
-	L1ToL2AssetAddressMap   map[common.Address]common.Address
-	mirrorChannelMap        map[types.Destination]MirrorChannelDetails
-	completedMirrorChannels chan types.Destination
-	sentTxs                 safesync.Map[SentTx]
+	cancel                context.CancelFunc
+	L1ToL2AssetAddressMap map[common.Address]common.Address
+	mirrorChannelMap      map[types.Destination]MirrorChannelDetails
+	createdMirrorChannels chan types.Destination
+	sentTxs               safesync.Map[SentTx]
 }
 
 type BridgeConfig struct {
@@ -96,9 +96,9 @@ type BridgeConfig struct {
 
 func New() *Bridge {
 	bridge := Bridge{
-		mirrorChannelMap:        make(map[types.Destination]MirrorChannelDetails),
-		L1ToL2AssetAddressMap:   make(map[common.Address]common.Address),
-		completedMirrorChannels: make(chan types.Destination),
+		mirrorChannelMap:      make(map[types.Destination]MirrorChannelDetails),
+		L1ToL2AssetAddressMap: make(map[common.Address]common.Address),
+		createdMirrorChannels: make(chan types.Destination),
 	}
 
 	return &bridge
@@ -316,7 +316,7 @@ func (b *Bridge) processCompletedObjectivesFromL2(objId protocols.ObjectiveId) e
 
 		// use a nonblocking send in case no one is listening
 		select {
-		case b.completedMirrorChannels <- l2channelId:
+		case b.createdMirrorChannels <- l2channelId:
 		default:
 		}
 
@@ -498,8 +498,8 @@ func (b *Bridge) GetAllL2Channels() ([]query.LedgerChannelInfo, error) {
 	return b.nodeL2.GetAllLedgerChannels()
 }
 
-func (b *Bridge) CompletedMirrorChannels() <-chan types.Destination {
-	return b.completedMirrorChannels
+func (b *Bridge) CreatedMirrorChannels() <-chan types.Destination {
+	return b.createdMirrorChannels
 }
 
 func (b *Bridge) RetryObjectiveTx(objectiveId protocols.ObjectiveId) error {
@@ -522,7 +522,7 @@ func (b *Bridge) RetryTx(txHash common.Hash) error {
 		return fmt.Errorf("tx with given hash %s was either complete or cannot be found", txHash)
 	}
 
-	if !txToRetry.IsDropped {
+	if !txToRetry.IsRetryLimitReached {
 		return fmt.Errorf("tx with given hash %s is pending confirmation and connot be retried", txHash)
 	}
 
@@ -587,22 +587,23 @@ func (b *Bridge) listenForDroppedEvents(ctx context.Context) {
 
 func (b *Bridge) checkAndRetryDroppedTxs(droppedEvent protocols.DroppedEventInfo, chainservice chainservice.ChainService, isL2 bool) error {
 	txToRetry, ok := b.sentTxs.Load(droppedEvent.TxHash.String())
+	if !ok {
+		return nil
+	}
 
-	if ok {
-		txToRetry.IsDropped = true
+	if txToRetry.NumOfRetries >= RETRY_TX_LIMIT {
+		txToRetry.IsRetryLimitReached = true
 		b.sentTxs.Store(droppedEvent.TxHash.String(), txToRetry)
+		return nil
 	}
 
-	if ok && txToRetry.NumOfRetries < RETRY_TX_LIMIT {
-		retriedTx, err := chainservice.SendTransaction(txToRetry.Tx)
-		if err != nil {
-			return err
-		}
-
-		b.sentTxs.Delete(droppedEvent.TxHash.String())
-		b.sentTxs.Store(retriedTx.Hash().String(), SentTx{txToRetry.Tx, txToRetry.NumOfRetries + 1, false, isL2})
+	retriedTx, err := chainservice.SendTransaction(txToRetry.Tx)
+	if err != nil {
+		return err
 	}
 
+	b.sentTxs.Delete(droppedEvent.TxHash.String())
+	b.sentTxs.Store(retriedTx.Hash().String(), SentTx{txToRetry.Tx, txToRetry.NumOfRetries + 1, false, isL2})
 	return nil
 }
 
