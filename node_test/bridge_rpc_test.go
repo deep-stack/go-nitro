@@ -128,26 +128,24 @@ func TestBridgeFlow(t *testing.T) {
 	}
 
 	nodeAChainservice, err := chainservice.NewEthChainService(chainservice.ChainOpts{
-		ChainUrl:           infraL1.anvilChain.ChainUrl,
-		ChainStartBlockNum: 0,
-		ChainAuthToken:     infraL1.anvilChain.ChainAuthToken,
-		NaAddress:          infraL1.anvilChain.ContractAddresses.NaAddress,
-		VpaAddress:         infraL1.anvilChain.ContractAddresses.VpaAddress,
-		CaAddress:          infraL1.anvilChain.ContractAddresses.CaAddress,
-		ChainPk:            infraL1.anvilChain.ChainPks[tcL1.Participants[0].ChainAccountIndex],
+		ChainUrl:       infraL1.anvilChain.ChainUrl,
+		ChainAuthToken: infraL1.anvilChain.ChainAuthToken,
+		NaAddress:      infraL1.anvilChain.ContractAddresses.NaAddress,
+		VpaAddress:     infraL1.anvilChain.ContractAddresses.VpaAddress,
+		CaAddress:      infraL1.anvilChain.ContractAddresses.CaAddress,
+		ChainPk:        infraL1.anvilChain.ChainPks[tcL1.Participants[0].ChainAccountIndex],
 	})
 	if err != nil {
 		panic(err)
 	}
 
 	nodeAPrimeChainservice, err := chainservice.NewL2ChainService(chainservice.L2ChainOpts{
-		ChainUrl:           infraL2.anvilChain.ChainUrl,
-		ChainStartBlockNum: 0,
-		ChainAuthToken:     infraL2.anvilChain.ChainAuthToken,
-		BridgeAddress:      infraL2.anvilChain.ContractAddresses.BridgeAddress,
-		CaAddress:          infraL2.anvilChain.ContractAddresses.CaAddress,
-		VpaAddress:         infraL2.anvilChain.ContractAddresses.VpaAddress,
-		ChainPk:            infraL2.anvilChain.ChainPks[tcL2.Participants[0].ChainAccountIndex],
+		ChainUrl:       infraL2.anvilChain.ChainUrl,
+		ChainAuthToken: infraL2.anvilChain.ChainAuthToken,
+		BridgeAddress:  infraL2.anvilChain.ContractAddresses.BridgeAddress,
+		CaAddress:      infraL2.anvilChain.ContractAddresses.CaAddress,
+		VpaAddress:     infraL2.anvilChain.ContractAddresses.VpaAddress,
+		ChainPk:        infraL2.anvilChain.ChainPks[tcL2.Participants[0].ChainAccountIndex],
 	})
 	if err != nil {
 		panic(err)

@@ -168,7 +168,12 @@ func newEthChainService(chain ethChain, startBlockNum uint64, na *NitroAdjudicat
 
 	logger := logging.LoggerWithAddress(slog.Default(), txSigner.From)
 
-	block, err := chain.BlockByNumber(ctx, new(big.Int).SetUint64(startBlockNum))
+	var startBlockNumber *big.Int
+	if startBlockNum != 0 {
+		startBlockNumber = new(big.Int).SetUint64(startBlockNum)
+	}
+
+	block, err := chain.BlockByNumber(ctx, startBlockNumber)
 	if err != nil {
 		cancelCtx()
 		return nil, err

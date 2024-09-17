@@ -106,21 +106,19 @@ func New() *Bridge {
 
 func (b *Bridge) Start(configOpts BridgeConfig) (nodeL1 *node.Node, nodeL2 *node.Node, nodeL1MultiAddress string, nodeL2MultiAddress string, err error) {
 	chainOptsL1 := chainservice.ChainOpts{
-		ChainUrl:           configOpts.L1ChainUrl,
-		ChainStartBlockNum: configOpts.L1ChainStartBlock,
-		ChainPk:            configOpts.ChainPK,
-		NaAddress:          common.HexToAddress(configOpts.NaAddress),
-		VpaAddress:         common.HexToAddress(configOpts.VpaAddress),
-		CaAddress:          common.HexToAddress(configOpts.CaAddress),
+		ChainUrl:   configOpts.L1ChainUrl,
+		ChainPk:    configOpts.ChainPK,
+		NaAddress:  common.HexToAddress(configOpts.NaAddress),
+		VpaAddress: common.HexToAddress(configOpts.VpaAddress),
+		CaAddress:  common.HexToAddress(configOpts.CaAddress),
 	}
 
 	chainOptsL2 := chainservice.L2ChainOpts{
-		ChainUrl:           configOpts.L2ChainUrl,
-		ChainStartBlockNum: configOpts.L2ChainStartBlock,
-		ChainPk:            configOpts.ChainPK,
-		BridgeAddress:      common.HexToAddress(configOpts.BridgeAddress),
-		VpaAddress:         common.HexToAddress(configOpts.VpaAddress),
-		CaAddress:          common.HexToAddress(configOpts.CaAddress),
+		ChainUrl:      configOpts.L2ChainUrl,
+		ChainPk:       configOpts.ChainPK,
+		BridgeAddress: common.HexToAddress(configOpts.BridgeAddress),
+		VpaAddress:    common.HexToAddress(configOpts.VpaAddress),
+		CaAddress:     common.HexToAddress(configOpts.CaAddress),
 	}
 
 	storeOptsL1 := store.StoreOpts{

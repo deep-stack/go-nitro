@@ -21,15 +21,11 @@ func InitializeNode(chainOpts chainservice.ChainOpts, storeOpts store.StoreOpts,
 	messageOpts.SCAddr = *ourStore.GetAddress()
 	messageService := p2pms.NewMessageService(messageOpts)
 
-	// Compare chainOpts.ChainStartBlock to lastBlockNum seen in store. The larger of the two
-	// gets passed as an argument when creating NewEthChainService
 	storeBlockNum, err := ourStore.GetLastBlockNumSeen()
 	if err != nil {
 		return nil, nil, nil, nil, err
 	}
-	if storeBlockNum > chainOpts.ChainStartBlockNum {
-		chainOpts.ChainStartBlockNum = storeBlockNum
-	}
+	chainOpts.ChainStartBlockNum = storeBlockNum
 
 	slog.Info("Initializing chain service...")
 	ourChain, err := chainservice.NewEthChainService(chainOpts)

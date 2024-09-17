@@ -97,13 +97,12 @@ func setupChainService(tc TestCase, tp TestParticipant, si sharedTestInfrastruct
 		return cs
 	case AnvilChainL1:
 		cs, err := chainservice.NewEthChainService(chainservice.ChainOpts{
-			ChainUrl:           si.anvilChain.ChainUrl,
-			ChainStartBlockNum: 0,
-			ChainAuthToken:     si.anvilChain.ChainAuthToken,
-			NaAddress:          si.anvilChain.ContractAddresses.NaAddress,
-			VpaAddress:         si.anvilChain.ContractAddresses.VpaAddress,
-			CaAddress:          si.anvilChain.ContractAddresses.CaAddress,
-			ChainPk:            si.anvilChain.ChainPks[tp.ChainAccountIndex],
+			ChainUrl:       si.anvilChain.ChainUrl,
+			ChainAuthToken: si.anvilChain.ChainAuthToken,
+			NaAddress:      si.anvilChain.ContractAddresses.NaAddress,
+			VpaAddress:     si.anvilChain.ContractAddresses.VpaAddress,
+			CaAddress:      si.anvilChain.ContractAddresses.CaAddress,
+			ChainPk:        si.anvilChain.ChainPks[tp.ChainAccountIndex],
 		})
 		if err != nil {
 			panic(err)
@@ -111,13 +110,12 @@ func setupChainService(tc TestCase, tp TestParticipant, si sharedTestInfrastruct
 		return cs
 	case AnvilChainL2:
 		cs, err := chainservice.NewL2ChainService(chainservice.L2ChainOpts{
-			ChainUrl:           si.anvilChain.ChainUrl,
-			ChainStartBlockNum: 0,
-			ChainAuthToken:     si.anvilChain.ChainAuthToken,
-			BridgeAddress:      si.anvilChain.ContractAddresses.BridgeAddress,
-			CaAddress:          si.anvilChain.ContractAddresses.CaAddress,
-			VpaAddress:         si.anvilChain.ContractAddresses.VpaAddress,
-			ChainPk:            si.anvilChain.ChainPks[tp.ChainAccountIndex],
+			ChainUrl:       si.anvilChain.ChainUrl,
+			ChainAuthToken: si.anvilChain.ChainAuthToken,
+			BridgeAddress:  si.anvilChain.ContractAddresses.BridgeAddress,
+			CaAddress:      si.anvilChain.ContractAddresses.CaAddress,
+			VpaAddress:     si.anvilChain.ContractAddresses.VpaAddress,
+			ChainPk:        si.anvilChain.ChainPks[tp.ChainAccountIndex],
 		})
 		if err != nil {
 			panic(err)

@@ -33,7 +33,6 @@ func main() {
 		CONNECTIVITY_CATEGORY = "Connectivity:"
 		USE_NATS              = "usenats"
 		CHAIN_URL             = "chainurl"
-		CHAIN_START_BLOCK     = "chainstartblock"
 		CHAIN_AUTH_TOKEN      = "chainauthtoken"
 		NA_ADDRESS            = "naaddress"
 		VPA_ADDRESS           = "vpaaddress"
@@ -65,7 +64,6 @@ func main() {
 	)
 	var pkString, chainUrl, chainAuthToken, naAddress, vpaAddress, caAddress, bridgeAddress, chainPk, durableStoreFolder, bootPeers, publicIp, extMultiAddr string
 	var msgPort, wsMsgPort, rpcPort, guiPort int
-	var chainStartBlock uint64
 	var useNats, useDurableStore, l2 bool
 
 	var tlsCertFilepath, tlsKeyFilepath string
@@ -133,14 +131,6 @@ func main() {
 			Category:    KEYS_CATEGORY,
 			Destination: &chainPk,
 			EnvVars:     []string{"CHAIN_PK"},
-		}),
-		altsrc.NewUint64Flag(&cli.Uint64Flag{
-			Name:        CHAIN_START_BLOCK,
-			Usage:       "Specifies the block number to start looking for nitro adjudicator events.",
-			Value:       0,
-			Category:    CONNECTIVITY_CATEGORY,
-			Destination: &chainStartBlock,
-			EnvVars:     []string{"CHAIN_START_BLOCK"},
 		}),
 		altsrc.NewStringFlag(&cli.StringFlag{
 			Name:        NA_ADDRESS,
@@ -271,25 +261,23 @@ func main() {
 			var err error
 			if l2 {
 				chainOpts := chainservice.L2ChainOpts{
-					ChainUrl:           chainUrl,
-					ChainStartBlockNum: chainStartBlock,
-					ChainAuthToken:     chainAuthToken,
-					ChainPk:            chainPk,
-					BridgeAddress:      common.HexToAddress(bridgeAddress),
-					VpaAddress:         common.HexToAddress(vpaAddress),
-					CaAddress:          common.HexToAddress(caAddress),
+					ChainUrl:       chainUrl,
+					ChainAuthToken: chainAuthToken,
+					ChainPk:        chainPk,
+					BridgeAddress:  common.HexToAddress(bridgeAddress),
+					VpaAddress:     common.HexToAddress(vpaAddress),
+					CaAddress:      common.HexToAddress(caAddress),
 				}
 
 				node, _, _, _, err = nodeUtils.InitializeL2Node(chainOpts, storeOpts, messageOpts)
 			} else {
 				chainOpts := chainservice.ChainOpts{
-					ChainUrl:           chainUrl,
-					ChainStartBlockNum: chainStartBlock,
-					ChainAuthToken:     chainAuthToken,
-					ChainPk:            chainPk,
-					NaAddress:          common.HexToAddress(naAddress),
-					VpaAddress:         common.HexToAddress(vpaAddress),
-					CaAddress:          common.HexToAddress(caAddress),
+					ChainUrl:       chainUrl,
+					ChainAuthToken: chainAuthToken,
+					ChainPk:        chainPk,
+					NaAddress:      common.HexToAddress(naAddress),
+					VpaAddress:     common.HexToAddress(vpaAddress),
+					CaAddress:      common.HexToAddress(caAddress),
 				}
 
 				node, _, _, _, err = nodeUtils.InitializeNode(chainOpts, storeOpts, messageOpts, &engine.PermissivePolicy{})

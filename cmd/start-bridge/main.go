@@ -23,9 +23,6 @@ const (
 	L1_CHAIN_URL = "l1chainurl"
 	L2_CHAIN_URL = "l2chainurl"
 
-	L1_CHAIN_START_BLOCK = "l1chainstartblock"
-	L2_CHAIN_START_BLOCK = "l2chainstartblock"
-
 	CHAIN_PK         = "chainpk"
 	STATE_CHANNEL_PK = "statechannelpk"
 
@@ -59,7 +56,6 @@ const (
 func main() {
 	var l1chainurl, l2chainurl, chainpk, statechannelpk, naaddress, vpaaddress, caaddress, bridgeaddress, durableStoreDir, bridgepublicip, nodel1ExtMultiAddr, nodel2ExtMultiAddr string
 	var nodel1msgport, nodel2msgport, rpcport int
-	var l1chainstartblock, l2chainstartblock uint64
 
 	var tlscertfilepath, tlskeyfilepath string
 
@@ -167,18 +163,6 @@ func main() {
 			Value:       4007,
 			Destination: &rpcport,
 		}),
-		altsrc.NewUint64Flag(&cli.Uint64Flag{
-			Name:        L1_CHAIN_START_BLOCK,
-			Usage:       "Specifies the block number to start looking for nitro adjudicator events of nodeL1",
-			Value:       0,
-			Destination: &l1chainstartblock,
-		}),
-		altsrc.NewUint64Flag(&cli.Uint64Flag{
-			Name:        L2_CHAIN_START_BLOCK,
-			Usage:       "Specifies the block number to start looking for nitro adjudicator events of nodeL1",
-			Value:       0,
-			Destination: &l2chainstartblock,
-		}),
 		altsrc.NewStringFlag(&cli.StringFlag{
 			Name:        TLS_CERT_FILEPATH,
 			Usage:       "Filepath to the TLS certificate. If not specified, TLS will not be used with the RPC transport.",
@@ -227,8 +211,6 @@ func main() {
 			bridgeConfig := bridge.BridgeConfig{
 				L1ChainUrl:         l1chainurl,
 				L2ChainUrl:         l2chainurl,
-				L1ChainStartBlock:  l1chainstartblock,
-				L2ChainStartBlock:  l2chainstartblock,
 				ChainPK:            chainpk,
 				StateChannelPK:     statechannelpk,
 				NaAddress:          naaddress,
