@@ -29,7 +29,10 @@ const (
 	SignedStatePayload protocols.PayloadType = "SignedStatePayload"
 )
 
-var ErrUpdatingLedgerFunding = errors.New("error updating ledger funding")
+var (
+	ErrUpdatingLedgerFunding = errors.New("error updating ledger funding")
+	ErrLedgerChannelNotFound = errors.New("could not find a ledger channel")
+)
 
 const ObjectivePrefix = "VirtualFund-"
 
@@ -585,7 +588,7 @@ func ConstructObjectiveFromPayload(
 		leftOfBob := participants[len(participants)-2]
 		leftC, ok = getTwoPartyConsensusLedger(leftOfBob)
 		if !ok {
-			return Objective{}, fmt.Errorf("could not find a left ledger channel between %v and %v", leftOfBob, myAddress)
+			return Objective{}, fmt.Errorf("%w between %v and %v", ErrLedgerChannelNotFound, leftOfBob, myAddress)
 		}
 
 	} else {
@@ -603,12 +606,12 @@ func ConstructObjectiveFromPayload(
 
 				leftC, ok = getTwoPartyConsensusLedger(leftOfMe)
 				if !ok {
-					return Objective{}, fmt.Errorf("could not find a left ledger channel between %v and %v", leftOfMe, myAddress)
+					return Objective{}, fmt.Errorf("%w between %v and %v", ErrLedgerChannelNotFound, leftOfMe, myAddress)
 				}
 
 				rightC, ok = getTwoPartyConsensusLedger(rightOfMe)
 				if !ok {
-					return Objective{}, fmt.Errorf("could not find a right ledger channel between %v and %v", myAddress, rightOfMe)
+					return Objective{}, fmt.Errorf("%w between %v and %v", ErrLedgerChannelNotFound, myAddress, rightOfMe)
 				}
 
 				break

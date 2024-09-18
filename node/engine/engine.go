@@ -64,6 +64,7 @@ var nonFatalErrors = []error{
 	store.ErrLoadVouchers,
 	directfund.ErrLedgerChannelExists,
 	virtualfund.ErrUpdatingLedgerFunding,
+	virtualfund.ErrLedgerChannelNotFound,
 	errEmptyDroppedEvent,
 }
 
