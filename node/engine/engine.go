@@ -1027,6 +1027,9 @@ func (e *Engine) generateNotifications(o protocols.Objective) (EngineEvent, erro
 				return outgoing, err
 			}
 			outgoing.LedgerChannelUpdates = append(outgoing.LedgerChannelUpdates, l)
+		case *channel.SwapChannel:
+			// TODO: Add notification for swap channel
+			// TODO: Implement query swap channel info
 		default:
 			return outgoing, fmt.Errorf("handleNotifications: Unknown related type %T", c)
 		}
@@ -1046,7 +1049,6 @@ func (e Engine) registerPaymentChannel(vfo virtualfund.Objective) error {
 func (e Engine) registerSwapChannel(sfo swapfund.Objective) error {
 	// TODO: Add function to register swap channel
 	// TODO: Add swapManager similar to voucher mananger
-	fmt.Println("Test swapfund objective", sfo)
 	return nil
 }
 
