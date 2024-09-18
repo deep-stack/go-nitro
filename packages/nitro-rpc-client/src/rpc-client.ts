@@ -19,12 +19,14 @@ import {
   ObjectiveCompleteNotification,
   MirrorBridgedDefundObjectiveRequest,
   GetNodeInfo,
+  AssetData,
 } from "./types";
 import { Transport } from "./transport";
 import { createOutcome, generateRequest } from "./utils";
 import { HttpTransport } from "./transport/http";
 import { getAndValidateResult } from "./serde";
 import { RpcClientApi } from "./interface";
+import { ZERO_ETHEREUM_ADDRESS } from "./constants";
 
 export class NitroRpcClient implements RpcClientApi {
   private transport: Transport;
@@ -139,22 +141,14 @@ export class NitroRpcClient implements RpcClientApi {
 
   public async CreateLedgerChannel(
     counterParty: string,
-    assetAddress: string,
-    alphaAmount: number,
-    betaAmount: number,
+    assetsData: AssetData[],
     challengeDuration: number
   ): Promise<ObjectiveResponse> {
     const payload: DirectFundPayload = {
       CounterParty: counterParty,
       ChallengeDuration: challengeDuration,
-      Outcome: createOutcome(
-        assetAddress,
-        await this.GetAddress(),
-        counterParty,
-        alphaAmount,
-        betaAmount
-      ),
-      AppDefinition: assetAddress,
+      Outcome: createOutcome(await this.GetAddress(), counterParty, assetsData),
+      AppDefinition: ZERO_ETHEREUM_ADDRESS,
       AppData: "0x00",
       Nonce: Date.now(),
     };
@@ -179,14 +173,14 @@ export class NitroRpcClient implements RpcClientApi {
       CounterParty: counterParty,
       Intermediaries: intermediaries,
       ChallengeDuration: 0,
-      Outcome: createOutcome(
-        asset,
-        await this.GetAddress(),
-        counterParty,
-        amount,
-        // As payment channel is simplex, only alpha node can pay beta node and not vice-versa hence beta node's allocation amount is 0
-        0
-      ),
+      Outcome: createOutcome(await this.GetAddress(), counterParty, [
+        {
+          assetAddress: asset,
+          alphaAmount: amount,
+          // As payment channel is simplex, only alpha node can pay beta node and not vice-versa hence beta node's allocation amount is 0
+          betaAmount: 0,
+        },
+      ]),
       AppDefinition: asset,
       Nonce: Date.now(),
     };

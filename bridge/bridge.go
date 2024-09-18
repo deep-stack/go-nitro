@@ -270,7 +270,8 @@ func (b *Bridge) processCompletedObjectivesFromL1(objId protocols.ObjectiveId) e
 	}
 
 	// Create mirrored ledger channel between node BPrime and APrime
-	l2LedgerChannelResponse, err := b.nodeL2.CreateBridgeChannel(l1ledgerChannelStateClone.State().Participants[0], l1ledgerChannelStateClone.State().ChallengeDuration, l2ChannelOutcome)
+	// TODO: Support mirrored ledger channel creation with multiple assets
+	l2LedgerChannelResponse, err := b.nodeL2.CreateBridgeChannel(l1ledgerChannelStateClone.State().Participants[0], l1ledgerChannelStateClone.State().ChallengeDuration, l2ChannelOutcome[:1])
 	if err != nil {
 		return err
 	}
@@ -372,7 +373,8 @@ func (b *Bridge) processCompletedObjectivesFromL2(objId protocols.ObjectiveId) e
 // Get update mirror channel state transaction from given consensus channel
 func (b *Bridge) getUpdateMirrorChannelStateTransaction(con *consensus_channel.ConsensusChannel) (protocols.ChainTransaction, error) {
 	// Get latest outcome bytes
-	ledgerOutcome := con.ConsensusVars().Outcome
+	// TODO: Support mirrored channels with multiple assets
+	ledgerOutcome := con.ConsensusVars().Outcome[0]
 	outcome := ledgerOutcome.AsOutcome()
 	outcomeByte, err := outcome.Encode()
 	if err != nil {

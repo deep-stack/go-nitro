@@ -18,7 +18,7 @@ const (
 )
 
 // NewFollowerChannel constructs a new FollowerChannel
-func NewFollowerChannel(fp state.FixedPart, turnNum uint64, outcome LedgerOutcome, signatures [2]state.Signature) (ConsensusChannel, error) {
+func NewFollowerChannel(fp state.FixedPart, turnNum uint64, outcome LedgerOutcomes, signatures [2]state.Signature) (ConsensusChannel, error) {
 	return newConsensusChannel(fp, Follower, turnNum, outcome, signatures)
 }
 

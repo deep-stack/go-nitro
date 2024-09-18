@@ -63,7 +63,7 @@ func TestLeaderChannel(t *testing.T) {
 	}
 
 	cId := fp().ChannelId()
-	testChannel := func(lo LedgerOutcome, testProposalQueue []SignedProposalVars) ConsensusChannel {
+	testChannel := func(lo LedgerOutcomes, testProposalQueue []SignedProposalVars) ConsensusChannel {
 		vars := Vars{TurnNum: 0, Outcome: lo}
 		aliceSig, _ := vars.AsState(fp()).Sign(alice.PrivateKey)
 		bobsSig, _ := vars.AsState(fp()).Sign(bob.PrivateKey)
@@ -151,7 +151,7 @@ func TestLeaderChannel(t *testing.T) {
 					remove := proposal.ToRemove
 					vars, _ := channel.latestProposedVars()
 
-					for target := range vars.Outcome.guarantees {
+					for target := range vars.Outcome[0].guarantees {
 						if target == remove.Target {
 							t.Fatalf("guarantee still present in proposal for target %s", remove.Target)
 						}
@@ -184,11 +184,11 @@ func TestLeaderChannel(t *testing.T) {
 
 	{
 		msg := "ok:adding with an empty queue"
-		startingOutcome := makeOutcome(
+		startingOutcome := LedgerOutcomes{makeOutcome(
 			allocation(alice, aBal-amountAdded),
 			allocation(bob, bBal),
 			guarantee(vAmount, channel1Id, alice, bob),
-		)
+		)}
 		c := testChannel(startingOutcome, emptyQueue())
 		proposalMade := createAdd(cId, targetChannel)
 
@@ -198,11 +198,11 @@ func TestLeaderChannel(t *testing.T) {
 
 	{
 		msg := "ok:adding with a non-empty queue"
-		startingOutcome := makeOutcome(
+		startingOutcome := LedgerOutcomes{makeOutcome(
 			allocation(alice, aBal-amountAdded),
 			allocation(bob, bBal),
 			guarantee(vAmount, channel1Id, alice, bob),
-		)
+		)}
 
 		p1 := createAdd(cId, types.Destination{2})
 		sp1 := aliceSignedProposal(Vars{TurnNum: 1, Outcome: startingOutcome}, p1, 1)
@@ -219,11 +219,11 @@ func TestLeaderChannel(t *testing.T) {
 	}
 	{
 		msg := "ok:adding a remove proposal"
-		startingOutcome := makeOutcome(
+		startingOutcome := LedgerOutcomes{makeOutcome(
 			allocation(alice, aBal),
 			allocation(bob, bBal),
 			guarantee(amountAdded, channel1Id, alice, bob),
-		)
+		)}
 
 		c := testChannel(startingOutcome, emptyQueue())
 
@@ -236,10 +236,10 @@ func TestLeaderChannel(t *testing.T) {
 	}
 	{
 		msg := "err:adding a remove proposal with invalid target"
-		startingOutcome := makeOutcome(
+		startingOutcome := LedgerOutcomes{makeOutcome(
 			allocation(alice, aBal),
 			allocation(bob, bBal),
-		)
+		)}
 
 		c := testChannel(startingOutcome, emptyQueue())
 
@@ -249,11 +249,11 @@ func TestLeaderChannel(t *testing.T) {
 	}
 	{
 		msg := "err:adding a remove proposal with too large left/right amounts"
-		startingOutcome := makeOutcome(
+		startingOutcome := LedgerOutcomes{makeOutcome(
 			allocation(alice, aBal),
 			allocation(bob, bBal),
 			guarantee(amountAdded, channel1Id, alice, bob),
-		)
+		)}
 
 		c := testChannel(startingOutcome, emptyQueue())
 
@@ -265,11 +265,11 @@ func TestLeaderChannel(t *testing.T) {
 
 	{
 		msg := "err:adding a duplicate proposal"
-		startingOutcome := makeOutcome(
+		startingOutcome := LedgerOutcomes{makeOutcome(
 			allocation(alice, aBal-amountAdded),
 			allocation(bob, bBal),
 			guarantee(vAmount, channel1Id, alice, bob),
-		)
+		)}
 
 		proposedChan := types.Destination{2}
 		p1 := createAdd(cId, proposedChan)
@@ -286,10 +286,10 @@ func TestLeaderChannel(t *testing.T) {
 
 	{
 		msg := "err:overspending"
-		startingOutcome := makeOutcome(
+		startingOutcome := LedgerOutcomes{makeOutcome(
 			allocation(alice, 0),
 			allocation(bob, bBal),
-		)
+		)}
 
 		proposedChan := types.Destination{2}
 
@@ -303,10 +303,10 @@ func TestLeaderChannel(t *testing.T) {
 	// // UpdateConsensus //
 	// // *************** //
 
-	startingOutcome := makeOutcome(
+	startingOutcome := LedgerOutcomes{makeOutcome(
 		allocation(alice, aBal-amountAdded),
 		allocation(bob, bBal),
-	)
+	)}
 
 	const consensusTurnNum = uint64(0)
 
@@ -360,7 +360,7 @@ func TestLeaderChannel(t *testing.T) {
 			case RemoveProposal:
 				{
 					r := counterProposal.Proposal.ToRemove
-					_, foundGuarantee := channel.current.Outcome.guarantees[r.Target]
+					_, foundGuarantee := channel.current.Outcome[0].guarantees[r.Target]
 					if foundGuarantee {
 						t.Fatalf("failed to remove guarantee given successful counterproposal")
 					}

@@ -17,12 +17,12 @@ func TestConsensusChannel(t *testing.T) {
 
 	proposal := add(vAmount, targetChannel, alice, bob)
 
-	outcome := func() LedgerOutcome {
-		return makeOutcome(
+	outcome := func() LedgerOutcomes {
+		return LedgerOutcomes{makeOutcome(
 			allocation(alice, aBal),
 			allocation(bob, bBal),
 			guarantee(vAmount, existingChannel, alice, bob),
-		)
+		)}
 	}
 
 	fingerprint := func(v Vars) string {
@@ -36,9 +36,10 @@ func TestConsensusChannel(t *testing.T) {
 	vars := Vars{TurnNum: 9, Outcome: outcome()}
 
 	f1 := fingerprint(vars)
-	clone1 := vars.Outcome.clone()
+	// Assume only one asset
+	clone1 := vars.Outcome[0].clone()
 
-	if fingerprint(Vars{TurnNum: vars.TurnNum, Outcome: clone1}) != f1 {
+	if fingerprint(Vars{TurnNum: vars.TurnNum, Outcome: LedgerOutcomes{clone1}}) != f1 {
 		t.Fatal("vars incorrectly cloned")
 	}
 
@@ -48,13 +49,13 @@ func TestConsensusChannel(t *testing.T) {
 		t.Fatal("vars shares data with clone")
 	}
 
-	clone2 := vars.Outcome.clone()
+	clone2 := vars.Outcome[0].clone()
 	clone2.leader.amount.SetInt64(111)
 	if f1 != fingerprint(vars) {
 		t.Fatal("vars shares data with clone")
 	}
 
-	clone3 := vars.Outcome.clone()
+	clone3 := vars.Outcome[0].clone()
 	clone3.follower.amount.SetInt64(111)
 	if f1 != fingerprint(vars) {
 		t.Fatal("vars shares data with clone")
@@ -95,7 +96,7 @@ func TestConsensusChannel(t *testing.T) {
 		// Proposing a change that depletes a balance should fail
 		vars = Vars{TurnNum: startingTurnNum, Outcome: outcome()}
 		largeProposal := proposal
-		leftAmount := big.NewInt(0).Set(vars.Outcome.leader.amount)
+		leftAmount := big.NewInt(0).Set(vars.Outcome[0].leader.amount)
 		largeProposal.amount = leftAmount.Add(leftAmount, big.NewInt(1))
 		largeProposal.LeftDeposit = largeProposal.amount
 		err = vars.Add(largeProposal)
@@ -173,7 +174,7 @@ func TestConsensusChannel(t *testing.T) {
 			t.Fatalf("latest proposed vars returned err: %v", err)
 		}
 
-		latest.Outcome.guarantees[targetChannel] = guarantee(10, targetChannel, alice, bob)
+		latest.Outcome[0].guarantees[targetChannel] = guarantee(10, targetChannel, alice, bob)
 		if f != fingerprint(channel.current.Vars) {
 			t.Fatalf("latestProposedVars did not return a copy")
 		}

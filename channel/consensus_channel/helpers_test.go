@@ -59,12 +59,12 @@ func makeOutcome(leader, follower Balance, guarantees ...Guarantee) LedgerOutcom
 //   - alice: 200,
 //   - bob: 300,
 //   - guarantee(target: 1, left: alice, right: bob, amount: 5)
-func ledgerOutcome() LedgerOutcome {
-	return makeOutcome(
+func ledgerOutcome() LedgerOutcomes {
+	return LedgerOutcomes{makeOutcome(
 		allocation(alice, aBal),
 		allocation(bob, bBal),
 		guarantee(vAmount, channel1Id, alice, bob),
-	)
+	)}
 }
 
 func add(amount uint64, vId types.Destination, left, right testactors.Actor) Add {

@@ -56,7 +56,7 @@ func newConsensusChannel(
 	fp state.FixedPart,
 	myIndex ledgerIndex,
 	initialTurnNum uint64,
-	outcome LedgerOutcome,
+	outcome LedgerOutcomes,
 	signatures [2]state.Signature,
 ) (ConsensusChannel, error) {
 	err := fp.Validate()
@@ -163,7 +163,7 @@ func (c *ConsensusChannel) Includes(g Guarantee) bool {
 // IncludesTarget returns whether or not the consensus state includes a guarantee
 // addressed to the given target.
 func (c *ConsensusChannel) IncludesTarget(target types.Destination) bool {
-	return c.current.Outcome.IncludesTarget(target)
+	return c.current.Outcome.includesTarget(target)
 }
 
 // HasRemovalBeenProposed returns whether or not a proposal exists to remove the guarantee for the target.
@@ -398,17 +398,17 @@ func (lo *LedgerOutcome) Follower() Balance {
 }
 
 // NewLedgerOutcome creates a new ledger outcome with the given asset address, balances, and guarantees.
-func NewLedgerOutcome(assetAddress types.Address, leader, follower Balance, guarantees []Guarantee) *LedgerOutcome {
+func NewLedgerOutcome(assetAddress types.Address, leader, follower Balance, guarantees []Guarantee) *LedgerOutcomes {
 	guaranteeMap := make(map[types.Destination]Guarantee, len(guarantees))
 	for _, g := range guarantees {
 		guaranteeMap[g.target] = g
 	}
-	return &LedgerOutcome{
+	return &LedgerOutcomes{{
 		assetAddress: assetAddress,
 		leader:       leader,
 		follower:     follower,
 		guarantees:   guaranteeMap,
-	}
+	}}
 }
 
 // IncludesTarget returns true when the receiver includes a guarantee that targets the given destination.
@@ -430,13 +430,13 @@ func (o *LedgerOutcome) includes(g Guarantee) bool {
 		types.Equal(existing.amount, g.amount)
 }
 
-// FromExit creates a new LedgerOutcome from the given SingleAssetExit.
+// FromSingleAssetExit creates a new LedgerOutcome from the given SingleAssetExit.
 //
 // It makes the following assumptions about the exit:
 //   - The first allocation entry is for the ledger leader
 //   - The second allocation entry is for the ledger follower
 //   - All other allocations are guarantees
-func FromExit(sae outcome.SingleAssetExit) (LedgerOutcome, error) {
+func FromSingleAssetExit(sae outcome.SingleAssetExit) (LedgerOutcome, error) {
 	var (
 		leader     = Balance{destination: sae.Allocations[0].Destination, amount: sae.Allocations[0].Amount}
 		follower   = Balance{destination: sae.Allocations[1].Destination, amount: sae.Allocations[1].Amount}
@@ -461,6 +461,21 @@ func FromExit(sae outcome.SingleAssetExit) (LedgerOutcome, error) {
 	}
 
 	return LedgerOutcome{leader: leader, follower: follower, guarantees: guarantees, assetAddress: sae.Asset}, nil
+}
+
+func FromExit(assetExit outcome.Exit) (LedgerOutcomes, error) {
+	var outcomes LedgerOutcomes
+
+	for _, sae := range assetExit {
+		outcome, err := FromSingleAssetExit(sae)
+		if err != nil {
+			return LedgerOutcomes{}, fmt.Errorf("could not create ledger outcome from channel exit: %w", err)
+		}
+
+		outcomes = append(outcomes, outcome)
+	}
+
+	return outcomes, nil
 }
 
 // AsOutcome converts a LedgerOutcome to an on-chain exit according to the following convention:
@@ -506,14 +521,16 @@ func (o LedgerOutcome) FundingTargets() []types.Destination {
 // Vars stores the turn number and outcome for a state in a consensus channel.
 type Vars struct {
 	TurnNum uint64
-	Outcome LedgerOutcome
+	Outcome LedgerOutcomes
 }
 
 // Clone returns a deep copy of the receiver.
 func (v *Vars) Clone() Vars {
+	outcomeArr := v.Outcome.clone()
+
 	return Vars{
 		v.TurnNum,
-		v.Outcome.Clone(),
+		outcomeArr,
 	}
 }
 
@@ -544,6 +561,65 @@ func (o *LedgerOutcome) clone() LedgerOutcome {
 		follower:     follower,
 		guarantees:   guarantees,
 	}
+}
+
+type LedgerOutcomes []LedgerOutcome
+
+func (lo *LedgerOutcomes) clone() LedgerOutcomes {
+	var clonedOutcomes LedgerOutcomes
+
+	for _, o := range *lo {
+		clonedOutcomes = append(clonedOutcomes, o.clone())
+	}
+
+	return clonedOutcomes
+}
+
+func (lo *LedgerOutcomes) includes(g Guarantee) bool {
+	isGuaranteeIncluded := false
+
+	for _, o := range *lo {
+		if o.includes(g) {
+			isGuaranteeIncluded = true
+			break
+		}
+	}
+
+	return isGuaranteeIncluded
+}
+
+func (lo *LedgerOutcomes) includesTarget(target types.Destination) bool {
+	isTargetIncluded := false
+
+	for _, o := range *lo {
+		if o.IncludesTarget(target) {
+			isTargetIncluded = true
+			break
+		}
+	}
+
+	return isTargetIncluded
+}
+
+func (lo LedgerOutcomes) FundingTargets() []types.Destination {
+	var fundingTargets []types.Destination
+
+	for _, o := range lo {
+		f := o.FundingTargets()
+		fundingTargets = append(fundingTargets, f...)
+	}
+
+	return fundingTargets
+}
+
+func (lo *LedgerOutcomes) asOutcome() outcome.Exit {
+	var outcome outcome.Exit
+	for _, o := range *lo {
+		outcomeExit := o.AsOutcome()
+		outcome = append(outcome, outcomeExit...)
+	}
+
+	return outcome
 }
 
 // SignedVars stores 0-2 signatures for some vars in a consensus channel.
@@ -741,9 +817,10 @@ func (vars *Vars) HandleProposal(p Proposal) error {
 //   - the guarantee is already included in vars.Outcome
 //
 // If an error is returned, the original vars is not mutated.
+// TODO: Pass `assetIndex` argument to select asset used for guarantee
 func (vars *Vars) Add(p Add) error {
 	// CHECKS
-	o := vars.Outcome
+	o := vars.Outcome[0]
 
 	_, found := o.guarantees[p.target]
 	if found {
@@ -808,7 +885,7 @@ func (vars *Vars) Add(p Add) error {
 func (vars *Vars) Remove(p Remove) error {
 	// CHECKS
 
-	o := vars.Outcome
+	o := vars.Outcome[0]
 
 	guarantee, found := o.guarantees[p.Target]
 	if !found {
@@ -863,7 +940,8 @@ func (r *Remove) Clone() Remove {
 }
 
 func (v Vars) AsState(fp state.FixedPart) state.State {
-	outcome := v.Outcome.AsOutcome()
+	outcome := v.Outcome.asOutcome()
+
 	return state.State{
 		// Variable
 		TurnNum: v.TurnNum,
