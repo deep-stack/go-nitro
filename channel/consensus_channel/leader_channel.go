@@ -34,8 +34,10 @@ func (c *ConsensusChannel) Propose(proposal Proposal, sk []byte) (SignedProposal
 		return SignedProposal{}, fmt.Errorf("unable to construct latest proposed vars: %w", err)
 	}
 
+	// ITS HANDLING PROPOSAL ON CLONED VARS AND NOT THE ACTUAL CHANNEL VARS
 	err = vars.HandleProposal(proposal)
 	if err != nil {
+		fmt.Println("P HP ERR")
 		return SignedProposal{}, fmt.Errorf("propose could not add new state vars: %w", err)
 	}
 
@@ -76,25 +78,38 @@ func (c *ConsensusChannel) leaderReceive(countersigned SignedProposal) error {
 		return err
 	}
 
+	fmt.Println("c.leaderReceive", c.proposalQueue)
+
 	consensusCandidate := Vars{
 		TurnNum: c.current.TurnNum,
 		Outcome: c.current.Outcome.clone(),
 	}
 	consensusTurnNum := countersigned.TurnNum
 
+	fmt.Println("countersingedd.turnnum", consensusTurnNum)
+
 	if consensusTurnNum <= consensusCandidate.TurnNum {
+		fmt.Println("consensusTurnNum <= consensusCandidate.Turnnum")
 		// We've already seen this proposal; return early
 		return nil
 	}
 
 	for i, ourP := range c.proposalQueue {
 
+		fmt.Println("i , ourP", i, ourP)
+
 		err := consensusCandidate.HandleProposal(ourP.Proposal)
 		if err != nil {
+			fmt.Println("LR HP ERR")
 			return err
 		}
 
+		fmt.Println("IN LEADER RECEIVE", len(c.proposalQueue))
+
+		fmt.Println("IN LEADER RECEIVE ouT Fojsdnhvihblerhgoipuwahpoooorjgoimdfnmvdflkvnls;fvjnsfvhnkljsjcoigj", len(c.proposalQueue), c.proposalQueue[1].Proposal.ToAdd.AssetAddress)
+
 		if consensusCandidate.TurnNum == consensusTurnNum {
+
 			signer, err := consensusCandidate.AsState(c.fp).RecoverSigner(countersigned.Signature)
 			if err != nil {
 				return fmt.Errorf("unable to recover signer: %w", err)
@@ -109,7 +124,6 @@ func (c *ConsensusChannel) leaderReceive(countersigned SignedProposal) error {
 				Vars:       consensusCandidate,
 				Signatures: [2]state.Signature{mySig, countersigned.Signature},
 			}
-
 			c.proposalQueue = c.proposalQueue[i+1:]
 
 			return nil
@@ -126,5 +140,6 @@ func (c *ConsensusChannel) appendToProposalQueue(signed SignedProposal) error {
 		return fmt.Errorf("appending to ConsensusChannel.proposalQueue: not a consecutive TurnNum")
 	}
 	c.proposalQueue = append(c.proposalQueue, signed)
+	fmt.Println("APPENDTOPROPQ LEADER_CHANNEL", signed.Proposal.ToAdd.AssetAddress, c.proposalQueue)
 	return nil
 }

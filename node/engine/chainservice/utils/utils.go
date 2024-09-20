@@ -27,6 +27,7 @@ type ContractAddresses struct {
 	CaAddress     common.Address
 	BridgeAddress common.Address
 	TokenAddress  common.Address
+	TokenAddress2 common.Address
 }
 
 // ConnectToChain connects to the chain at the given url and returns a client and a transactor.

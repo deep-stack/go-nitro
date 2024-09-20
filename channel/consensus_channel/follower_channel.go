@@ -34,6 +34,7 @@ func (c *ConsensusChannel) SignNextProposal(expectedProposal Proposal, sk []byte
 		return SignedProposal{}, err
 	}
 
+	fmt.Println("PROPQUEUE in SNP", c.ProposalQueue())
 	if len(c.proposalQueue) == 0 {
 		return SignedProposal{}, ErrNoProposals
 	}
@@ -44,6 +45,8 @@ func (c *ConsensusChannel) SignNextProposal(expectedProposal Proposal, sk []byte
 		return SignedProposal{}, ErrNonMatchingProposals
 	}
 
+	fmt.Println("After equal")
+
 	// vars are cloned and modified instead of modified in place to simplify recovering from error
 	vars := Vars{
 		TurnNum: c.current.TurnNum,
@@ -51,6 +54,7 @@ func (c *ConsensusChannel) SignNextProposal(expectedProposal Proposal, sk []byte
 	}
 	err := vars.HandleProposal(p)
 	if err != nil {
+		fmt.Println("SNP HP ERR")
 		return SignedProposal{}, err
 	}
 

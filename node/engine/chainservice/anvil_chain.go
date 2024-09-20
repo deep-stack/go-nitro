@@ -65,6 +65,11 @@ func NewAnvilChain(chainPort string, l2 bool, ethAccountIndex uint) (*AnvilChain
 		return nil, err
 	}
 
+	tokenAddress2, _, tokenBinding2, err := Token.DeployToken(txSubmitter, ethClient, "TEST2", "TST2", txSubmitter.From, big.NewInt(TEST_INITIAL_SUPPLY))
+	if err != nil {
+		return nil, err
+	}
+
 	if l2 {
 		anvilChain.ContractAddresses.BridgeAddress, err = chainutils.DeployL2Contract(context.Background(), ethClient, txSubmitter)
 	} else {
@@ -75,8 +80,14 @@ func NewAnvilChain(chainPort string, l2 bool, ethAccountIndex uint) (*AnvilChain
 		if err != nil {
 			return nil, err
 		}
+
+		err = chainutils.TransferToken(ethClient, tokenBinding2, txSubmitter, ChainPks, INITIAL_TOKEN_BALANCE)
+		if err != nil {
+			return nil, err
+		}
 	}
 	anvilChain.ContractAddresses.TokenAddress = tokenAddress
+	anvilChain.ContractAddresses.TokenAddress2 = tokenAddress2
 
 	if err != nil {
 		return nil, err

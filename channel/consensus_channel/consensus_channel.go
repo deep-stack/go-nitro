@@ -107,6 +107,7 @@ func (c *ConsensusChannel) FixedPart() state.FixedPart {
 // validates its signature, and performs updates to the proposal queue and
 // consensus state.
 func (c *ConsensusChannel) Receive(sp SignedProposal) error {
+	fmt.Println("c.receive", c.proposalQueue)
 	if c.IsFollower() {
 		return c.followerReceive(sp)
 	}
@@ -123,6 +124,7 @@ func (c *ConsensusChannel) Receive(sp SignedProposal) error {
 func (c *ConsensusChannel) IsProposed(g Guarantee) (bool, error) {
 	latest, err := c.latestProposedVars()
 	if err != nil {
+		fmt.Println("IP LPS ERR")
 		return false, err
 	}
 
@@ -144,6 +146,7 @@ func (c *ConsensusChannel) IsProposedNext(g Guarantee) (bool, error) {
 	}
 
 	if err != nil {
+		fmt.Println("IPN HP ERR")
 		return false, err
 	}
 
@@ -261,6 +264,7 @@ func (c *ConsensusChannel) latestProposedVars() (Vars, error) {
 	for _, p := range c.proposalQueue {
 		err = vars.HandleProposal(p.Proposal)
 		if err != nil {
+			fmt.Println("LPS HP ERR")
 			return Vars{}, err
 		}
 	}

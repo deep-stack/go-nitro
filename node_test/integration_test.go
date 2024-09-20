@@ -88,6 +88,12 @@ func TestMultiAssetLedgerChannel(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
+	// _, err := Token.NewToken(infra.anvilChain.ContractAddresses.TokenAddress2, infra.anvilChain.EthClient)
+	// if err != nil {
+	// 	t.Fatal(err)
+	// }
+
+	// outcomeToken2 := CreateLedgerOutcome(*nodeA.Address, *nodeB.Address, ledgerChannelDeposit, ledgerChannelDeposit, infra.anvilChain.ContractAddresses.TokenAddress2)
 
 	// Create go-nitro nodes
 	nodeA, _, _, storeA, _ := setupIntegrationNode(testCase, testCase.Participants[0], infra, []string{}, dataFolder)
@@ -98,7 +104,7 @@ func TestMultiAssetLedgerChannel(t *testing.T) {
 	outcomeEth := CreateLedgerOutcome(*nodeA.Address, *nodeB.Address, ledgerChannelDeposit, ledgerChannelDeposit, common.Address{})
 	outcomeCustomToken := CreateLedgerOutcome(*nodeA.Address, *nodeB.Address, ledgerChannelDeposit, ledgerChannelDeposit, infra.anvilChain.ContractAddresses.TokenAddress)
 
-	multiAssetOutcome := append(outcomeEth, outcomeCustomToken...)
+	multiAssetOutcome := append(outcomeCustomToken, outcomeEth...)
 
 	// Create ledger channel
 	ledgerResponse, err := nodeA.CreateLedgerChannel(*nodeB.Address, uint32(testCase.ChallengeDuration), multiAssetOutcome)
@@ -113,23 +119,12 @@ func TestMultiAssetLedgerChannel(t *testing.T) {
 	<-chA
 	<-chB
 
+	t.Log("Completed direct-fund objective")
+
 	cc, _ := storeA.GetConsensusChannelById(ledgerResponse.ChannelId)
 	fmt.Printf("MULIT ASSSET LEDGER CHANNEL %+v", cc)
-
+	fmt.Println("cc. multiasset outcome", cc.ConsensusVars().Outcome[0].AsOutcome()[0].Asset, cc.ConsensusVars().Outcome[1].AsOutcome()[0].Asset)
 	multiassetVirtualChannelOutcome := outcome.Exit{
-		outcome.SingleAssetExit{
-			Asset: common.Address{},
-			Allocations: outcome.Allocations{
-				outcome.Allocation{
-					Destination: types.AddressToDestination(*nodeA.Address),
-					Amount:      big.NewInt(int64(1001)),
-				},
-				outcome.Allocation{
-					Destination: types.AddressToDestination(*nodeB.Address),
-					Amount:      big.NewInt(int64(1002)),
-				},
-			},
-		},
 		outcome.SingleAssetExit{
 			Asset: infra.anvilChain.ContractAddresses.TokenAddress,
 			Allocations: outcome.Allocations{
@@ -143,9 +138,22 @@ func TestMultiAssetLedgerChannel(t *testing.T) {
 				},
 			},
 		},
+		outcome.SingleAssetExit{
+			Asset: common.Address{},
+			Allocations: outcome.Allocations{
+				outcome.Allocation{
+					Destination: types.AddressToDestination(*nodeA.Address),
+					Amount:      big.NewInt(int64(1001)),
+				},
+				outcome.Allocation{
+					Destination: types.AddressToDestination(*nodeB.Address),
+					Amount:      big.NewInt(int64(1002)),
+				},
+			},
+		},
 	}
 
-	virtualresponse, err := nodeA.CreateSwapChannel(
+	swapResponse, err := nodeA.CreateSwapChannel(
 		nil,
 		*nodeB.Address,
 		0,
@@ -155,16 +163,13 @@ func TestMultiAssetLedgerChannel(t *testing.T) {
 		fmt.Println("err from here", err)
 		t.Fatal(err)
 	}
-	fmt.Println(">>>>>VIRTUAL CHANNEL RESPONSE....WAITING FOR OBJECTIVE TO COMPLETE", virtualresponse.ChannelId)
+	fmt.Println(">>>>>SWAP CHANNEL RESPONSE....WAITING FOR OBJECTIVE TO COMPLETE", swapResponse.ChannelId)
 
-	chB = nodeB.ObjectiveCompleteChan(virtualresponse.Id)
-	<-nodeA.ObjectiveCompleteChan(virtualresponse.Id)
-	<-chB
+	<-nodeA.ObjectiveCompleteChan(swapResponse.Id)
+	<-nodeB.ObjectiveCompleteChan(swapResponse.Id)
 
 	cc, _ = storeA.GetConsensusChannelById(ledgerResponse.ChannelId)
 	fmt.Printf("MULIT ASSET LEDGER CHANNEL AFTER VIRTUAL CHANNEL %+v", cc)
-
-	t.Log("Completed direct-fund objective")
 }
 
 // RunIntegrationTestCase runs the integration test case.

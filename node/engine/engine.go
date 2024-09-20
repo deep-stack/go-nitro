@@ -277,6 +277,11 @@ func (e *Engine) handleProposal(proposal consensus_channel.Proposal) (EngineEven
 	if err != nil {
 		return EngineEvent{}, err
 	}
+	val, ok := obj.(*swapfund.Objective)
+	if ok {
+		fmt.Println("HANDLE PROPOSALLLLLLLLLLL O??????????????????????????????????????????????", val.ToMyLeft)
+		fmt.Println("HANDLE PROPOSALLLLLLLLLLL O??????????????????????????????????????????????", val.ToMyLeft)
+	}
 	if obj.GetStatus() == protocols.Completed {
 		e.logger.Info("Ignoring proposal for completed objective", logging.WithObjectiveIdAttribute(id))
 		return EngineEvent{}, nil
@@ -380,10 +385,14 @@ func (e *Engine) handleMessage(message protocols.Message) (EngineEvent, error) {
 		c, _ := e.store.GetChannelById(entry.Proposal.Target())
 		id := getProposalObjectiveId(entry.Proposal, c.Type)
 
+		fmt.Println("OBJ", id)
+
+		// CHECK: OBJECTIVE STORED INCORRECTLY
 		o, err := e.store.GetObjectiveById(id)
 		if err != nil {
 			return EngineEvent{}, err
 		}
+
 		if o.GetStatus() == protocols.Completed {
 			e.logger.Info("Ignoring proposal for completed objective", logging.WithObjectiveIdAttribute(id))
 
@@ -394,9 +403,37 @@ func (e *Engine) handleMessage(message protocols.Message) (EngineEvent, error) {
 			return EngineEvent{}, fmt.Errorf("received a proposal for an objective which cannot receive proposals %s", objective.Id())
 		}
 
+		val, ok := objective.(*swapfund.Objective)
+		if ok {
+			if val.ToMyLeft != nil {
+				fmt.Println("LEFT ////////////////////////////////////////////////////////////////////////////////////////////", val.ToMyLeft.Channel)
+				fmt.Println("LEFT FUNDING TARGETS", val.ToMyLeft.Channel.ProposalQueue())
+				fmt.Println("LEFT GUARANTEEINFO", val.ToMyLeft.GuaranteeInfo)
+			}
+			if val.ToMyRight != nil {
+				fmt.Println("RIGHT ////////////////////////////////////////////////////////////////////////////////////////////", val.ToMyRight.Channel)
+				fmt.Println("RIGHT FUNDING TARGETS", val.ToMyRight.Channel.ProposalQueue())
+				fmt.Println("LEFT GUARANTEEINFO", val.ToMyRight.GuaranteeInfo)
+			}
+			fmt.Println("HANDLE PROPOSALLLLLLLLLLL O?????????????????????????????????????????????? RIGHT", val.ToMyRight)
+			fmt.Println("HANDLE PROPOSALLLLLLLLLLL O?????????????????????????????????????????????? LEFT", val.ToMyLeft)
+		}
+
 		updatedObjective, err := objective.ReceiveProposal(entry)
 		if err != nil {
 			return EngineEvent{}, err
+		}
+
+		val, ok = updatedObjective.(*swapfund.Objective)
+		if ok {
+			if val.ToMyLeft != nil {
+				fmt.Println("UPDATED LEFT FUNDING TARGETS", val.ToMyLeft.Channel.ProposalQueue())
+			}
+			if val.ToMyRight != nil {
+				fmt.Println("UPDATED RIGHT FUNDING TARGETS", val.ToMyRight.Channel.ProposalQueue())
+			}
+			fmt.Println("UPDATED HANDLE PROPOSALLLLLLLLLLL O?????????????????????????????????????????????? RIGHT", val.ToMyRight)
+			fmt.Println("UPDATED HANDLE PROPOSALLLLLLLLLLL O?????????????????????????????????????????????? LEFT", val.ToMyLeft)
 		}
 
 		progressEvent, err := e.attemptProgress(updatedObjective)
@@ -947,6 +984,14 @@ func (e *Engine) attemptProgress(objective protocols.Objective) (outgoing Engine
 	crankedObjective, sideEffects, waitingFor, err = objective.Crank(secretKey)
 	if err != nil {
 		return
+	}
+
+	val, ok := crankedObjective.(*swapfund.Objective)
+
+	if ok {
+		fmt.Println("attemptProgress ToMyRight>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>", val.ToMyRight)
+		fmt.Println("attemptProgress ToMyLeft>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>", val.ToMyLeft)
+
 	}
 
 	err = e.store.SetObjective(crankedObjective)
