@@ -270,16 +270,10 @@ func main() {
 			var node *node.Node
 			var err error
 			if l2 {
-				chainOpts := chainservice.L2ChainOpts{
-					ChainUrl:           chainUrl,
-					ChainStartBlockNum: chainStartBlock,
-					ChainAuthToken:     chainAuthToken,
-					ChainPk:            chainPk,
-					BridgeAddress:      common.HexToAddress(bridgeAddress),
-					VpaAddress:         common.HexToAddress(vpaAddress),
-					CaAddress:          common.HexToAddress(caAddress),
+				chainOpts := chainservice.LaconicdChainOpts{
+					VpaAddress: common.HexToAddress(vpaAddress),
+					CaAddress:  common.HexToAddress(caAddress),
 				}
-
 				node, _, _, _, err = nodeUtils.InitializeL2Node(chainOpts, storeOpts, messageOpts)
 			} else {
 				chainOpts := chainservice.ChainOpts{

@@ -224,6 +224,7 @@ func prepareSimulatedBackend(t *testing.T) preparedChain {
 		ethConf.Genesis.GasLimit = blockGasLimit
 	})
 	simulatedClient := sim.Client()
+
 	// Deploy Adjudicator
 	_, _, na, err := DeployNitroAdjudicator(auth, simulatedClient)
 	if err != nil {

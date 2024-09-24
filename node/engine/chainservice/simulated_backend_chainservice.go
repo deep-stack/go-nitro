@@ -10,9 +10,9 @@ import (
 	ethTypes "github.com/ethereum/go-ethereum/core/types"
 	"github.com/ethereum/go-ethereum/crypto"
 	"github.com/ethereum/go-ethereum/eth/ethconfig"
-	"github.com/ethereum/go-ethereum/ethclient/simulated"
 	"github.com/ethereum/go-ethereum/node"
 
+	"github.com/ethereum/go-ethereum/ethclient/simulated"
 	NitroAdjudicator "github.com/statechannels/go-nitro/node/engine/chainservice/adjudicator"
 	ConsensusApp "github.com/statechannels/go-nitro/node/engine/chainservice/consensusapp"
 	Token "github.com/statechannels/go-nitro/node/engine/chainservice/erc20"

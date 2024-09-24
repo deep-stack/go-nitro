@@ -206,7 +206,11 @@ func (e *Engine) run(ctx context.Context) {
 		var res EngineEvent
 		var err error
 
-		blockTicker := time.NewTicker(5 * time.Second)
+		var blockTicker <-chan time.Time
+		_, isEthChainService := e.chain.(*chainservice.EthChainService)
+		if isEthChainService {
+			blockTicker = time.NewTicker(5 * time.Second).C
+		}
 
 		select {
 
@@ -228,7 +232,7 @@ func (e *Engine) run(ctx context.Context) {
 			err = e.handleCounterChallengeRequest(counterChallengeReq)
 		case retryObjectiveTxReq := <-e.RetryObjectiveTxRequestFromAPI:
 			err = e.handleRetryObjectiveTxRequest(retryObjectiveTxReq)
-		case <-blockTicker.C:
+		case <-blockTicker:
 			blockNum := e.chain.GetLastConfirmedBlockNum()
 			err = e.store.SetLastBlockNumSeen(blockNum)
 			e.checkError(err)
@@ -244,6 +248,7 @@ func (e *Engine) run(ctx context.Context) {
 			}
 
 			err = e.processStoreChannels(chainServiceBlock)
+
 		case <-ctx.Done():
 			e.wg.Done()
 			return
@@ -589,12 +594,6 @@ func (e *Engine) handleDroppedChainEvent(droppedEventInfo protocols.DroppedEvent
 		if err != nil {
 			return err
 		}
-	case *bridgedfund.Objective:
-		objective.SetDroppedEvent(droppedEventInfo)
-		err := e.store.SetObjective(objective)
-		if err != nil {
-			return err
-		}
 	}
 
 	return nil
@@ -851,15 +850,6 @@ func (e *Engine) handleRetryObjectiveTxRequest(request types.RetryObjectiveTxReq
 			return errEmptyDroppedEvent
 		}
 		objective.ResetWithDrawAllTxSubmitted()
-		_, err = e.attemptProgress(objective)
-
-	case *bridgedfund.Objective:
-		droppedEvent := objective.GetDroppedEvent()
-		if droppedEvent.ChannelId.IsZero() {
-			return errEmptyDroppedEvent
-		}
-
-		objective.ResetTxSubmitted()
 		_, err = e.attemptProgress(objective)
 	}
 

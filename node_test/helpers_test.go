@@ -19,6 +19,7 @@ import (
 	"github.com/statechannels/go-nitro/node"
 	"github.com/statechannels/go-nitro/node/engine"
 	"github.com/statechannels/go-nitro/node/engine/chainservice"
+	chainutils "github.com/statechannels/go-nitro/node/engine/chainservice/utils"
 	"github.com/statechannels/go-nitro/node/engine/messageservice"
 	p2pms "github.com/statechannels/go-nitro/node/engine/messageservice/p2p-message-service"
 	"github.com/statechannels/go-nitro/node/engine/store"
@@ -95,7 +96,7 @@ func setupChainService(tc TestCase, tp TestParticipant, si sharedTestInfrastruct
 			panic(err)
 		}
 		return cs
-	case AnvilChainL1:
+	case AnvilChain:
 		cs, err := chainservice.NewEthChainService(chainservice.ChainOpts{
 			ChainUrl:           si.anvilChain.ChainUrl,
 			ChainStartBlockNum: 0,
@@ -109,16 +110,12 @@ func setupChainService(tc TestCase, tp TestParticipant, si sharedTestInfrastruct
 			panic(err)
 		}
 		return cs
-	case AnvilChainL2:
-		cs, err := chainservice.NewL2ChainService(chainservice.L2ChainOpts{
-			ChainUrl:           si.anvilChain.ChainUrl,
-			ChainStartBlockNum: 0,
-			ChainAuthToken:     si.anvilChain.ChainAuthToken,
-			BridgeAddress:      si.anvilChain.ContractAddresses.BridgeAddress,
-			CaAddress:          si.anvilChain.ContractAddresses.CaAddress,
-			VpaAddress:         si.anvilChain.ContractAddresses.VpaAddress,
-			ChainPk:            si.anvilChain.ChainPks[tp.ChainAccountIndex],
-		})
+	case LaconicdChain:
+		cs, err := chainservice.NewLaconicdChainService(
+			chainservice.LaconicdChainOpts{
+				VpaAddress: si.laconicdChain.ContractAddresses.VpaAddress,
+				CaAddress:  si.laconicdChain.ContractAddresses.CaAddress,
+			})
 		if err != nil {
 			panic(err)
 		}
@@ -275,20 +272,15 @@ func setupSharedInfra(tc TestCase) sharedTestInfrastructure {
 		infra.simulatedChain = sim
 		infra.bindings = &bindings
 		infra.ethAccounts = ethAccounts
-	case AnvilChainL1:
+	case AnvilChain:
 		ethAccountIndex := tc.Participants[tc.deployerIndex].ChainAccountIndex
 		chain, err := chainservice.NewAnvilChain(tc.ChainPort, false, ethAccountIndex)
 		if err != nil {
 			panic(err)
 		}
 		infra.anvilChain = chain
-	case AnvilChainL2:
-		ethAccountIndex := tc.Participants[tc.deployerIndex].ChainAccountIndex
-		chain, err := chainservice.NewAnvilChain(tc.ChainPort, true, ethAccountIndex)
-		if err != nil {
-			panic(err)
-		}
-		infra.anvilChain = chain
+	case LaconicdChain:
+		infra.laconicdChain = chainutils.LaconicdChain{}
 	default:
 		panic("Unknown chain service")
 	}
