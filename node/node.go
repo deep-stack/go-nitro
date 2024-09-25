@@ -8,6 +8,7 @@ import (
 	"runtime/debug"
 	"time"
 
+	"github.com/ethereum/go-ethereum/common"
 	"github.com/statechannels/go-nitro/channel/state"
 	"github.com/statechannels/go-nitro/channel/state/outcome"
 	"github.com/statechannels/go-nitro/internal/safesync"
@@ -24,6 +25,7 @@ import (
 	"github.com/statechannels/go-nitro/protocols/directdefund"
 	"github.com/statechannels/go-nitro/protocols/directfund"
 	"github.com/statechannels/go-nitro/protocols/mirrorbridgeddefund"
+	"github.com/statechannels/go-nitro/protocols/swap"
 	"github.com/statechannels/go-nitro/protocols/swapdefund"
 	"github.com/statechannels/go-nitro/protocols/swapfund"
 	"github.com/statechannels/go-nitro/protocols/virtualdefund"
@@ -231,6 +233,16 @@ func (n *Node) CreatePaymentChannel(Intermediaries []types.Address, CounterParty
 
 	objectiveRequest.WaitForObjectiveToStart()
 	return objectiveRequest.Response(*n.Address), nil
+}
+
+func (n *Node) SwapAsset(channelId types.Destination, fromAsset common.Address, toAsset common.Address, fromAmount *big.Int, toAmount *big.Int) (swap.ObjectiveResponse, error) {
+	objectiveRequest := swap.NewObjectiveRequest()
+
+	// Send the event to the engine
+	n.engine.ObjectiveRequestsFromAPI <- objectiveRequest
+
+	objectiveRequest.WaitForObjectiveToStart()
+	return objectiveRequest.Response(), nil
 }
 
 // ClosePaymentChannel attempts to close and defund the given virtually funded channel.

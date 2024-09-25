@@ -9,6 +9,8 @@ import (
 
 type SwapChannel struct {
 	Channel
+
+	// TODO: Store array of swap primitive
 }
 
 func NewSwapChannel(s state.State, myIndex uint) (*SwapChannel, error) {
