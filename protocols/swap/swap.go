@@ -19,6 +19,17 @@ import (
 
 type GetChannelByIdFunction func(id types.Destination) (channel *channel.Channel, ok bool)
 
+const (
+	SwapPrimitivePayload protocols.PayloadType = "SwapPrimitivePayload"
+)
+
+const (
+	WaitingForSwapping protocols.WaitingFor = "WaitingForSwapping"
+	WaitingForNothing  protocols.WaitingFor = "WaitingForNothing" // Finished
+)
+
+const ObjectivePrefix = "Swap-"
+
 // TODO: Discuss fields of exchange
 type Exchange struct {
 	FromAsset  common.Address
@@ -46,16 +57,11 @@ func NewSwapPrimitive(channelId types.Destination, fromAsset, toAsset common.Add
 	}
 }
 
-// HasSignatureForParticipant returns true if the participant (at participantIndex) has a valid signature.
-func (sp SwapPrimitive) HasSignatureForParticipant(participantIndex uint) bool {
-	_, found := sp.Sigs[uint(participantIndex)]
-	return found
-}
-
 // TODO: Create clone method for swap primitive
 
 // encodes the state into a []bytes value
 func (sp SwapPrimitive) encode() (types.Bytes, error) {
+	// TODO: Check whether we need to encode array of swap primitive
 	return ethAbi.Arguments{
 		{Type: abi.Destination}, // channel id
 		{Type: abi.Address},     // fromAsset
@@ -89,16 +95,11 @@ func (sp SwapPrimitive) Sign(secretKey []byte) (state.Signature, error) {
 	return nc.SignEthereumMessage(hash.Bytes(), secretKey)
 }
 
-const (
-	WaitingForSwapPrimitive protocols.WaitingFor = "WaitingForSwapPrimitive"
-	WaitingForNothing       protocols.WaitingFor = "WaitingForNothing" // Finished
-)
-
-const (
-	SwapPrimitivePayload protocols.PayloadType = "SwapPrimitivePayload"
-)
-
-const ObjectivePrefix = "Swap-"
+func (sp SwapPrimitive) AddSignature(sig state.Signature, myIndex uint) error {
+	// TODO: Validation
+	sp.Sigs[myIndex] = sig
+	return nil
+}
 
 // Objective is a cache of data computed by reading from the store. It stores (potentially) infinite data.
 type Objective struct {
@@ -192,17 +193,38 @@ func (o *Objective) Crank(secretKey *[]byte) (protocols.Objective, protocols.Sid
 		return &updated, sideEffects, WaitingForNothing, protocols.ErrNotApproved
 	}
 
+	// fmt.Printf("SWAP OBJECTIVE>>>>>>>%+v", updated)
+	// fmt.Printf("SWAP CHANNEL>>>>>>>%+v", updated.C)
+
 	// TODO: Swapee check whether to accept or reject
 
-	// Check if me signed it?
-	// If not signed then sign and send it back to counterparty
-	if !updated.SwapPrimitive.HasSignatureForParticipant(updated.C.MyIndex) {
-		updated.SwapPrimitive.Sign(*secretKey)
+	// Verify if I have signed it
+	// If not, sign it and send it to the counterparty
+	if !updated.HasSignatureForParticipant() {
+		sig, err := updated.SwapPrimitive.Sign(*secretKey)
+		if err != nil {
+			return &updated, sideEffects, WaitingForSwapping, err
+		}
+
+		err = updated.SwapPrimitive.AddSignature(sig, updated.C.MyIndex)
+		if err != nil {
+			return &updated, sideEffects, WaitingForSwapping, err
+		}
+
+		messages, err := protocols.CreateObjectivePayloadMessage(updated.Id(), updated.SwapPrimitive, SwapPrimitivePayload, o.C.Participants[1-o.C.MyIndex])
+		if err != nil {
+			return &updated, protocols.SideEffects{}, WaitingForSwapping, fmt.Errorf("could not create payload message %w", err)
+		}
+		sideEffects.MessagesToSend = append(sideEffects.MessagesToSend, messages...)
+		return &updated, sideEffects, WaitingForSwapping, nil
 	}
 
-	// If not full signature then wait here
+	// Wait if all signatures are not available
+	if !updated.HasAllSignatures() {
+		return &updated, protocols.SideEffects{}, WaitingForSwapping, nil
+	}
 
-	// if full signature then update the swap channel and objective is complete
+	// If all signatures are available, update the swap channel according to the swap primitive and add the swap primitive to the channel.
 
 	// Completion
 	updated.Status = protocols.Completed
@@ -229,6 +251,22 @@ func (o *Objective) clone() Objective {
 	clone.SwapPrimitive = o.SwapPrimitive
 
 	return clone
+}
+
+// HasAllSignatures returns true if every participant has a valid signature.
+func (o *Objective) HasAllSignatures() bool {
+	// Since signatures are validated
+	if len(o.SwapPrimitive.Sigs) == len(o.C.Participants) {
+		return true
+	} else {
+		return false
+	}
+}
+
+// HasSignatureForParticipant returns true if the participant (at participantIndex) has a valid signature.
+func (o *Objective) HasSignatureForParticipant() bool {
+	_, found := o.SwapPrimitive.Sigs[o.C.MyIndex]
+	return found
 }
 
 func (o Objective) MarshalJSON() ([]byte, error) {
