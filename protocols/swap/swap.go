@@ -6,15 +6,20 @@ import (
 	"math/big"
 	"strings"
 
+	ethAbi "github.com/ethereum/go-ethereum/accounts/abi"
 	"github.com/ethereum/go-ethereum/common"
+	"github.com/ethereum/go-ethereum/crypto"
+	"github.com/statechannels/go-nitro/abi"
 	"github.com/statechannels/go-nitro/channel"
 	"github.com/statechannels/go-nitro/channel/state"
+	nc "github.com/statechannels/go-nitro/crypto"
 	"github.com/statechannels/go-nitro/protocols"
 	"github.com/statechannels/go-nitro/types"
 )
 
 type GetChannelByIdFunction func(id types.Destination) (channel *channel.Channel, ok bool)
 
+// TODO: Discuss fields of exchange
 type Exchange struct {
 	FromAsset  common.Address
 	ToAsset    common.Address
@@ -39,6 +44,49 @@ func NewSwapPrimitive(channelId types.Destination, fromAsset, toAsset common.Add
 		},
 		Sigs: make(map[uint]state.Signature, 2),
 	}
+}
+
+// HasSignatureForParticipant returns true if the participant (at participantIndex) has a valid signature.
+func (sp SwapPrimitive) HasSignatureForParticipant(participantIndex uint) bool {
+	_, found := sp.Sigs[uint(participantIndex)]
+	return found
+}
+
+// TODO: Create clone method for swap primitive
+
+// encodes the state into a []bytes value
+func (sp SwapPrimitive) encode() (types.Bytes, error) {
+	return ethAbi.Arguments{
+		{Type: abi.Destination}, // channel id
+		{Type: abi.Address},     // fromAsset
+		{Type: abi.Address},     // toAsset
+		{Type: abi.Uint256},     // fromAmount
+		{Type: abi.Uint256},     // toAmount
+	}.Pack(
+		sp.ChannelId,
+		sp.Exchange.FromAsset,
+		sp.Exchange.ToAsset,
+		sp.Exchange.FromAmount,
+		sp.Exchange.ToAmount,
+	)
+}
+
+// Hash returns the keccak256 hash of the State
+func (sp SwapPrimitive) Hash() (types.Bytes32, error) {
+	encoded, err := sp.encode()
+	if err != nil {
+		return types.Bytes32{}, fmt.Errorf("failed to encode swap primitive: %w", err)
+	}
+	return crypto.Keccak256Hash(encoded), nil
+}
+
+// Sign generates an ECDSA signature on the swap primitive using the supplied private key
+func (sp SwapPrimitive) Sign(secretKey []byte) (state.Signature, error) {
+	hash, error := sp.Hash()
+	if error != nil {
+		return state.Signature{}, error
+	}
+	return nc.SignEthereumMessage(hash.Bytes(), secretKey)
 }
 
 const (
@@ -144,6 +192,18 @@ func (o *Objective) Crank(secretKey *[]byte) (protocols.Objective, protocols.Sid
 		return &updated, sideEffects, WaitingForNothing, protocols.ErrNotApproved
 	}
 
+	// TODO: Swapee check whether to accept or reject
+
+	// Check if me signed it?
+	// If not signed then sign and send it back to counterparty
+	if !updated.SwapPrimitive.HasSignatureForParticipant(updated.C.MyIndex) {
+		updated.SwapPrimitive.Sign(*secretKey)
+	}
+
+	// If not full signature then wait here
+
+	// if full signature then update the swap channel and objective is complete
+
 	// Completion
 	updated.Status = protocols.Completed
 	return &updated, sideEffects, WaitingForNothing, nil
@@ -163,6 +223,10 @@ func (o *Objective) Related() []protocols.Storable {
 func (o *Objective) clone() Objective {
 	clone := Objective{}
 	clone.Status = o.Status
+	clone.IsSwapper = o.IsSwapper
+	clone.C = o.C.Clone()
+	// TODP: Create clone method for swap primitive
+	clone.SwapPrimitive = o.SwapPrimitive
 
 	return clone
 }
