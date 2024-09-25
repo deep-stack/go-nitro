@@ -2,6 +2,7 @@ package swap
 
 import (
 	"encoding/json"
+	"fmt"
 	"math/big"
 	"strings"
 
@@ -12,6 +13,8 @@ import (
 	"github.com/statechannels/go-nitro/types"
 )
 
+type GetChannelByIdFunction func(id types.Destination) (channel *channel.Channel, ok bool)
+
 type Exchange struct {
 	FromAsset  common.Address
 	ToAsset    common.Address
@@ -20,21 +23,21 @@ type Exchange struct {
 }
 
 type SwapPrimitive struct {
-	channelId types.Destination
-	exchange  Exchange
-	sigs      map[uint]state.Signature // keyed by participant index in swap channel
+	ChannelId types.Destination
+	Exchange  Exchange
+	Sigs      map[uint]state.Signature // keyed by participant index in swap channel
 }
 
-func NewSwap(channelId types.Destination, fromAsset, toAsset common.Address, fromAmount, toAmout *big.Int) SwapPrimitive {
+func NewSwapPrimitive(channelId types.Destination, fromAsset, toAsset common.Address, fromAmount, toAmout *big.Int) SwapPrimitive {
 	return SwapPrimitive{
-		channelId: channelId,
-		exchange: Exchange{
+		ChannelId: channelId,
+		Exchange: Exchange{
 			fromAsset,
 			toAsset,
 			fromAmount,
 			toAmout,
 		},
-		sigs: make(map[uint]state.Signature, 2),
+		Sigs: make(map[uint]state.Signature, 2),
 	}
 }
 
@@ -51,15 +54,38 @@ const ObjectivePrefix = "Swap-"
 
 // Objective is a cache of data computed by reading from the store. It stores (potentially) infinite data.
 type Objective struct {
-	Status protocols.ObjectiveStatus
-	C      *channel.SwapChannel
-
-	MyRole uint // index in the swap protocol
+	Status        protocols.ObjectiveStatus
+	C             *channel.SwapChannel
+	SwapPrimitive SwapPrimitive
+	IsSwapper     bool
 }
 
 // NewObjective creates a new swap objective from a given request.
-func NewObjective(request ObjectiveRequest, preApprove bool, myAddress types.Address) (Objective, error) {
-	return Objective{}, nil
+func NewObjective(request ObjectiveRequest, preApprove bool, isSwapper bool, getChannelFunc GetChannelByIdFunction) (Objective, error) {
+	obj := Objective{}
+
+	swapChannel, ok := getChannelFunc(request.ChannelId)
+	if !ok {
+		return obj, fmt.Errorf("new swap objective creation failed, swap channel not found")
+	}
+
+	if preApprove {
+		obj.Status = protocols.Approved
+	} else {
+		obj.Status = protocols.Unapproved
+	}
+
+	if isSwapper {
+		swapPrimitive := NewSwapPrimitive(request.ChannelId, request.FromAsset, request.ToAsset, request.FromAmount, request.ToAmount)
+		obj.SwapPrimitive = swapPrimitive
+		obj.IsSwapper = true
+	}
+
+	obj.C = &channel.SwapChannel{
+		Channel: *swapChannel,
+	}
+
+	return obj, nil
 }
 
 // Id returns the objective id.
@@ -83,7 +109,8 @@ func (o *Objective) Reject() (protocols.Objective, protocols.SideEffects) {
 	updated := o.clone()
 	updated.Status = protocols.Rejected
 
-	messages := protocols.CreateRejectionNoticeMessage(o.Id(), o.otherParticipants()...)
+	peer := o.C.Participants[1-o.C.MyIndex]
+	messages := protocols.CreateRejectionNoticeMessage(o.Id(), peer)
 	sideEffects := protocols.SideEffects{MessagesToSend: messages}
 	return &updated, sideEffects
 }
@@ -96,16 +123,6 @@ func (o *Objective) OwnsChannel() types.Destination {
 // GetStatus returns the status of the objective.
 func (o *Objective) GetStatus() protocols.ObjectiveStatus {
 	return o.Status
-}
-
-func (o *Objective) otherParticipants() []types.Address {
-	otherParticipants := make([]types.Address, 0)
-	for i, p := range o.C.Participants {
-		if i != int(o.MyRole) {
-			otherParticipants = append(otherParticipants, p)
-		}
-	}
-	return otherParticipants
 }
 
 // Update receives an protocols.ObjectiveEvent, applies all applicable event data to the VirtualFundObjective,
@@ -163,11 +180,44 @@ func (o *Objective) UnmarshalJSON(data []byte) error {
 // ConstructObjectiveFromPayload takes in a message and constructs an objective from it.
 // It accepts the message, myAddress, and a function to to retrieve ledgers from a store.
 func ConstructObjectiveFromPayload(
-	p protocols.ObjectivePayload,
-	preapprove bool,
-	myAddress types.Address,
+	op protocols.ObjectivePayload,
+	preApprove bool,
+	getChannelFunc GetChannelByIdFunction,
 ) (Objective, error) {
-	return Objective{}, nil
+	obj := Objective{}
+
+	sp, err := getSwapPrimitivePayload(op.PayloadData)
+	if err != nil {
+		return Objective{}, fmt.Errorf("could not get swap primitive payload: %w", err)
+	}
+
+	if preApprove {
+		obj.Status = protocols.Approved
+	} else {
+		obj.Status = protocols.Unapproved
+	}
+
+	obj.SwapPrimitive = sp
+
+	ch, ok := getChannelFunc(sp.ChannelId)
+	if !ok {
+		return Objective{}, fmt.Errorf("unable to construct objective from payload, swap channel not found")
+	}
+
+	obj.C = &channel.SwapChannel{
+		Channel: *ch,
+	}
+
+	return obj, nil
+}
+
+func getSwapPrimitivePayload(b []byte) (SwapPrimitive, error) {
+	sp := SwapPrimitive{}
+	err := json.Unmarshal(b, &sp)
+	if err != nil {
+		return sp, fmt.Errorf("could not unmarshal swap primitive: %w", err)
+	}
+	return sp, nil
 }
 
 // IsSwapObjective inspects a objective id and returns true if the objective id is for a swap objective.
@@ -177,20 +227,30 @@ func IsSwapObjective(id protocols.ObjectiveId) bool {
 
 // ObjectiveRequest represents a request to create a new virtual funding objective.
 type ObjectiveRequest struct {
+	ChannelId        types.Destination
+	FromAsset        common.Address
+	ToAsset          common.Address
+	FromAmount       *big.Int
+	ToAmount         *big.Int
 	objectiveStarted chan struct{}
 }
 
 // NewObjectiveRequest creates a new ObjectiveRequest.
-func NewObjectiveRequest() ObjectiveRequest {
+func NewObjectiveRequest(channelId types.Destination, fromAsset common.Address, toAsset common.Address, fromAmount *big.Int, toAmount *big.Int) ObjectiveRequest {
 	return ObjectiveRequest{
+		ChannelId:        channelId,
+		FromAsset:        fromAsset,
+		ToAsset:          toAsset,
+		FromAmount:       fromAmount,
+		ToAmount:         toAmount,
 		objectiveStarted: make(chan struct{}),
 	}
 }
 
 // Id returns the objective id for the request.
 func (r ObjectiveRequest) Id(myAddress types.Address, chainId *big.Int) protocols.ObjectiveId {
-	// TODO: Determine objective id
-	return protocols.ObjectiveId(ObjectivePrefix + "")
+	// TODO: Determine unique objective id
+	return protocols.ObjectiveId(ObjectivePrefix + r.ChannelId.String())
 }
 
 // SignalObjectiveStarted is used by the engine to signal the objective has been started.
@@ -212,7 +272,7 @@ type ObjectiveResponse struct {
 // Response computes and returns the appropriate response from the request.
 func (r ObjectiveRequest) Response() ObjectiveResponse {
 	return ObjectiveResponse{
-		Id:        protocols.ObjectiveId(ObjectivePrefix + ""),
-		ChannelId: types.Destination{},
+		Id:        protocols.ObjectiveId(ObjectivePrefix + r.ChannelId.String()),
+		ChannelId: r.ChannelId,
 	}
 }

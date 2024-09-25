@@ -31,6 +31,7 @@ import (
 	"github.com/statechannels/go-nitro/protocols/directdefund"
 	"github.com/statechannels/go-nitro/protocols/directfund"
 	"github.com/statechannels/go-nitro/protocols/mirrorbridgeddefund"
+	"github.com/statechannels/go-nitro/protocols/swap"
 	"github.com/statechannels/go-nitro/protocols/swapdefund"
 	"github.com/statechannels/go-nitro/protocols/swapfund"
 	"github.com/statechannels/go-nitro/protocols/virtualdefund"
@@ -682,6 +683,14 @@ func (e *Engine) handleObjectiveRequest(or protocols.ObjectiveRequest) (EngineEv
 		}
 		return e.attemptProgress(&vfo)
 
+	case swap.ObjectiveRequest:
+		so, err := swap.NewObjective(request, true, true, e.store.GetChannelById)
+		if err != nil {
+			return failedEngineEvent, fmt.Errorf("handleAPIEvent: Could not create swap objective for %+v: %w", request, err)
+		}
+
+		return e.attemptProgress(&so)
+
 	case swapfund.ObjectiveRequest:
 		sfo, err := swapfund.NewObjective(request, true, myAddress, chainId, e.store.GetConsensusChannel)
 		if err != nil {
@@ -1178,6 +1187,9 @@ func (e *Engine) constructObjectiveFromMessage(id protocols.ObjectiveId, p proto
 		}
 
 		return &sfo, nil
+	case swap.IsSwapObjective(id):
+		so, err := swap.ConstructObjectiveFromPayload(p, false, e.store.GetChannelById)
+		return &so, err
 	case virtualdefund.IsVirtualDefundObjective(id):
 		vId, err := virtualdefund.GetVirtualChannelFromObjectiveId(id)
 		if err != nil {
