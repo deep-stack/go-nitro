@@ -5,6 +5,7 @@ import (
 
 	"github.com/ethereum/go-ethereum/common"
 	"github.com/statechannels/go-nitro/channel/state"
+	"github.com/statechannels/go-nitro/channel/state/outcome"
 	"github.com/statechannels/go-nitro/types"
 )
 
@@ -31,5 +32,23 @@ func NewSwap(channelId types.Destination, fromAsset, toAsset common.Address, fro
 			toAmout,
 		},
 		sigs: make(map[uint]state.Signature, 2),
+	}
+}
+
+type SwapKeeper struct {
+	channelId      types.Destination
+	participant    []types.Address
+	MyIndex        uint
+	channelOutcome outcome.Exit
+	collector      []Swap
+}
+
+func NewSwapKeeper(channelId types.Destination, participant []types.Address, myIndex uint, outcome outcome.Exit) SwapKeeper {
+	return SwapKeeper{
+		channelId,
+		participant,
+		myIndex,
+		outcome,
+		make([]Swap, 0),
 	}
 }
