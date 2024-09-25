@@ -19,6 +19,7 @@ import (
 	"github.com/statechannels/go-nitro/protocols/directdefund"
 	"github.com/statechannels/go-nitro/protocols/directfund"
 	"github.com/statechannels/go-nitro/protocols/mirrorbridgeddefund"
+	"github.com/statechannels/go-nitro/protocols/swap"
 	"github.com/statechannels/go-nitro/protocols/swapdefund"
 	"github.com/statechannels/go-nitro/protocols/swapfund"
 	"github.com/statechannels/go-nitro/protocols/virtualdefund"
@@ -614,6 +615,14 @@ func (ds *DurableStore) populateChannelData(obj protocols.Objective) error {
 			o.ToMyRight.Channel = right
 		}
 
+		return nil
+	case *swap.Objective:
+		ch, err := ds.getChannelById(o.C.Id)
+		if err != nil {
+			return fmt.Errorf("error retrieving channel data for objective %s: %w", id, err)
+		}
+
+		o.C = &channel.SwapChannel{Channel: ch}
 		return nil
 	case *swapfund.Objective:
 		v, err := ds.getChannelById(o.S.Id)

@@ -17,6 +17,7 @@ import (
 	"github.com/statechannels/go-nitro/protocols/directdefund"
 	"github.com/statechannels/go-nitro/protocols/directfund"
 	"github.com/statechannels/go-nitro/protocols/mirrorbridgeddefund"
+	"github.com/statechannels/go-nitro/protocols/swap"
 	"github.com/statechannels/go-nitro/protocols/swapdefund"
 	"github.com/statechannels/go-nitro/protocols/swapfund"
 	"github.com/statechannels/go-nitro/protocols/virtualdefund"
@@ -493,6 +494,15 @@ func (ms *MemStore) populateChannelData(obj protocols.Objective) error {
 			o.ToMyRight = right
 		}
 		return nil
+	case *swap.Objective:
+		ch, err := ms.getChannelById(o.C.Id)
+		if err != nil {
+			return fmt.Errorf("error retrieving channel data for objective %s: %w", id, err)
+		}
+
+		o.C = &channel.SwapChannel{Channel: ch}
+		return nil
+
 	case *swapfund.Objective:
 		v, err := ms.getChannelById(o.S.Id)
 		if err != nil {
@@ -628,6 +638,10 @@ func decodeObjective(id protocols.ObjectiveId, data []byte) (protocols.Objective
 		sdfo := swapdefund.Objective{}
 		err := sdfo.UnmarshalJSON(data)
 		return &sdfo, err
+	case swap.IsSwapObjective(id):
+		so := swap.Objective{}
+		err := so.UnmarshalJSON(data)
+		return &so, err
 	default:
 		return nil, fmt.Errorf("objective id %s does not correspond to a known Objective type", id)
 

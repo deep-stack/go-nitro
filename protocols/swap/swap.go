@@ -59,9 +59,12 @@ func NewSwapPrimitive(channelId types.Destination, fromAsset, toAsset common.Add
 
 // TODO: Create clone method for swap primitive
 
+// TODO: Check need of custom marshall and unmarshall methods for swap primitive
+
 // encodes the state into a []bytes value
 func (sp SwapPrimitive) encode() (types.Bytes, error) {
 	// TODO: Check whether we need to encode array of swap primitive
+	// TODO: Check need of app data for sad path will be array of swap primitive
 	return ethAbi.Arguments{
 		{Type: abi.Destination}, // channel id
 		{Type: abi.Address},     // fromAsset
@@ -215,6 +218,9 @@ func (o *Objective) Crank(secretKey *[]byte) (protocols.Objective, protocols.Sid
 		if err != nil {
 			return &updated, protocols.SideEffects{}, WaitingForSwapping, fmt.Errorf("could not create payload message %w", err)
 		}
+
+		fmt.Printf("SWAP updated.SwapPrimitive>>>>>>>%+v", updated.SwapPrimitive)
+
 		sideEffects.MessagesToSend = append(sideEffects.MessagesToSend, messages...)
 		return &updated, sideEffects, WaitingForSwapping, nil
 	}
@@ -269,13 +275,40 @@ func (o *Objective) HasSignatureForParticipant() bool {
 	return found
 }
 
+type jsonObjective struct {
+	Status        protocols.ObjectiveStatus
+	C             types.Destination
+	SwapPrimitive SwapPrimitive
+	IsSwapper     bool
+}
+
 func (o Objective) MarshalJSON() ([]byte, error) {
-	// TODO: create marshal method
-	return json.Marshal("")
+	jsonSO := jsonObjective{
+		Status:        o.Status,
+		C:             o.C.Id,
+		SwapPrimitive: o.SwapPrimitive,
+		IsSwapper:     o.IsSwapper,
+	}
+
+	return json.Marshal(jsonSO)
 }
 
 func (o *Objective) UnmarshalJSON(data []byte) error {
-	// TODO: create unmarshal method
+	if string(data) == "null" {
+		return nil
+	}
+
+	var jsonSo jsonObjective
+	if err := json.Unmarshal(data, &jsonSo); err != nil {
+		return fmt.Errorf("failed to unmarshal the Swap Objective: %w", err)
+	}
+
+	o.Status = jsonSo.Status
+	o.IsSwapper = jsonSo.IsSwapper
+	o.SwapPrimitive = jsonSo.SwapPrimitive
+	o.C = &channel.SwapChannel{}
+	o.C.Id = jsonSo.C
+
 	return nil
 }
 
