@@ -37,6 +37,10 @@ type Exchange struct {
 	AmountOut *big.Int
 }
 
+func (ex Exchange) Equal(target Exchange) bool {
+	return ex.TokenIn == target.TokenIn && ex.TokenOut == target.TokenOut && ex.AmountIn.Cmp(target.AmountIn) == 0 && ex.AmountOut.Cmp(target.AmountOut) == 0
+}
+
 type SwapPrimitive struct {
 	ChannelId types.Destination
 	Exchange  Exchange
@@ -79,6 +83,10 @@ func (sp SwapPrimitive) encode() (types.Bytes, error) {
 	)
 }
 
+func (sp SwapPrimitive) Equal(target SwapPrimitive) bool {
+	return sp.ChannelId == target.ChannelId && sp.Exchange.Equal(target.Exchange)
+}
+
 // Hash returns the keccak256 hash of the State
 func (sp SwapPrimitive) Hash() (types.Bytes32, error) {
 	encoded, err := sp.encode()
@@ -101,6 +109,15 @@ func (sp SwapPrimitive) AddSignature(sig state.Signature, myIndex uint) error {
 	// TODO: Validation
 	sp.Sigs[myIndex] = sig
 	return nil
+}
+
+// RecoverSigner computes the Ethereum address which generated Signature sig on State state
+func (sp SwapPrimitive) RecoverSigner(sig state.Signature) (types.Address, error) {
+	hash, error := sp.Hash()
+	if error != nil {
+		return types.Address{}, error
+	}
+	return nc.RecoverEthereumMessageSigner(hash[:], sig)
 }
 
 // Objective is a cache of data computed by reading from the store. It stores (potentially) infinite data.
@@ -192,7 +209,22 @@ func (o *Objective) Update(raw protocols.ObjectivePayload) (protocols.Objective,
 		return &updated, fmt.Errorf("could not get swap primitive payload: %w", err)
 	}
 
-	// TODO: Validation
+	// Ensure the incoming swap primitive is valid
+	ok := o.SwapPrimitive.Equal(sp)
+	if !ok {
+		return &updated, fmt.Errorf("swap primitive does not match")
+	}
+
+	counterPartySig := sp.Sigs[1-updated.C.MyIndex]
+	counterPartyAddress, err := o.SwapPrimitive.RecoverSigner(counterPartySig)
+	if err != nil {
+		return &updated, err
+	}
+
+	if counterPartyAddress != o.C.Participants[1-o.C.MyIndex] {
+		return &updated, fmt.Errorf("swap primitive lacks counterparty's signature")
+	}
+
 	updated.SwapPrimitive = sp
 
 	return &updated, nil
@@ -209,6 +241,7 @@ func (o *Objective) Crank(secretKey *[]byte) (protocols.Objective, protocols.Sid
 	if updated.Status != protocols.Approved {
 		return &updated, sideEffects, WaitingForNothing, protocols.ErrNotApproved
 	}
+	// TODO: Both participant checks whether swap operation is valid one
 
 	// TODO: Swapee check whether to accept or reject
 
