@@ -684,7 +684,7 @@ func (e *Engine) handleObjectiveRequest(or protocols.ObjectiveRequest) (EngineEv
 		return e.attemptProgress(&vfo)
 
 	case swap.ObjectiveRequest:
-		so, err := swap.NewObjective(request, true, true, e.store.GetChannelById)
+		so, err := swap.NewObjective(request, true, true, e.store.GetChannelById, *e.store.GetAddress())
 		if err != nil {
 			return failedEngineEvent, fmt.Errorf("handleAPIEvent: Could not create swap objective for %+v: %w", request, err)
 		}
@@ -1188,7 +1188,7 @@ func (e *Engine) constructObjectiveFromMessage(id protocols.ObjectiveId, p proto
 
 		return &sfo, nil
 	case swap.IsSwapObjective(id):
-		so, err := swap.ConstructObjectiveFromPayload(p, false, e.store.GetChannelById)
+		so, err := swap.ConstructObjectiveFromPayload(p, false, e.store.GetChannelById, *e.store.GetAddress())
 		return &so, err
 	case virtualdefund.IsVirtualDefundObjective(id):
 		vId, err := virtualdefund.GetVirtualChannelFromObjectiveId(id)

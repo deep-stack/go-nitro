@@ -30,12 +30,11 @@ const (
 
 const ObjectivePrefix = "Swap-"
 
-// TODO: Discuss fields of exchange
 type Exchange struct {
-	FromAsset  common.Address
-	ToAsset    common.Address
-	FromAmount *big.Int
-	ToAmount   *big.Int
+	TokenIn   common.Address
+	TokenOut  common.Address
+	AmountIn  *big.Int
+	AmountOut *big.Int
 }
 
 type SwapPrimitive struct {
@@ -67,16 +66,16 @@ func (sp SwapPrimitive) encode() (types.Bytes, error) {
 	// TODO: Check need of app data for sad path will be array of swap primitive
 	return ethAbi.Arguments{
 		{Type: abi.Destination}, // channel id
-		{Type: abi.Address},     // fromAsset
-		{Type: abi.Address},     // toAsset
-		{Type: abi.Uint256},     // fromAmount
-		{Type: abi.Uint256},     // toAmount
+		{Type: abi.Address},     // tokenIn
+		{Type: abi.Address},     // tokenOut
+		{Type: abi.Uint256},     // amountIn
+		{Type: abi.Uint256},     // amountOut
 	}.Pack(
 		sp.ChannelId,
-		sp.Exchange.FromAsset,
-		sp.Exchange.ToAsset,
-		sp.Exchange.FromAmount,
-		sp.Exchange.ToAmount,
+		sp.Exchange.TokenIn,
+		sp.Exchange.TokenOut,
+		sp.Exchange.AmountIn,
+		sp.Exchange.AmountOut,
 	)
 }
 
@@ -109,16 +108,19 @@ type Objective struct {
 	Status        protocols.ObjectiveStatus
 	C             *channel.SwapChannel
 	SwapPrimitive SwapPrimitive
-	IsSwapper     bool
+	SwapperIndex  uint
 }
 
 // NewObjective creates a new swap objective from a given request.
-func NewObjective(request ObjectiveRequest, preApprove bool, isSwapper bool, getChannelFunc GetChannelByIdFunction) (Objective, error) {
+func NewObjective(request ObjectiveRequest, preApprove bool, isSwapper bool, getChannelFunc GetChannelByIdFunction, address common.Address) (Objective, error) {
 	obj := Objective{}
 
 	swapChannel, ok := getChannelFunc(request.ChannelId)
 	if !ok {
-		return obj, fmt.Errorf("new swap objective creation failed, swap channel not found")
+		return obj, fmt.Errorf("swap objective creation failed, swap channel not found")
+	}
+	obj.C = &channel.SwapChannel{
+		Channel: *swapChannel,
 	}
 
 	if preApprove {
@@ -127,14 +129,17 @@ func NewObjective(request ObjectiveRequest, preApprove bool, isSwapper bool, get
 		obj.Status = protocols.Unapproved
 	}
 
+	myIndex, err := obj.FindParticipantIndex(address)
+	if err != nil {
+		return obj, err
+	}
+
 	if isSwapper {
 		swapPrimitive := NewSwapPrimitive(request.ChannelId, request.FromAsset, request.ToAsset, request.FromAmount, request.ToAmount)
 		obj.SwapPrimitive = swapPrimitive
-		obj.IsSwapper = true
-	}
-
-	obj.C = &channel.SwapChannel{
-		Channel: *swapChannel,
+		obj.SwapperIndex = uint(myIndex)
+	} else {
+		obj.SwapperIndex = 1 - uint(myIndex)
 	}
 
 	return obj, nil
@@ -181,6 +186,15 @@ func (o *Objective) GetStatus() protocols.ObjectiveStatus {
 // and returns the updated state.
 func (o *Objective) Update(raw protocols.ObjectivePayload) (protocols.Objective, error) {
 	updated := o.clone()
+
+	sp, err := getSwapPrimitivePayload(raw.PayloadData)
+	if err != nil {
+		return &updated, fmt.Errorf("could not get swap primitive payload: %w", err)
+	}
+
+	// TODO: Validation
+	updated.SwapPrimitive = sp
+
 	return &updated, nil
 }
 
@@ -195,9 +209,6 @@ func (o *Objective) Crank(secretKey *[]byte) (protocols.Objective, protocols.Sid
 	if updated.Status != protocols.Approved {
 		return &updated, sideEffects, WaitingForNothing, protocols.ErrNotApproved
 	}
-
-	// fmt.Printf("SWAP OBJECTIVE>>>>>>>%+v", updated)
-	// fmt.Printf("SWAP CHANNEL>>>>>>>%+v", updated.C)
 
 	// TODO: Swapee check whether to accept or reject
 
@@ -219,18 +230,15 @@ func (o *Objective) Crank(secretKey *[]byte) (protocols.Objective, protocols.Sid
 			return &updated, protocols.SideEffects{}, WaitingForSwapping, fmt.Errorf("could not create payload message %w", err)
 		}
 
-		fmt.Printf("SWAP updated.SwapPrimitive>>>>>>>%+v", updated.SwapPrimitive)
-
 		sideEffects.MessagesToSend = append(sideEffects.MessagesToSend, messages...)
-		return &updated, sideEffects, WaitingForSwapping, nil
 	}
 
 	// Wait if all signatures are not available
 	if !updated.HasAllSignatures() {
-		return &updated, protocols.SideEffects{}, WaitingForSwapping, nil
+		return &updated, sideEffects, WaitingForSwapping, nil
 	}
 
-	// If all signatures are available, update the swap channel according to the swap primitive and add the swap primitive to the channel.
+	// If all signatures are available, update the swap channel according to the swap primitive and add the swap primitive to the swap channel
 
 	// Completion
 	updated.Status = protocols.Completed
@@ -251,7 +259,7 @@ func (o *Objective) Related() []protocols.Storable {
 func (o *Objective) clone() Objective {
 	clone := Objective{}
 	clone.Status = o.Status
-	clone.IsSwapper = o.IsSwapper
+	clone.SwapperIndex = o.SwapperIndex
 	clone.C = o.C.Clone()
 	// TODP: Create clone method for swap primitive
 	clone.SwapPrimitive = o.SwapPrimitive
@@ -275,11 +283,21 @@ func (o *Objective) HasSignatureForParticipant() bool {
 	return found
 }
 
+func (o *Objective) FindParticipantIndex(address common.Address) (int, error) {
+	for index, participantAddress := range o.C.Participants {
+		if participantAddress == address {
+			return index, nil
+		}
+	}
+
+	return -1, fmt.Errorf("participant not found")
+}
+
 type jsonObjective struct {
 	Status        protocols.ObjectiveStatus
 	C             types.Destination
 	SwapPrimitive SwapPrimitive
-	IsSwapper     bool
+	SwapperIndex  uint
 }
 
 func (o Objective) MarshalJSON() ([]byte, error) {
@@ -287,7 +305,7 @@ func (o Objective) MarshalJSON() ([]byte, error) {
 		Status:        o.Status,
 		C:             o.C.Id,
 		SwapPrimitive: o.SwapPrimitive,
-		IsSwapper:     o.IsSwapper,
+		SwapperIndex:  o.SwapperIndex,
 	}
 
 	return json.Marshal(jsonSO)
@@ -304,7 +322,7 @@ func (o *Objective) UnmarshalJSON(data []byte) error {
 	}
 
 	o.Status = jsonSo.Status
-	o.IsSwapper = jsonSo.IsSwapper
+	o.SwapperIndex = jsonSo.SwapperIndex
 	o.SwapPrimitive = jsonSo.SwapPrimitive
 	o.C = &channel.SwapChannel{}
 	o.C.Id = jsonSo.C
@@ -318,30 +336,19 @@ func ConstructObjectiveFromPayload(
 	op protocols.ObjectivePayload,
 	preApprove bool,
 	getChannelFunc GetChannelByIdFunction,
+	address common.Address,
 ) (Objective, error) {
-	obj := Objective{}
-
 	sp, err := getSwapPrimitivePayload(op.PayloadData)
 	if err != nil {
 		return Objective{}, fmt.Errorf("could not get swap primitive payload: %w", err)
 	}
 
-	if preApprove {
-		obj.Status = protocols.Approved
-	} else {
-		obj.Status = protocols.Unapproved
+	obj, err := NewObjective(ObjectiveRequest{ChannelId: sp.ChannelId}, preApprove, false, getChannelFunc, address)
+	if err != nil {
+		return Objective{}, fmt.Errorf("unable to construct swap objective from payload: %w", err)
 	}
 
 	obj.SwapPrimitive = sp
-
-	ch, ok := getChannelFunc(sp.ChannelId)
-	if !ok {
-		return Objective{}, fmt.Errorf("unable to construct objective from payload, swap channel not found")
-	}
-
-	obj.C = &channel.SwapChannel{
-		Channel: *ch,
-	}
 
 	return obj, nil
 }
