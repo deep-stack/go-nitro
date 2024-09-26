@@ -45,9 +45,10 @@ type SwapPrimitive struct {
 	ChannelId types.Destination
 	Exchange  Exchange
 	Sigs      map[uint]state.Signature // keyed by participant index in swap channel
+	Nonce     uint64
 }
 
-func NewSwapPrimitive(channelId types.Destination, tokenIn, tokenOut common.Address, amountIn, amountOut *big.Int) SwapPrimitive {
+func NewSwapPrimitive(channelId types.Destination, tokenIn, tokenOut common.Address, amountIn, amountOut *big.Int, nonce uint64) SwapPrimitive {
 	return SwapPrimitive{
 		ChannelId: channelId,
 		Exchange: Exchange{
@@ -56,7 +57,8 @@ func NewSwapPrimitive(channelId types.Destination, tokenIn, tokenOut common.Addr
 			amountIn,
 			amountOut,
 		},
-		Sigs: make(map[uint]state.Signature, 2),
+		Sigs:  make(map[uint]state.Signature, 2),
+		Nonce: nonce,
 	}
 }
 
@@ -72,17 +74,19 @@ func (sp SwapPrimitive) encode() (types.Bytes, error) {
 		{Type: abi.Address},     // tokenOut
 		{Type: abi.Uint256},     // amountIn
 		{Type: abi.Uint256},     // amountOut
+		{Type: abi.Uint256},     // nonce
 	}.Pack(
 		sp.ChannelId,
 		sp.Exchange.TokenIn,
 		sp.Exchange.TokenOut,
 		sp.Exchange.AmountIn,
 		sp.Exchange.AmountOut,
+		new(big.Int).SetUint64(sp.Nonce),
 	)
 }
 
 func (sp SwapPrimitive) Equal(target SwapPrimitive) bool {
-	return sp.ChannelId == target.ChannelId && sp.Exchange.Equal(target.Exchange)
+	return sp.ChannelId == target.ChannelId && sp.Exchange.Equal(target.Exchange) && sp.Nonce == target.Nonce
 }
 
 func (sp SwapPrimitive) Clone() SwapPrimitive {
@@ -99,7 +103,8 @@ func (sp SwapPrimitive) Clone() SwapPrimitive {
 			AmountIn:  sp.Exchange.AmountIn,
 			AmountOut: sp.Exchange.AmountOut,
 		},
-		Sigs: clonedSigs,
+		Sigs:  clonedSigs,
+		Nonce: sp.Nonce,
 	}
 }
 
@@ -147,7 +152,7 @@ type Objective struct {
 func NewObjective(request ObjectiveRequest, preApprove bool, isSwapper bool, getChannelFunc GetChannelByIdFunction, address common.Address) (Objective, error) {
 	obj := Objective{}
 
-	swapChannel, ok := getChannelFunc(request.ChannelId)
+	swapChannel, ok := getChannelFunc(request.channelId)
 	if !ok {
 		return obj, fmt.Errorf("swap objective creation failed, swap channel not found")
 	}
@@ -167,7 +172,7 @@ func NewObjective(request ObjectiveRequest, preApprove bool, isSwapper bool, get
 	}
 
 	if isSwapper {
-		swapPrimitive := NewSwapPrimitive(request.ChannelId, request.tokenIn, request.tokenOut, request.amountIn, request.amountOut)
+		swapPrimitive := NewSwapPrimitive(request.channelId, request.tokenIn, request.tokenOut, request.amountIn, request.amountOut, request.nonce)
 		obj.SwapPrimitive = swapPrimitive
 		obj.SwapperIndex = uint(myIndex)
 	} else {
@@ -179,9 +184,8 @@ func NewObjective(request ObjectiveRequest, preApprove bool, isSwapper bool, get
 
 // Id returns the objective id.
 func (o *Objective) Id() protocols.ObjectiveId {
-	// TODO: Determine objective id
-	// TODO: Each objective id should be unique for each swap primitive
-	return protocols.ObjectiveId(ObjectivePrefix + o.C.Id.String())
+	spId := getSwapPrimitiveId(o.C.FixedPart, o.SwapPrimitive.Nonce)
+	return protocols.ObjectiveId(ObjectivePrefix + spId.String())
 }
 
 // Approve returns an approved copy of the objective.
@@ -379,6 +383,7 @@ type jsonObjective struct {
 	C             types.Destination
 	SwapPrimitive SwapPrimitive
 	SwapperIndex  uint
+	Nonce         uint64
 }
 
 func (o Objective) MarshalJSON() ([]byte, error) {
@@ -424,7 +429,7 @@ func ConstructObjectiveFromPayload(
 		return Objective{}, fmt.Errorf("could not get swap primitive payload: %w", err)
 	}
 
-	obj, err := NewObjective(ObjectiveRequest{ChannelId: sp.ChannelId}, preApprove, false, getChannelFunc, address)
+	obj, err := NewObjective(ObjectiveRequest{channelId: sp.ChannelId}, preApprove, false, getChannelFunc, address)
 	if err != nil {
 		return Objective{}, fmt.Errorf("unable to construct swap objective from payload: %w", err)
 	}
@@ -450,7 +455,9 @@ func IsSwapObjective(id protocols.ObjectiveId) bool {
 
 // ObjectiveRequest represents a request to create a new virtual funding objective.
 type ObjectiveRequest struct {
-	ChannelId        types.Destination
+	fixedPart        state.FixedPart
+	channelId        types.Destination
+	nonce            uint64
 	tokenIn          common.Address
 	tokenOut         common.Address
 	amountIn         *big.Int
@@ -459,9 +466,11 @@ type ObjectiveRequest struct {
 }
 
 // NewObjectiveRequest creates a new ObjectiveRequest.
-func NewObjectiveRequest(channelId types.Destination, tokenIn common.Address, tokenOut common.Address, amountIn *big.Int, amountOut *big.Int) ObjectiveRequest {
+func NewObjectiveRequest(channelId types.Destination, tokenIn common.Address, tokenOut common.Address, amountIn *big.Int, amountOut *big.Int, fixedPart state.FixedPart, nonce uint64) ObjectiveRequest {
 	return ObjectiveRequest{
-		ChannelId:        channelId,
+		fixedPart:        fixedPart,
+		nonce:            nonce,
+		channelId:        channelId,
 		tokenIn:          tokenIn,
 		tokenOut:         tokenOut,
 		amountIn:         amountIn,
@@ -472,8 +481,18 @@ func NewObjectiveRequest(channelId types.Destination, tokenIn common.Address, to
 
 // Id returns the objective id for the request.
 func (r ObjectiveRequest) Id(myAddress types.Address, chainId *big.Int) protocols.ObjectiveId {
-	// TODO: Determine unique objective id
-	return protocols.ObjectiveId(ObjectivePrefix + r.ChannelId.String())
+	return protocols.ObjectiveId(ObjectivePrefix + getSwapPrimitiveId(r.fixedPart, r.nonce).String())
+}
+
+func getSwapPrimitiveId(fixedPart state.FixedPart, nonce uint64) types.Destination {
+	fp := state.FixedPart{
+		Participants:      fixedPart.Participants,
+		ChannelNonce:      nonce,
+		ChallengeDuration: fixedPart.ChallengeDuration,
+		AppDefinition:     fixedPart.AppDefinition,
+	}
+
+	return fp.ChannelId()
 }
 
 // SignalObjectiveStarted is used by the engine to signal the objective has been started.
@@ -495,7 +514,7 @@ type ObjectiveResponse struct {
 // Response computes and returns the appropriate response from the request.
 func (r ObjectiveRequest) Response() ObjectiveResponse {
 	return ObjectiveResponse{
-		Id:        protocols.ObjectiveId(ObjectivePrefix + r.ChannelId.String()),
-		ChannelId: r.ChannelId,
+		Id:        protocols.ObjectiveId(ObjectivePrefix + getSwapPrimitiveId(r.fixedPart, r.nonce).String()),
+		ChannelId: r.channelId,
 	}
 }

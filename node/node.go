@@ -236,7 +236,12 @@ func (n *Node) CreatePaymentChannel(Intermediaries []types.Address, CounterParty
 }
 
 func (n *Node) SwapAssets(channelId types.Destination, tokenIn common.Address, tokenOut common.Address, amountIn *big.Int, amountOut *big.Int) (swap.ObjectiveResponse, error) {
-	objectiveRequest := swap.NewObjectiveRequest(channelId, tokenIn, tokenOut, amountIn, amountOut)
+	swapChannel, ok := n.store.GetChannelById(channelId)
+	if !ok {
+		return swap.ObjectiveResponse{}, fmt.Errorf("no swap channel found for channel ID %v", channelId)
+	}
+
+	objectiveRequest := swap.NewObjectiveRequest(channelId, tokenIn, tokenOut, amountIn, amountOut, swapChannel.FixedPart, rand.Uint64())
 
 	// Send the event to the engine
 	n.engine.ObjectiveRequestsFromAPI <- objectiveRequest
