@@ -60,8 +60,6 @@ func NewSwapPrimitive(channelId types.Destination, tokenIn, tokenOut common.Addr
 	}
 }
 
-// TODO: Create clone method for swap primitive
-
 // TODO: Check need of custom marshall and unmarshall methods for swap primitive
 
 // encodes the state into a []bytes value
@@ -87,6 +85,24 @@ func (sp SwapPrimitive) Equal(target SwapPrimitive) bool {
 	return sp.ChannelId == target.ChannelId && sp.Exchange.Equal(target.Exchange)
 }
 
+func (sp SwapPrimitive) Clone() SwapPrimitive {
+	clonedSigs := make(map[uint]state.Signature, len(sp.Sigs))
+	for i, sig := range sp.Sigs {
+		clonedSigs[i] = sig
+	}
+
+	return SwapPrimitive{
+		ChannelId: sp.ChannelId,
+		Exchange: Exchange{
+			TokenIn:   sp.Exchange.TokenIn,
+			TokenOut:  sp.Exchange.TokenOut,
+			AmountIn:  sp.Exchange.AmountIn,
+			AmountOut: sp.Exchange.AmountOut,
+		},
+		Sigs: clonedSigs,
+	}
+}
+
 // Hash returns the keccak256 hash of the State
 func (sp SwapPrimitive) Hash() (types.Bytes32, error) {
 	encoded, err := sp.encode()
@@ -106,7 +122,6 @@ func (sp SwapPrimitive) Sign(secretKey []byte) (state.Signature, error) {
 }
 
 func (sp SwapPrimitive) AddSignature(sig state.Signature, myIndex uint) error {
-	// TODO: Validation
 	sp.Sigs[myIndex] = sig
 	return nil
 }
@@ -328,8 +343,7 @@ func (o *Objective) clone() Objective {
 	clone.Status = o.Status
 	clone.SwapperIndex = o.SwapperIndex
 	clone.C = o.C.Clone()
-	// TODP: Create clone method for swap primitive
-	clone.SwapPrimitive = o.SwapPrimitive
+	clone.SwapPrimitive = o.SwapPrimitive.Clone()
 
 	return clone
 }
