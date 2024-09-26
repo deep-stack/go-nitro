@@ -43,14 +43,14 @@ type SwapPrimitive struct {
 	Sigs      map[uint]state.Signature // keyed by participant index in swap channel
 }
 
-func NewSwapPrimitive(channelId types.Destination, fromAsset, toAsset common.Address, fromAmount, toAmout *big.Int) SwapPrimitive {
+func NewSwapPrimitive(channelId types.Destination, tokenIn, tokenOut common.Address, amountIn, amountOut *big.Int) SwapPrimitive {
 	return SwapPrimitive{
 		ChannelId: channelId,
 		Exchange: Exchange{
-			fromAsset,
-			toAsset,
-			fromAmount,
-			toAmout,
+			tokenIn,
+			tokenOut,
+			amountIn,
+			amountOut,
 		},
 		Sigs: make(map[uint]state.Signature, 2),
 	}
@@ -135,7 +135,7 @@ func NewObjective(request ObjectiveRequest, preApprove bool, isSwapper bool, get
 	}
 
 	if isSwapper {
-		swapPrimitive := NewSwapPrimitive(request.ChannelId, request.FromAsset, request.ToAsset, request.FromAmount, request.ToAmount)
+		swapPrimitive := NewSwapPrimitive(request.ChannelId, request.tokenIn, request.tokenOut, request.amountIn, request.amountOut)
 		obj.SwapPrimitive = swapPrimitive
 		obj.SwapperIndex = uint(myIndex)
 	} else {
@@ -239,10 +239,44 @@ func (o *Objective) Crank(secretKey *[]byte) (protocols.Objective, protocols.Sid
 	}
 
 	// If all signatures are available, update the swap channel according to the swap primitive and add the swap primitive to the swap channel
+	state := updated.UpdateSwapState()
+	fmt.Printf("\nstate>>>>>>>%+v", state)
+	// TODO: Need dicussion for storing the updated state in swap channel
+	// TODO: Use some new methods to store latest swap channel state
 
 	// Completion
 	updated.Status = protocols.Completed
 	return &updated, sideEffects, WaitingForNothing, nil
+}
+
+func (o *Objective) UpdateSwapState() state.State {
+	tokenIn := o.SwapPrimitive.Exchange.TokenIn
+	tokenOut := o.SwapPrimitive.Exchange.TokenOut
+
+	// TODO: Use some new methods to get latest swap channel state
+	updateSupportedState, _ := o.C.LatestSupportedState()
+	updateOutcome := updateSupportedState.Outcome.Clone()
+
+	for _, assetOutcome := range updateOutcome {
+
+		swapperAllocation := assetOutcome.Allocations[o.SwapperIndex]
+		swappeAllocation := assetOutcome.Allocations[1-o.SwapperIndex]
+
+		if assetOutcome.Asset == tokenIn {
+
+			swapperAllocation.Amount.Sub(swapperAllocation.Amount, o.SwapPrimitive.Exchange.AmountIn)
+			swappeAllocation.Amount.Add(swappeAllocation.Amount, o.SwapPrimitive.Exchange.AmountIn)
+		}
+
+		if assetOutcome.Asset == tokenOut {
+			swapperAllocation.Amount.Add(swapperAllocation.Amount, o.SwapPrimitive.Exchange.AmountOut)
+			swappeAllocation.Amount.Sub(swappeAllocation.Amount, o.SwapPrimitive.Exchange.AmountOut)
+		}
+	}
+
+	updateSupportedState.Outcome = updateOutcome
+	updateSupportedState.TurnNum++
+	return updateSupportedState
 }
 
 func (o *Objective) Related() []protocols.Storable {
@@ -370,21 +404,21 @@ func IsSwapObjective(id protocols.ObjectiveId) bool {
 // ObjectiveRequest represents a request to create a new virtual funding objective.
 type ObjectiveRequest struct {
 	ChannelId        types.Destination
-	FromAsset        common.Address
-	ToAsset          common.Address
-	FromAmount       *big.Int
-	ToAmount         *big.Int
+	tokenIn          common.Address
+	tokenOut         common.Address
+	amountIn         *big.Int
+	amountOut        *big.Int
 	objectiveStarted chan struct{}
 }
 
 // NewObjectiveRequest creates a new ObjectiveRequest.
-func NewObjectiveRequest(channelId types.Destination, fromAsset common.Address, toAsset common.Address, fromAmount *big.Int, toAmount *big.Int) ObjectiveRequest {
+func NewObjectiveRequest(channelId types.Destination, tokenIn common.Address, tokenOut common.Address, amountIn *big.Int, amountOut *big.Int) ObjectiveRequest {
 	return ObjectiveRequest{
 		ChannelId:        channelId,
-		FromAsset:        fromAsset,
-		ToAsset:          toAsset,
-		FromAmount:       fromAmount,
-		ToAmount:         toAmount,
+		tokenIn:          tokenIn,
+		tokenOut:         tokenOut,
+		amountIn:         amountIn,
+		amountOut:        amountOut,
 		objectiveStarted: make(chan struct{}),
 	}
 }

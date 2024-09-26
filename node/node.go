@@ -235,8 +235,8 @@ func (n *Node) CreatePaymentChannel(Intermediaries []types.Address, CounterParty
 	return objectiveRequest.Response(*n.Address), nil
 }
 
-func (n *Node) SwapAssets(channelId types.Destination, fromAsset common.Address, toAsset common.Address, fromAmount *big.Int, toAmount *big.Int) (swap.ObjectiveResponse, error) {
-	objectiveRequest := swap.NewObjectiveRequest(channelId, fromAsset, toAsset, fromAmount, toAmount)
+func (n *Node) SwapAssets(channelId types.Destination, tokenIn common.Address, tokenOut common.Address, amountIn *big.Int, amountOut *big.Int) (swap.ObjectiveResponse, error) {
+	objectiveRequest := swap.NewObjectiveRequest(channelId, tokenIn, tokenOut, amountIn, amountOut)
 
 	// Send the event to the engine
 	n.engine.ObjectiveRequestsFromAPI <- objectiveRequest
