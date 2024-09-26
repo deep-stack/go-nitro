@@ -20,7 +20,7 @@ import (
 type GetChannelByIdFunction func(id types.Destination) (channel *channel.Channel, ok bool)
 
 const (
-	SwapPrimitivePayload protocols.PayloadType = "SwapPrimitivePayload"
+	SwapPayloadType protocols.PayloadType = "SwapPayload"
 )
 
 const (
@@ -39,6 +39,11 @@ type Exchange struct {
 
 func (ex Exchange) Equal(target Exchange) bool {
 	return ex.TokenIn == target.TokenIn && ex.TokenOut == target.TokenOut && ex.AmountIn.Cmp(target.AmountIn) == 0 && ex.AmountOut.Cmp(target.AmountOut) == 0
+}
+
+type SwapPayload struct {
+	SwapPrimitive SwapPrimitive
+	StateSigs     map[uint]state.Signature
 }
 
 type SwapPrimitive struct {
@@ -145,6 +150,7 @@ type Objective struct {
 	Status        protocols.ObjectiveStatus
 	C             *channel.SwapChannel
 	SwapPrimitive SwapPrimitive
+	StateSigs     map[uint]state.Signature
 	SwapperIndex  uint
 }
 
@@ -178,6 +184,8 @@ func NewObjective(request ObjectiveRequest, preApprove bool, isSwapper bool, get
 	} else {
 		obj.SwapperIndex = 1 - uint(myIndex)
 	}
+
+	obj.StateSigs = make(map[uint]state.Signature, 2)
 
 	return obj, nil
 }
@@ -221,20 +229,22 @@ func (o *Objective) GetStatus() protocols.ObjectiveStatus {
 // Update receives an protocols.ObjectiveEvent, applies all applicable event data to the VirtualFundObjective,
 // and returns the updated state.
 func (o *Objective) Update(raw protocols.ObjectivePayload) (protocols.Objective, error) {
+	// TODO: Check objective id are same
+
 	updated := o.clone()
 
-	sp, err := getSwapPrimitivePayload(raw.PayloadData)
+	sp, err := getSwapPayload(raw.PayloadData)
 	if err != nil {
 		return &updated, fmt.Errorf("could not get swap primitive payload: %w", err)
 	}
 
 	// Ensure the incoming swap primitive is valid
-	ok := o.SwapPrimitive.Equal(sp)
+	ok := o.SwapPrimitive.Equal(sp.SwapPrimitive)
 	if !ok {
 		return &updated, fmt.Errorf("swap primitive does not match")
 	}
 
-	counterPartySig := sp.Sigs[1-updated.C.MyIndex]
+	counterPartySig := sp.SwapPrimitive.Sigs[1-updated.C.MyIndex]
 	counterPartyAddress, err := o.SwapPrimitive.RecoverSigner(counterPartySig)
 	if err != nil {
 		return &updated, err
@@ -244,7 +254,9 @@ func (o *Objective) Update(raw protocols.ObjectivePayload) (protocols.Objective,
 		return &updated, fmt.Errorf("swap primitive lacks counterparty's signature")
 	}
 
-	updated.SwapPrimitive = sp
+	updated.SwapPrimitive = sp.SwapPrimitive
+	// TODO: Validation for state sigs
+	updated.StateSigs = sp.StateSigs
 
 	return &updated, nil
 }
@@ -277,7 +289,27 @@ func (o *Objective) Crank(secretKey *[]byte) (protocols.Objective, protocols.Sid
 			return &updated, sideEffects, WaitingForSwapping, err
 		}
 
-		messages, err := protocols.CreateObjectivePayloadMessage(updated.Id(), updated.SwapPrimitive, SwapPrimitivePayload, o.C.Participants[1-o.C.MyIndex])
+		updatedState, err := updated.GetUpdatedSwapState()
+		if err != nil {
+			return &updated, protocols.SideEffects{}, WaitingForSwapping, fmt.Errorf("error creating updated swap channel state %w", err)
+		}
+
+		stateSig, err := updatedState.Sign(*secretKey)
+		if err != nil {
+			return &updated, sideEffects, WaitingForSwapping, fmt.Errorf("error signing swap channel state %w", err)
+		}
+
+		updated.StateSigs[updated.C.MyIndex] = stateSig
+
+		messages, err := protocols.CreateObjectivePayloadMessage(
+			updated.Id(),
+			SwapPayload{
+				SwapPrimitive: updated.SwapPrimitive,
+				StateSigs:     updated.StateSigs,
+			},
+			SwapPayloadType,
+			o.C.Participants[1-o.C.MyIndex],
+		)
 		if err != nil {
 			return &updated, protocols.SideEffects{}, WaitingForSwapping, fmt.Errorf("could not create payload message %w", err)
 		}
@@ -291,22 +323,47 @@ func (o *Objective) Crank(secretKey *[]byte) (protocols.Objective, protocols.Sid
 	}
 
 	// If all signatures are available, update the swap channel according to the swap primitive and add the swap primitive to the swap channel
-	state := updated.UpdateSwapState()
-	fmt.Printf("\nstate>>>>>>>%+v", state)
-	// TODO: Need dicussion for storing the updated state in swap channel
-	// TODO: Use some new methods to store latest swap channel state
+	err := updated.UpdateSwapChannelState()
+	if err != nil {
+		return &updated, protocols.SideEffects{}, WaitingForSwapping, fmt.Errorf("error updating swap channel state %w", err)
+	}
 
 	// Completion
 	updated.Status = protocols.Completed
 	return &updated, sideEffects, WaitingForNothing, nil
 }
 
-func (o *Objective) UpdateSwapState() state.State {
+func (o *Objective) UpdateSwapChannelState() error {
+	updatedState, err := o.GetUpdatedSwapState()
+	if err != nil {
+		return fmt.Errorf("error creating updated swap channel state %w", err)
+	}
+
+	updatedSignedState := state.NewSignedState(updatedState)
+	for _, sig := range o.StateSigs {
+		err := updatedSignedState.AddSignature(sig)
+		if err != nil {
+			return fmt.Errorf("error adding signature to signed swap channel state %w", err)
+		}
+	}
+
+	ok := o.C.AddSignedState(updatedSignedState)
+	if !ok {
+		return fmt.Errorf("error adding signed state to swap channel %w", err)
+	}
+
+	return nil
+}
+
+func (o *Objective) GetUpdatedSwapState() (state.State, error) {
 	tokenIn := o.SwapPrimitive.Exchange.TokenIn
 	tokenOut := o.SwapPrimitive.Exchange.TokenOut
 
-	// TODO: Use some new methods to get latest swap channel state
-	updateSupportedState, _ := o.C.LatestSupportedState()
+	s, err := o.C.LatestSupportedState()
+	if err != nil {
+		return state.State{}, fmt.Errorf("latest supported state not found: %w", err)
+	}
+	updateSupportedState := s.Clone()
 	updateOutcome := updateSupportedState.Outcome.Clone()
 
 	for _, assetOutcome := range updateOutcome {
@@ -328,7 +385,7 @@ func (o *Objective) UpdateSwapState() state.State {
 
 	updateSupportedState.Outcome = updateOutcome
 	updateSupportedState.TurnNum++
-	return updateSupportedState
+	return updateSupportedState, nil
 }
 
 func (o *Objective) Related() []protocols.Storable {
@@ -336,10 +393,6 @@ func (o *Objective) Related() []protocols.Storable {
 
 	return ret
 }
-
-//////////////////////////////////////////////////
-//  Private methods on the Swap Objective //
-//////////////////////////////////////////////////
 
 // Clone returns a deep copy of the receiver.
 func (o *Objective) clone() Objective {
@@ -349,13 +402,19 @@ func (o *Objective) clone() Objective {
 	clone.C = o.C.Clone()
 	clone.SwapPrimitive = o.SwapPrimitive.Clone()
 
+	clonedSigs := make(map[uint]state.Signature, len(o.StateSigs))
+	for i, sig := range o.StateSigs {
+		clonedSigs[i] = sig
+	}
+	clone.StateSigs = clonedSigs
+
 	return clone
 }
 
 // HasAllSignatures returns true if every participant has a valid signature.
 func (o *Objective) HasAllSignatures() bool {
 	// Since signatures are validated
-	if len(o.SwapPrimitive.Sigs) == len(o.C.Participants) {
+	if len(o.SwapPrimitive.Sigs) == len(o.C.Participants) && len(o.StateSigs) == len(o.C.Participants) {
 		return true
 	} else {
 		return false
@@ -384,6 +443,7 @@ type jsonObjective struct {
 	SwapPrimitive SwapPrimitive
 	SwapperIndex  uint
 	Nonce         uint64
+	StateSigs     map[uint]state.Signature
 }
 
 func (o Objective) MarshalJSON() ([]byte, error) {
@@ -392,6 +452,7 @@ func (o Objective) MarshalJSON() ([]byte, error) {
 		C:             o.C.Id,
 		SwapPrimitive: o.SwapPrimitive,
 		SwapperIndex:  o.SwapperIndex,
+		StateSigs:     o.StateSigs,
 	}
 
 	return json.Marshal(jsonSO)
@@ -412,6 +473,7 @@ func (o *Objective) UnmarshalJSON(data []byte) error {
 	o.SwapPrimitive = jsonSo.SwapPrimitive
 	o.C = &channel.SwapChannel{}
 	o.C.Id = jsonSo.C
+	o.StateSigs = jsonSo.StateSigs
 
 	return nil
 }
@@ -424,23 +486,23 @@ func ConstructObjectiveFromPayload(
 	getChannelFunc GetChannelByIdFunction,
 	address common.Address,
 ) (Objective, error) {
-	sp, err := getSwapPrimitivePayload(op.PayloadData)
+	sp, err := getSwapPayload(op.PayloadData)
 	if err != nil {
 		return Objective{}, fmt.Errorf("could not get swap primitive payload: %w", err)
 	}
 
-	obj, err := NewObjective(ObjectiveRequest{channelId: sp.ChannelId}, preApprove, false, getChannelFunc, address)
+	obj, err := NewObjective(ObjectiveRequest{channelId: sp.SwapPrimitive.ChannelId}, preApprove, false, getChannelFunc, address)
 	if err != nil {
 		return Objective{}, fmt.Errorf("unable to construct swap objective from payload: %w", err)
 	}
 
-	obj.SwapPrimitive = sp
+	obj.SwapPrimitive = sp.SwapPrimitive
 
 	return obj, nil
 }
 
-func getSwapPrimitivePayload(b []byte) (SwapPrimitive, error) {
-	sp := SwapPrimitive{}
+func getSwapPayload(b []byte) (SwapPayload, error) {
+	sp := SwapPayload{}
 	err := json.Unmarshal(b, &sp)
 	if err != nil {
 		return sp, fmt.Errorf("could not unmarshal swap primitive: %w", err)
