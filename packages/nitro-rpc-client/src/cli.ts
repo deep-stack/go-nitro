@@ -802,12 +802,12 @@ yargs(hideBin(process.argv))
           type: "string",
           demandOption: true,
         })
-        .option("AssetDetailsIn", {
+        .option("AssetIn", {
           describe: "Input asset details in the format of '0xAddress:amount'",
           type: "string",
           demandOption: true,
         })
-        .option("AssetDetailsOut", {
+        .option("AssetOut", {
           describe: "Output asset details in the format of '0xAddress:amount'",
           type: "string",
           demandOption: true,
@@ -824,10 +824,7 @@ yargs(hideBin(process.argv))
       );
       if (yargs.n) logOutChannelUpdates(rpcClient);
 
-      const swapAssetsData = parseSwapAssetsData(
-        yargs.AssetDetailsIn,
-        yargs.AssetDetailsOut
-      );
+      const swapAssetsData = parseSwapAssetsData(yargs.AssetIn, yargs.AssetOut);
 
       const swapInfo = await rpcClient.SwapAssets(
         yargs.channelId,

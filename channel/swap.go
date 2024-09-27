@@ -15,7 +15,7 @@ import (
 	"github.com/statechannels/go-nitro/types"
 )
 
-const MaxSwapStorageLimit = 5
+const MAX_SWAP_STORAGE_LIMIT = 5
 
 type SwapChannel struct {
 	Channel
@@ -36,7 +36,7 @@ func NewSwapChannel(s state.State, myIndex uint) (*SwapChannel, error) {
 
 	c, err := New(s, myIndex, types.Swap)
 
-	return &SwapChannel{*c, *queue.NewFixedQueue[Swap](MaxSwapStorageLimit)}, err
+	return &SwapChannel{*c, *queue.NewFixedQueue[Swap](MAX_SWAP_STORAGE_LIMIT)}, err
 }
 
 // Clone returns a pointer to a new, deep copy of the receiver, or a nil pointer if the receiver is nil.
@@ -76,8 +76,6 @@ func NewSwap(channelId types.Destination, tokenIn, tokenOut common.Address, amou
 
 // encodes the state into a []bytes value
 func (s Swap) encode() (types.Bytes, error) {
-	// TODO: Check whether we need to encode array of swap
-	// TODO: Check need of app data for sad path will be array of swap
 	return ethAbi.Arguments{
 		{Type: abi.Destination}, // channel id
 		{Type: abi.Address},     // tokenIn

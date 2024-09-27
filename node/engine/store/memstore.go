@@ -538,7 +538,7 @@ func (ms *MemStore) populateChannelData(obj protocols.Objective) error {
 			return fmt.Errorf("error retrieving channel data for objective %s: %w", id, err)
 		}
 		processedSwaps := o.C.Swaps.Values()
-		swaps := queue.NewFixedQueue[channel.Swap](channel.MaxSwapStorageLimit)
+		swaps := queue.NewFixedQueue[channel.Swap](channel.MAX_SWAP_STORAGE_LIMIT)
 
 		for _, swap := range processedSwaps {
 			swap, err := ms.GetSwapById(swap.Id)

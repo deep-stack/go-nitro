@@ -21,8 +21,8 @@ const (
 )
 
 const (
-	WaitingForSwapping protocols.WaitingFor = "WaitingForSwapping"
-	WaitingForNothing  protocols.WaitingFor = "WaitingForNothing" // Finished
+	WaitingForConfirmation protocols.WaitingFor = "WaitingForConfirmation"
+	WaitingForNothing      protocols.WaitingFor = "WaitingForNothing" // Finished
 )
 
 const ObjectivePrefix = "Swap-"
@@ -34,10 +34,12 @@ type SwapPayload struct {
 
 // Objective is a cache of data computed by reading from the store. It stores (potentially) infinite data.
 type Objective struct {
-	Status       protocols.ObjectiveStatus
-	C            *channel.SwapChannel
-	Swap         channel.Swap
-	StateSigs    map[uint]state.Signature
+	Status    protocols.ObjectiveStatus
+	C         *channel.SwapChannel
+	Swap      channel.Swap
+	StateSigs map[uint]state.Signature
+
+	// Index of participant who initiated the swap in participants array
 	SwapperIndex uint
 }
 
@@ -52,7 +54,7 @@ func NewObjective(request ObjectiveRequest, preApprove bool, isSwapper bool, get
 
 	obj.C = &channel.SwapChannel{
 		Channel: *swapChannel,
-		Swaps:   *queue.NewFixedQueue[channel.Swap](channel.MaxSwapStorageLimit),
+		Swaps:   *queue.NewFixedQueue[channel.Swap](channel.MAX_SWAP_STORAGE_LIMIT),
 	}
 
 	if preApprove {
@@ -167,22 +169,22 @@ func (o *Objective) Crank(secretKey *[]byte) (protocols.Objective, protocols.Sid
 	if !updated.HasSignatureForParticipant() {
 		sig, err := updated.Swap.Sign(*secretKey)
 		if err != nil {
-			return &updated, sideEffects, WaitingForSwapping, err
+			return &updated, sideEffects, WaitingForConfirmation, err
 		}
 
 		err = updated.Swap.AddSignature(sig, updated.C.MyIndex)
 		if err != nil {
-			return &updated, sideEffects, WaitingForSwapping, err
+			return &updated, sideEffects, WaitingForConfirmation, err
 		}
 
 		updatedState, err := updated.GetUpdatedSwapState()
 		if err != nil {
-			return &updated, protocols.SideEffects{}, WaitingForSwapping, fmt.Errorf("error creating updated swap channel state %w", err)
+			return &updated, protocols.SideEffects{}, WaitingForConfirmation, fmt.Errorf("error creating updated swap channel state %w", err)
 		}
 
 		stateSig, err := updatedState.Sign(*secretKey)
 		if err != nil {
-			return &updated, sideEffects, WaitingForSwapping, fmt.Errorf("error signing swap channel state %w", err)
+			return &updated, sideEffects, WaitingForConfirmation, fmt.Errorf("error signing swap channel state %w", err)
 		}
 
 		updated.StateSigs[updated.C.MyIndex] = stateSig
@@ -197,7 +199,7 @@ func (o *Objective) Crank(secretKey *[]byte) (protocols.Objective, protocols.Sid
 			o.C.Participants[1-o.C.MyIndex],
 		)
 		if err != nil {
-			return &updated, protocols.SideEffects{}, WaitingForSwapping, fmt.Errorf("could not create payload message %w", err)
+			return &updated, protocols.SideEffects{}, WaitingForConfirmation, fmt.Errorf("could not create payload message %w", err)
 		}
 
 		sideEffects.MessagesToSend = append(sideEffects.MessagesToSend, messages...)
@@ -205,13 +207,13 @@ func (o *Objective) Crank(secretKey *[]byte) (protocols.Objective, protocols.Sid
 
 	// Wait if all signatures are not available
 	if !updated.HasAllSignatures() {
-		return &updated, sideEffects, WaitingForSwapping, nil
+		return &updated, sideEffects, WaitingForConfirmation, nil
 	}
 
 	// If all signatures are available, update the swap channel according to the swap
 	err := updated.UpdateSwapChannelState()
 	if err != nil {
-		return &updated, protocols.SideEffects{}, WaitingForSwapping, fmt.Errorf("error updating swap channel state %w", err)
+		return &updated, protocols.SideEffects{}, WaitingForConfirmation, fmt.Errorf("error updating swap channel state %w", err)
 	}
 
 	// Add swap to swap channel
@@ -371,7 +373,7 @@ func (o *Objective) UnmarshalJSON(data []byte) error {
 
 	o.C = &channel.SwapChannel{}
 	o.C.Id = jsonSo.C
-	swaps := queue.NewFixedQueue[channel.Swap](channel.MaxSwapStorageLimit)
+	swaps := queue.NewFixedQueue[channel.Swap](channel.MAX_SWAP_STORAGE_LIMIT)
 	for _, sId := range jsonSo.ProcessedSwapsInSwapChannel {
 		swap := channel.Swap{
 			Id: sId,

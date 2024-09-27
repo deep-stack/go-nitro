@@ -671,19 +671,20 @@ func (ds *DurableStore) populateChannelData(obj protocols.Objective) error {
 			return fmt.Errorf("error retrieving channel data for objective %s: %w", id, err)
 		}
 
-		Swaps := queue.NewFixedQueue[channel.Swap](channel.MaxSwapStorageLimit)
+		swaps := queue.NewFixedQueue[channel.Swap](channel.MAX_SWAP_STORAGE_LIMIT)
 
 		processedSwaps := o.C.Swaps.Values()
+		// TODO: Remove old swaps from store
 		for _, swap := range processedSwaps {
 			swap, err := ds.GetSwapById(swap.Id)
 			if err != nil {
 				return fmt.Errorf("error getting swap by nonce: %w", err)
 			}
 
-			Swaps.Enqueue(swap)
+			swaps.Enqueue(swap)
 		}
 
-		o.C = &channel.SwapChannel{Channel: ch, Swaps: *Swaps}
+		o.C = &channel.SwapChannel{Channel: ch, Swaps: *swaps}
 		return nil
 	case *swapfund.Objective:
 		v, err := ds.getChannelById(o.S.Id)
