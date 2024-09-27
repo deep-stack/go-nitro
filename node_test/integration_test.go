@@ -2,6 +2,7 @@ package node_test
 
 import (
 	"context"
+	"fmt"
 	"math/big"
 	"testing"
 	"time"
@@ -94,10 +95,10 @@ func TestSwapFund(t *testing.T) {
 	nodeB, _, _, _, _ := setupIntegrationNode(testCase, testCase.Participants[1], infra, []string{}, dataFolder)
 	defer nodeB.Close()
 
-	outcomeEth := CreateLedgerOutcome(*nodeA.Address, *nodeB.Address, ledgerChannelDeposit, ledgerChannelDeposit, common.Address{})
-	outcomeCustomToken := CreateLedgerOutcome(*nodeA.Address, *nodeB.Address, ledgerChannelDeposit, ledgerChannelDeposit, infra.anvilChain.ContractAddresses.TokenAddresses[0])
+	outcomeEth := CreateLedgerOutcome(*nodeA.Address, *nodeB.Address, ledgerChannelDeposit, ledgerChannelDeposit+10, common.Address{})
+	outcomeCustomToken := CreateLedgerOutcome(*nodeA.Address, *nodeB.Address, ledgerChannelDeposit+20, ledgerChannelDeposit+30, infra.anvilChain.ContractAddresses.TokenAddresses[0])
 
-	outcomeCustomToken2 := CreateLedgerOutcome(*nodeA.Address, *nodeB.Address, ledgerChannelDeposit, ledgerChannelDeposit, infra.anvilChain.ContractAddresses.TokenAddresses[1])
+	outcomeCustomToken2 := CreateLedgerOutcome(*nodeA.Address, *nodeB.Address, ledgerChannelDeposit+40, ledgerChannelDeposit+50, infra.anvilChain.ContractAddresses.TokenAddresses[1])
 
 	multiAssetOutcome := append(outcomeEth, outcomeCustomToken...)
 	multiAssetOutcome = append(multiAssetOutcome, outcomeCustomToken2...)
@@ -174,6 +175,28 @@ func TestSwapFund(t *testing.T) {
 	t.Log("Completed swap-fund objective")
 
 	checkSwapChannel(t, swapChannelresponse.ChannelId, multiassetSwapChannelOutcome, query.Open, nodeA, nodeB)
+
+	// Close crated swap channel
+	res, err := nodeA.CloseSwapChannel(swapChannelresponse.ChannelId)
+	if err != nil {
+		t.Error(err.Error())
+	}
+	t.Log("Started swap-defund objective", "objectiveId", res)
+
+	// Wait for swap-defund objectives to complete
+	chA = nodeA.ObjectiveCompleteChan(res)
+	chB = nodeB.ObjectiveCompleteChan(res)
+	<-chA
+	<-chB
+
+	t.Log("Completed swap-defund objective")
+
+	currentLedgerState, err := nodeA.GetSignedState(ledgerResponse.ChannelId)
+	if err != nil {
+		t.Error(err.Error())
+	}
+
+	fmt.Printf("New state %+v", currentLedgerState.State())
 }
 
 // RunIntegrationTestCase runs the integration test case.

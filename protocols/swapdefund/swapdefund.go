@@ -1,4 +1,4 @@
-package virtualdefund
+package swapdefund
 
 import (
 	"encoding/json"
@@ -32,19 +32,13 @@ const (
 	RequestFinalStatePayload protocols.PayloadType = "RequestFinalStatePayload"
 )
 
-// The turn number used for the final state
-const FinalTurnNum = 2
+var FinalTurnNum = 0
 
 // Objective contains relevant information for the defund objective
 type Objective struct {
 	Status protocols.ObjectiveStatus
 
-	// MinimumPaymentAmount is the latest payment amount we have received from Alice before starting defunding.
-	// This is set by Bob so he can ensure he receives the latest amount from any vouchers he's received.
-	// If this is not set then virtual defunding will accept any final outcome from Alice.
-	MinimumPaymentAmount *big.Int
-
-	V *channel.VirtualChannel
+	S *channel.SwapChannel
 
 	ToMyLeft  *consensus_channel.ConsensusChannel
 	ToMyRight *consensus_channel.ConsensusChannel
@@ -56,7 +50,7 @@ type Objective struct {
 	MyRole uint
 }
 
-const ObjectivePrefix = "VirtualDefund-"
+const ObjectivePrefix = "SwapDefund-"
 
 // GetChannelByIdFunction specifies a function that can be used to retrieve channels from a store.
 type GetChannelByIdFunction func(id types.Destination) (channel *channel.Channel, ok bool)
@@ -65,11 +59,10 @@ type GetChannelByIdFunction func(id types.Destination) (channel *channel.Channel
 // the calling client and the given counterparty, if such a channel exists.
 type GetTwoPartyConsensusLedgerFunction func(counterparty types.Address) (ledger *consensus_channel.ConsensusChannel, ok bool)
 
-// NewObjective constructs a new virtual defund objective
+// NewObjective constructs a new swap defund objective
 func NewObjective(request ObjectiveRequest,
 	preApprove bool,
 	myAddress types.Address,
-	largestPaymentAmount *big.Int,
 	getChannel GetChannelByIdFunction,
 	getConsensusChannel GetTwoPartyConsensusLedgerFunction,
 ) (Objective, error) {
@@ -86,28 +79,38 @@ func NewObjective(request ObjectiveRequest,
 	if !found {
 		return Objective{}, fmt.Errorf("could not find channel %s", request.ChannelId)
 	}
-	V := &channel.VirtualChannel{Channel: *c}
 
-	alice := V.Participants[0]
-	bob := V.Participants[len(V.Participants)-1]
+	if FinalTurnNum == 0 {
+		latestSupportedSignedState, err := c.LatestSupportedSignedState()
+		if err != nil {
+			return Objective{}, err
+		}
+
+		FinalTurnNum = int(latestSupportedSignedState.State().TurnNum) + 1
+	}
+
+	S := &channel.SwapChannel{Channel: *c}
+
+	alice := S.Participants[0]
+	bob := S.Participants[len(S.Participants)-1]
 
 	var leftLedger, rightLedger *consensus_channel.ConsensusChannel
 	var ok bool
 
 	if myAddress == alice {
-		rightOfAlice := V.Participants[1]
+		rightOfAlice := S.Participants[1]
 		rightLedger, ok = getConsensusChannel(rightOfAlice)
 		if !ok {
 			return Objective{}, fmt.Errorf("could not find a ledger channel between %v and %v", alice, rightOfAlice)
 		}
 	} else if myAddress == bob {
-		leftOfBob := V.Participants[len(V.Participants)-2]
+		leftOfBob := S.Participants[len(S.Participants)-2]
 		leftLedger, ok = getConsensusChannel(leftOfBob)
 		if !ok {
 			return Objective{}, fmt.Errorf("could not find a ledger channel between %v and %v", leftOfBob, bob)
 		}
 	} else {
-		intermediaries := V.Participants[1 : len(V.Participants)-1]
+		intermediaries := S.Participants[1 : len(S.Participants)-1]
 		foundMyself := false
 
 		for i, intermediary := range intermediaries {
@@ -116,8 +119,8 @@ func NewObjective(request ObjectiveRequest,
 				// I am intermediary `i` and participant `p`
 				p := i + 1 // participants[p] === intermediaries[i]
 
-				leftOfMe := V.Participants[p-1]
-				rightOfMe := V.Participants[p+1]
+				leftOfMe := S.Participants[p-1]
+				rightOfMe := S.Participants[p+1]
 
 				leftLedger, ok = getConsensusChannel(leftOfMe)
 				if !ok {
@@ -137,17 +140,12 @@ func NewObjective(request ObjectiveRequest,
 		}
 	}
 
-	if largestPaymentAmount == nil {
-		largestPaymentAmount = big.NewInt(0)
-	}
-
 	return Objective{
-		Status:               status,
-		MinimumPaymentAmount: largestPaymentAmount,
-		V:                    V,
-		MyRole:               V.MyIndex,
-		ToMyLeft:             leftLedger,
-		ToMyRight:            rightLedger,
+		Status:    status,
+		S:         S,
+		MyRole:    S.MyIndex,
+		ToMyLeft:  leftLedger,
+		ToMyRight: rightLedger,
 	}, nil
 }
 
@@ -158,11 +156,7 @@ func ConstructObjectiveFromPayload(
 	myAddress types.Address,
 	getChannel GetChannelByIdFunction,
 	getTwoPartyConsensusLedger GetTwoPartyConsensusLedgerFunction,
-	latestVoucherAmount *big.Int,
 ) (Objective, error) {
-	if latestVoucherAmount == nil {
-		latestVoucherAmount = big.NewInt(0)
-	}
 	var cId types.Destination
 	var err error
 	switch p.Type {
@@ -182,45 +176,37 @@ func ConstructObjectiveFromPayload(
 		NewObjectiveRequest(cId),
 		preapprove,
 		myAddress,
-		latestVoucherAmount,
 		getChannel,
 		getTwoPartyConsensusLedger)
 }
 
-// IsVirtualDefundObjective inspects a objective id and returns true if the objective id is for a virtualdefund objective.
-func IsVirtualDefundObjective(id protocols.ObjectiveId) bool {
+// IsSwapDefundObjective inspects a objective id and returns true if the objective id is for a swapdefund objective.
+func IsSwapDefundObjective(id protocols.ObjectiveId) bool {
 	return strings.HasPrefix(string(id), ObjectivePrefix)
 }
 
-// finalState returns the final state for the virtual channel
+// finalState returns the final state for the swap channel
 func (o *Objective) finalState() state.State {
-	return o.V.OffChain.SignedStateForTurnNum[FinalTurnNum].State()
+	return o.S.OffChain.SignedStateForTurnNum[uint64(FinalTurnNum)].State()
 }
 
-func (o *Objective) initialOutcome() outcome.SingleAssetExit {
-	return o.V.PostFundState().Outcome[0]
-}
-
-func (o *Objective) generateFinalOutcome() (outcome.SingleAssetExit, error) {
-	if o.MyRole != 0 {
-		return outcome.SingleAssetExit{}, fmt.Errorf("only Alice should call generateFinalOutcome")
+func (o *Objective) initialOutcome() (outcome.Exit, error) {
+	latestSupportedState, err := o.S.LatestSupportedState()
+	if err != nil {
+		return outcome.Exit{}, err
 	}
-	// Since Alice is responsible for issuing vouchers she always has the largest payment amount
-	// This means she can just set her FinalOutcomeFromAlice based on the largest voucher amount she has sent
-	finalOutcome := o.initialOutcome().Clone()
-	finalOutcome.Allocations[0].Amount.Sub(finalOutcome.Allocations[0].Amount, o.MinimumPaymentAmount)
-	finalOutcome.Allocations[1].Amount.Add(finalOutcome.Allocations[1].Amount, o.MinimumPaymentAmount)
-	return finalOutcome, nil
+
+	return latestSupportedState.Outcome, nil
 }
 
-// finalState returns the final state for the virtual channel
+// finalState returns the final state for the swap channel
 func (o *Objective) generateFinalState() (state.State, error) {
-	exit, err := o.generateFinalOutcome()
+	exit, err := o.initialOutcome()
 	if err != nil {
 		return state.State{}, err
 	}
-	vp := state.VariablePart{Outcome: outcome.Exit{exit}, TurnNum: FinalTurnNum, IsFinal: true}
-	return state.StateFromFixedAndVariablePart(o.V.FixedPart, vp), nil
+	vp := state.VariablePart{Outcome: exit, TurnNum: uint64(FinalTurnNum), IsFinal: true}
+	return state.StateFromFixedAndVariablePart(o.S.FixedPart, vp), nil
 }
 
 // Id returns the objective id.
@@ -242,7 +228,7 @@ func (o *Objective) Reject() (protocols.Objective, protocols.SideEffects) {
 	updated := o.clone()
 	updated.Status = protocols.Rejected
 	peers := []common.Address{}
-	for i, peer := range o.V.Participants {
+	for i, peer := range o.S.Participants {
 		if i != int(o.MyRole) {
 			peers = append(peers, peer)
 		}
@@ -266,7 +252,7 @@ func (o *Objective) GetStatus() protocols.ObjectiveStatus {
 func (o *Objective) Related() []protocols.Storable {
 	related := []protocols.Storable{}
 
-	related = append(related, o.V)
+	related = append(related, o.S)
 
 	if o.ToMyLeft != nil {
 		related = append(related, o.ToMyLeft)
@@ -283,11 +269,8 @@ func (o *Objective) clone() Objective {
 	clone := Objective{}
 	clone.Status = o.Status
 
-	clone.V = o.V.Clone()
+	clone.S = o.S.Clone()
 
-	if o.MinimumPaymentAmount != nil {
-		clone.MinimumPaymentAmount = big.NewInt(0).Set(o.MinimumPaymentAmount)
-	}
 	clone.MyRole = o.MyRole
 
 	// TODO: Properly clone the consensus channels
@@ -304,7 +287,7 @@ func (o *Objective) clone() Objective {
 // otherParticipants returns the participants in the channel that are not the current participant.
 func (o *Objective) otherParticipants() []types.Address {
 	others := make([]types.Address, 0)
-	for i, p := range o.V.Participants {
+	for i, p := range o.S.Participants {
 		if i != int(o.MyRole) {
 			others = append(others, p)
 		}
@@ -313,7 +296,7 @@ func (o *Objective) otherParticipants() []types.Address {
 }
 
 func (o *Objective) hasFinalStateFromAlice() bool {
-	ss, ok := o.V.OffChain.SignedStateForTurnNum[FinalTurnNum]
+	ss, ok := o.S.OffChain.SignedStateForTurnNum[uint64(FinalTurnNum)]
 	return ok && ss.State().IsFinal && !isZero(ss.Signatures()[0])
 }
 
@@ -321,7 +304,6 @@ func (o *Objective) hasFinalStateFromAlice() bool {
 func (o *Objective) Crank(secretKey *[]byte) (protocols.Objective, protocols.SideEffects, protocols.WaitingFor, error) {
 	updated := o.clone()
 	sideEffects := protocols.SideEffects{}
-
 	// Input validation
 	if updated.Status != protocols.Approved {
 		return &updated, sideEffects, WaitingForNothing, protocols.ErrNotApproved
@@ -329,7 +311,7 @@ func (o *Objective) Crank(secretKey *[]byte) (protocols.Objective, protocols.Sid
 
 	// If we don't know the amount yet we send a message to alice to request it
 	if !updated.isAlice() && !updated.hasFinalStateFromAlice() {
-		alice := o.V.Participants[0]
+		alice := o.S.Participants[0]
 		messages, err := protocols.CreateObjectivePayloadMessage(updated.Id(), o.VId(), RequestFinalStatePayload, alice)
 		if err != nil {
 			return &updated, sideEffects, WaitingForNothing, err
@@ -339,7 +321,7 @@ func (o *Objective) Crank(secretKey *[]byte) (protocols.Objective, protocols.Sid
 	}
 
 	// Signing of the final state
-	if !updated.V.FinalSignedByMe() {
+	if !updated.S.FinalSignedByMe() {
 		var s state.State
 		var err error
 		if updated.isAlice() {
@@ -351,7 +333,7 @@ func (o *Objective) Crank(secretKey *[]byte) (protocols.Objective, protocols.Sid
 			s = updated.finalState()
 		}
 		// Sign and store:
-		ss, err := updated.V.SignAndAddState(s, secretKey)
+		ss, err := updated.S.SignAndAddState(s, secretKey)
 		if err != nil {
 			return &updated, sideEffects, WaitingForNothing, fmt.Errorf("could not sign final state: %w", err)
 		}
@@ -364,7 +346,7 @@ func (o *Objective) Crank(secretKey *[]byte) (protocols.Objective, protocols.Sid
 	}
 
 	// Check if all participants have signed the final state
-	if !updated.V.FinalCompleted() {
+	if !updated.S.FinalCompleted() {
 		return &updated, sideEffects, WaitingForSupportedFinalState, nil
 	}
 
@@ -397,29 +379,39 @@ func (o *Objective) Crank(secretKey *[]byte) (protocols.Objective, protocols.Sid
 	return &updated, sideEffects, WaitingForNothing, nil
 }
 
-// isAlice returns true if the receiver represents participant 0 in the virtualdefund protocol.
+// isAlice returns true if the receiver represents participant 0 in the swapdefund protocol.
 func (o *Objective) isAlice() bool {
 	return o.MyRole == 0
 }
 
-// isBob returns true if the receiver represents the last participant in the virtualdefund protocol.
+// isBob returns true if the receiver represents the last participant in the swapdefund protocol.
 func (o *Objective) isBob() bool {
-	return int(o.MyRole) == len(o.V.Participants)-1
+	return int(o.MyRole) == len(o.S.Participants)-1
 }
 
 // ledgerProposal generates a ledger proposal to remove the guarantee for V for ledger
-func (o *Objective) ledgerProposal(ledger *consensus_channel.ConsensusChannel) consensus_channel.Proposal {
-	left := o.finalState().Outcome[0].Allocations[0].Amount
+func (o *Objective) ledgerProposal(ledger *consensus_channel.ConsensusChannel) []consensus_channel.Proposal {
+	var proposals []consensus_channel.Proposal
 
-	// Use first asset from outcome array while closing virtual channel
-	consensusState := ledger.SupportedSignedState().State()
-	return consensus_channel.NewRemoveProposal(ledger.Id, o.VId(), left, consensusState.Outcome[0].Asset)
+	for i, out := range ledger.ConsensusVars().Outcome {
+		for _, a := range out.AsOutcome()[0].Allocations {
+			if a.AllocationType == outcome.GuaranteeAllocationType {
+				left := o.S.OffChain.SignedStateForTurnNum[uint64(FinalTurnNum)].State().Outcome[i].Allocations[0].Amount
+				p := consensus_channel.NewRemoveProposal(ledger.Id, o.VId(), left, out.AsOutcome()[0].Asset)
+
+				proposals = append(proposals, p)
+			}
+		}
+	}
+
+	return proposals
 }
 
 // updateLedgerToRemoveGuarantee updates the ledger channel to remove the guarantee that funds V.
 func (o *Objective) updateLedgerToRemoveGuarantee(ledger *consensus_channel.ConsensusChannel, sk *[]byte) (protocols.SideEffects, error) {
 	var sideEffects protocols.SideEffects
 
+	proposals := o.ledgerProposal(ledger)
 	proposed := ledger.HasRemovalBeenProposed(o.VId())
 
 	if ledger.IsLeader() {
@@ -427,10 +419,13 @@ func (o *Objective) updateLedgerToRemoveGuarantee(ledger *consensus_channel.Cons
 			return protocols.SideEffects{}, nil
 		}
 
-		_, err := ledger.Propose(o.ledgerProposal(ledger), *sk)
-		if err != nil {
-			return protocols.SideEffects{}, fmt.Errorf("error proposing ledger update: %w", err)
+		for _, p := range proposals {
+			_, err := ledger.Propose(p, *sk)
+			if err != nil {
+				return protocols.SideEffects{}, fmt.Errorf("error proposing ledger update: %w", err)
+			}
 		}
+
 		recipient := ledger.Follower()
 
 		// Since the proposal queue is constructed with consecutive turn numbers, we can pass it straight in
@@ -441,30 +436,33 @@ func (o *Objective) updateLedgerToRemoveGuarantee(ledger *consensus_channel.Cons
 
 	} else {
 		// If the proposal is next in the queue we accept it
-		proposedNext := ledger.HasRemovalBeenProposedNext(o.VId())
-		if proposedNext {
-			sp, err := ledger.SignNextProposal(o.ledgerProposal(ledger), *sk)
-			if err != nil {
-				return protocols.SideEffects{}, fmt.Errorf("could not sign proposal: %w", err)
-			}
-			// ledger sideEffect
-			if proposals := ledger.ProposalQueue(); len(proposals) != 0 {
-				sideEffects.ProposalsToProcess = append(sideEffects.ProposalsToProcess, proposals[0].Proposal)
-			}
+		for _, p := range proposals {
+			proposedNext := ledger.HasRemovalBeenProposedNext(o.VId())
 
-			// messaging sideEffect
-			recipient := ledger.Leader()
-			message := protocols.CreateSignedProposalMessage(recipient, sp)
-			sideEffects.MessagesToSend = append(sideEffects.MessagesToSend, message)
+			if proposedNext {
+				sp, err := ledger.SignNextProposal(p, *sk)
+				if err != nil {
+					return protocols.SideEffects{}, fmt.Errorf("could not sign proposal: %w", err)
+				}
+				// ledger sideEffect
+				if proposals := ledger.ProposalQueue(); len(proposals) != 0 {
+					sideEffects.ProposalsToProcess = append(sideEffects.ProposalsToProcess, proposals[0].Proposal)
+				}
+
+				// messaging sideEffect
+				recipient := ledger.Leader()
+				message := protocols.CreateSignedProposalMessage(recipient, sp)
+				sideEffects.MessagesToSend = append(sideEffects.MessagesToSend, message)
+			}
 		}
 	}
 
 	return sideEffects, nil
 }
 
-// VId returns the channel id of the virtual channel.
+// VId returns the channel id of the swap channel.
 func (o *Objective) VId() types.Destination {
-	return o.V.ChannelId()
+	return o.S.ChannelId()
 }
 
 // rightHasDefunded returns whether the ledger channel ToMyRight has removed
@@ -513,7 +511,7 @@ func getRequestFinalStatePayload(b []byte) (types.Destination, error) {
 	return cId, nil
 }
 
-// Update receives an protocols.ObjectiveEvent, applies all applicable event data to the VirtualDefundObjective,
+// Update receives an protocols.ObjectiveEvent, applies all applicable event data to the SwapDefundObjective,
 // and returns the updated state.
 func (o *Objective) Update(op protocols.ObjectivePayload) (protocols.Objective, error) {
 	if o.Id() != op.ObjectiveId {
@@ -527,11 +525,8 @@ func (o *Objective) Update(op protocols.ObjectivePayload) (protocols.Objective, 
 			return &Objective{}, err
 		}
 		updated := o.clone()
-		err = validateFinalOutcome(updated.V.FixedPart, updated.initialOutcome(), ss.State().Outcome[0], o.V.Participants[o.MyRole], updated.MinimumPaymentAmount)
-		if err != nil {
-			return o, fmt.Errorf("outcome failed validation %w", err)
-		}
-		ok := updated.V.AddSignedState(ss)
+
+		ok := updated.S.AddSignedState(ss)
 		if !ok {
 			return o, fmt.Errorf("could not add signed state %v", ss)
 		}
@@ -545,7 +540,7 @@ func (o *Objective) Update(op protocols.ObjectivePayload) (protocols.Objective, 
 	}
 }
 
-// ReceiveProposal receives a signed proposal and returns an updated VirtualDefund objective.
+// ReceiveProposal receives a signed proposal and returns an updated SwapDefund objective.
 func (o *Objective) ReceiveProposal(sp consensus_channel.SignedProposal) (protocols.ProposalReceiver, error) {
 	var toMyLeftId types.Destination
 	var toMyRightId types.Destination
@@ -588,7 +583,7 @@ func isZero(sig state.Signature) bool {
 	return sig.Equal(zeroSig)
 }
 
-// ObjectiveRequest represents a request to create a new virtual defund objective.
+// ObjectiveRequest represents a request to create a new Swap defund objective.
 type ObjectiveRequest struct {
 	ChannelId        types.Destination
 	objectiveStarted chan struct{}
@@ -607,42 +602,13 @@ func (r ObjectiveRequest) Id(types.Address, *big.Int) protocols.ObjectiveId {
 	return protocols.ObjectiveId(ObjectivePrefix + r.ChannelId.String())
 }
 
-// GetVirtualChannelFromObjectiveId gets the virtual channel id from the objective id.
-func GetVirtualChannelFromObjectiveId(id protocols.ObjectiveId) (types.Destination, error) {
+// GetSwapChannelFromObjectiveId gets the swap channel id from the objective id.
+func GetSwapChannelFromObjectiveId(id protocols.ObjectiveId) (types.Destination, error) {
 	if !strings.HasPrefix(string(id), ObjectivePrefix) {
 		return types.Destination{}, fmt.Errorf("id %s does not have prefix %s", id, ObjectivePrefix)
 	}
 	raw := string(id)[len(ObjectivePrefix):]
 	return types.Destination(common.HexToHash(raw)), nil
-}
-
-// validateFinalOutcome is a helper function that validates a final outcome from Alice is valid.
-func validateFinalOutcome(vFixed state.FixedPart, initialOutcome outcome.SingleAssetExit, finalOutcome outcome.SingleAssetExit, me types.Address, minAmount *big.Int) error {
-	// Check the outcome participants are correct
-	alice, bob := vFixed.Participants[0], vFixed.Participants[len(vFixed.Participants)-1]
-	if initialOutcome.Allocations[0].Destination != types.AddressToDestination(alice) {
-		return fmt.Errorf("0th allocation is not to Alice but to %s", initialOutcome.Allocations[0].Destination)
-	}
-	if initialOutcome.Allocations[1].Destination != types.AddressToDestination(bob) {
-		return fmt.Errorf("1st allocation is not to Bob but to %s", initialOutcome.Allocations[0].Destination)
-	}
-
-	// Check the amounts are correct
-	initialAliceAmount, initialBobAmount := initialOutcome.Allocations[0].Amount, initialOutcome.Allocations[1].Amount
-	finalAliceAmount, finalBobAmount := finalOutcome.Allocations[0].Amount, finalOutcome.Allocations[1].Amount
-	paidToBob := big.NewInt(0).Sub(finalBobAmount, initialBobAmount)
-	paidFromAlice := big.NewInt(0).Sub(initialAliceAmount, finalAliceAmount)
-	if paidToBob.Cmp(paidFromAlice) != 0 {
-		return fmt.Errorf("final outcome is not balanced: Alice paid %d, Bob received %d", paidFromAlice, paidToBob)
-	}
-
-	// if we're Bob we want to make sure the final state Alice sent is equal to or larger than the payment we already have
-	if me == bob {
-		if paidToBob.Cmp(minAmount) < 0 {
-			return fmt.Errorf("payment amount %d is less than the minimum payment amount %d", paidToBob, minAmount)
-		}
-	}
-	return nil
 }
 
 // SignalObjectiveStarted is used by the engine to signal the objective has been started.

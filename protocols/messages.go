@@ -81,7 +81,12 @@ func GetProposalObjectiveId(p consensus_channel.Proposal, channelType types.Chan
 		}
 	case "RemoveProposal":
 		{
-			const prefix = "VirtualDefund-"
+			var prefix string
+			if channelType == types.Swap {
+				prefix = "SwapDefund-"
+			} else {
+				prefix = "VirtualDefund-"
+			}
 			channelId := p.ToRemove.Target.String()
 			return ObjectiveId(prefix + channelId), nil
 
