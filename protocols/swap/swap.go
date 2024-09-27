@@ -81,7 +81,7 @@ func NewObjective(request ObjectiveRequest, preApprove bool, isSwapper bool, get
 
 // Id returns the objective id.
 func (o *Objective) Id() protocols.ObjectiveId {
-	return protocols.ObjectiveId(ObjectivePrefix + o.SwapPrimitive.Id().String())
+	return protocols.ObjectiveId(ObjectivePrefix + o.SwapPrimitive.Id.String())
 }
 
 // Approve returns an approved copy of the objective.
@@ -336,14 +336,14 @@ type jsonObjective struct {
 	SwapperIndex   uint
 	Nonce          uint64
 	StateSigs      map[uint]state.Signature
-	SwapPrimitives []uint64
+	SwapPrimitives []types.Destination
 }
 
 func (o Objective) MarshalJSON() ([]byte, error) {
 	swapPrimitives := o.C.SwapPrimitives.Values()
-	SwapPrimitives := make([]uint64, len(swapPrimitives))
+	SwapPrimitives := make([]types.Destination, 0)
 	for _, sp := range swapPrimitives {
-		SwapPrimitives = append(SwapPrimitives, sp.Nonce)
+		SwapPrimitives = append(SwapPrimitives, sp.Id)
 	}
 
 	jsonSO := jsonObjective{
@@ -354,7 +354,6 @@ func (o Objective) MarshalJSON() ([]byte, error) {
 		StateSigs:      o.StateSigs,
 		SwapPrimitives: SwapPrimitives,
 	}
-
 	return json.Marshal(jsonSO)
 }
 
@@ -376,15 +375,14 @@ func (o *Objective) UnmarshalJSON(data []byte) error {
 	o.C = &channel.SwapChannel{}
 	o.C.Id = jsonSo.C
 	swapPrimitives := queue.NewFixedQueue[channel.SwapPrimitive](channel.MaxSwapPrimitiveStorageLimit)
-	for _, nonce := range jsonSo.SwapPrimitives {
+	for _, spId := range jsonSo.SwapPrimitives {
 		sp := channel.SwapPrimitive{
-			Nonce: nonce,
+			Id: spId,
 		}
 
 		swapPrimitives.Enqueue(sp)
 	}
 	o.C.SwapPrimitives = *swapPrimitives
-
 	return nil
 }
 
@@ -446,7 +444,7 @@ func NewObjectiveRequest(channelId types.Destination, tokenIn common.Address, to
 
 // Id returns the objective id for the request.
 func (r ObjectiveRequest) Id(myAddress types.Address, chainId *big.Int) protocols.ObjectiveId {
-	return protocols.ObjectiveId(ObjectivePrefix + r.swap.Id().String())
+	return protocols.ObjectiveId(ObjectivePrefix + r.swap.SwapId().String())
 }
 
 // SignalObjectiveStarted is used by the engine to signal the objective has been started.
@@ -468,7 +466,7 @@ type ObjectiveResponse struct {
 // Response computes and returns the appropriate response from the request.
 func (r ObjectiveRequest) Response() ObjectiveResponse {
 	return ObjectiveResponse{
-		Id:        protocols.ObjectiveId(ObjectivePrefix + r.swap.Id().String()),
+		Id:        protocols.ObjectiveId(ObjectivePrefix + r.swap.Id.String()),
 		ChannelId: r.swap.ChannelId,
 	}
 }

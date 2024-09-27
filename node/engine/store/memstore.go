@@ -95,7 +95,7 @@ func (ms *MemStore) SetSwapPrimitive(sp channel.SwapPrimitive) error {
 		return fmt.Errorf("error marshalling swap primitive")
 	}
 
-	ms.swapPrimitives.Store(sp.Id().String(), spJSON)
+	ms.swapPrimitives.Store(sp.Id.String(), spJSON)
 	return nil
 }
 
@@ -143,7 +143,8 @@ func (ms *MemStore) SetObjective(obj protocols.Objective) error {
 			if err != nil {
 				return fmt.Errorf("error setting virtual channel %s from objective %s: %w", ch.Id, obj.Id(), err)
 			}
-
+			// TODO: Get swap primtives by channel id
+			// filter and add the value
 			swapPrimitives := ch.SwapPrimitives.Values()
 			for _, sp := range swapPrimitives {
 				err := ms.SetSwapPrimitive(sp)
@@ -536,12 +537,11 @@ func (ms *MemStore) populateChannelData(obj protocols.Objective) error {
 		if err != nil {
 			return fmt.Errorf("error retrieving channel data for objective %s: %w", id, err)
 		}
-
+		swapPrimitive := o.C.SwapPrimitives.Values()
 		SwapPrimitives := queue.NewFixedQueue[channel.SwapPrimitive](channel.MaxSwapPrimitiveStorageLimit)
 
-		swapPrimitive := o.C.SwapPrimitives.Values()
 		for _, sp := range swapPrimitive {
-			swapPrimitive, err := ms.GetSwapPrimitiveById(sp.Id())
+			swapPrimitive, err := ms.GetSwapPrimitiveById(sp.Id)
 			if err != nil {
 				return fmt.Errorf("error getting swap primitive by nonce: %w", err)
 			}

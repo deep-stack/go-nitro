@@ -51,6 +51,7 @@ func (v *SwapChannel) Clone() *SwapChannel {
 }
 
 type SwapPrimitive struct {
+	Id        types.Destination
 	ChannelId types.Destination
 	Exchange  Exchange
 	Sigs      map[uint]state.Signature // keyed by participant index in swap channel
@@ -58,7 +59,7 @@ type SwapPrimitive struct {
 }
 
 func NewSwapPrimitive(channelId types.Destination, tokenIn, tokenOut common.Address, amountIn, amountOut *big.Int, nonce uint64) SwapPrimitive {
-	return SwapPrimitive{
+	sp := SwapPrimitive{
 		ChannelId: channelId,
 		Exchange: Exchange{
 			tokenIn,
@@ -69,6 +70,8 @@ func NewSwapPrimitive(channelId types.Destination, tokenIn, tokenOut common.Addr
 		Sigs:  make(map[uint]state.Signature, 2),
 		Nonce: nonce,
 	}
+	sp.Id = sp.SwapId()
+	return sp
 }
 
 // TODO: Check need of custom marshall and unmarshall methods for swap primitive
@@ -114,10 +117,11 @@ func (sp SwapPrimitive) Clone() SwapPrimitive {
 		},
 		Sigs:  clonedSigs,
 		Nonce: sp.Nonce,
+		Id:    sp.Id,
 	}
 }
 
-func (sp SwapPrimitive) Id() types.Destination {
+func (sp SwapPrimitive) SwapId() types.Destination {
 	spHash, err := sp.Hash()
 	if err != nil {
 		return types.Destination{}

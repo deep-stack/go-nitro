@@ -18,6 +18,7 @@ import (
 const (
 	ErrNoSuchObjective  = types.ConstError("store: no such objective")
 	ErrNoSuchChannel    = types.ConstError("store: failed to find required channel data")
+	ErrNoSuchSwap       = types.ConstError("store: failed to find required swap data")
 	ErrLoadVouchers     = types.ConstError("store: could not load vouchers")
 	lastBlockNumSeenKey = "lastBlockNumSeen"
 )
