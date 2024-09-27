@@ -20,6 +20,7 @@ import {
   MirrorBridgedDefundObjectiveRequest,
   GetNodeInfo,
   AssetData,
+  SwapFundPayload,
 } from "./types";
 import { Transport } from "./transport";
 import { createOutcome, generateRequest } from "./utils";
@@ -163,6 +164,23 @@ export class NitroRpcClient implements RpcClientApi {
     return this.sendRequest("retry_tx", { TxHash: txHash });
   }
 
+  public async CreateSwapChannel(
+    counterParty: string,
+    intermediaries: string[],
+    assetsData: AssetData[]
+  ): Promise<ObjectiveResponse> {
+    const payload: SwapFundPayload = {
+      CounterParty: counterParty,
+      Intermediaries: intermediaries,
+      ChallengeDuration: 0,
+      Outcome: createOutcome(await this.GetAddress(), counterParty, assetsData),
+      AppDefinition: ZERO_ETHEREUM_ADDRESS,
+      Nonce: Date.now(),
+    };
+
+    return this.sendRequest("create_swap_channel", payload);
+  }
+
   public async CreatePaymentChannel(
     counterParty: string,
     intermediaries: string[],
@@ -291,6 +309,10 @@ export class NitroRpcClient implements RpcClientApi {
     channelId: string
   ): Promise<PaymentChannelInfo> {
     return this.sendRequest("get_payment_channel", { Id: channelId });
+  }
+
+  public async GetSwapChannel(channelId: string): Promise<string> {
+    return this.sendRequest("get_swap_channel", { Id: channelId });
   }
 
   public async GetPaymentChannelsByLedger(

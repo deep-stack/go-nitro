@@ -46,7 +46,7 @@ func TestChallenge(t *testing.T) {
 	infra := setupSharedInfra(testCase)
 	defer infra.Close(t)
 
-	tokenBinding, err := Token.NewToken(infra.anvilChain.ContractAddresses.TokenAddress, infra.anvilChain.EthClient)
+	tokenBinding, err := Token.NewToken(infra.anvilChain.ContractAddresses.TokenAddresses[0], infra.anvilChain.EthClient)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -58,7 +58,7 @@ func TestChallenge(t *testing.T) {
 	defer nodeB.Close()
 
 	// Create ledger channel
-	ledgerChannel := openLedgerChannel(t, nodeA, nodeB, infra.anvilChain.ContractAddresses.TokenAddress, uint32(testCase.ChallengeDuration))
+	ledgerChannel := openLedgerChannel(t, nodeA, nodeB, infra.anvilChain.ContractAddresses.TokenAddresses[0], uint32(testCase.ChallengeDuration))
 
 	// Check balance of node
 	balanceNodeA, _ := tokenBinding.BalanceOf(nil, testCase.Participants[0].Address())
@@ -120,7 +120,7 @@ func TestCheckpoint(t *testing.T) {
 	infra := setupSharedInfra(testCase)
 	defer infra.Close(t)
 
-	tokenBinding, err := Token.NewToken(infra.anvilChain.ContractAddresses.TokenAddress, infra.anvilChain.EthClient)
+	tokenBinding, err := Token.NewToken(infra.anvilChain.ContractAddresses.TokenAddresses[0], infra.anvilChain.EthClient)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -132,7 +132,7 @@ func TestCheckpoint(t *testing.T) {
 	defer nodeB.Close()
 
 	// Create ledger channel and check balance of node
-	ledgerChannel := openLedgerChannel(t, nodeA, nodeB, infra.anvilChain.ContractAddresses.TokenAddress, uint32(testCase.ChallengeDuration))
+	ledgerChannel := openLedgerChannel(t, nodeA, nodeB, infra.anvilChain.ContractAddresses.TokenAddresses[0], uint32(testCase.ChallengeDuration))
 
 	// Check balance of node
 	balanceNodeA, _ := tokenBinding.BalanceOf(nil, testCase.Participants[0].Address())
@@ -239,7 +239,7 @@ func TestCounterChallenge(t *testing.T) {
 	infra := setupSharedInfra(testCase)
 	defer infra.Close(t)
 
-	tokenBinding, err := Token.NewToken(infra.anvilChain.ContractAddresses.TokenAddress, infra.anvilChain.EthClient)
+	tokenBinding, err := Token.NewToken(infra.anvilChain.ContractAddresses.TokenAddresses[0], infra.anvilChain.EthClient)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -251,7 +251,7 @@ func TestCounterChallenge(t *testing.T) {
 	defer nodeB.Close()
 
 	// Create ledger channel and check balance of node
-	ledgerChannel := openLedgerChannel(t, nodeA, nodeB, infra.anvilChain.ContractAddresses.TokenAddress, uint32(testCase.ChallengeDuration))
+	ledgerChannel := openLedgerChannel(t, nodeA, nodeB, infra.anvilChain.ContractAddresses.TokenAddresses[0], uint32(testCase.ChallengeDuration))
 
 	// Check balance of node
 	balanceNodeA, _ := tokenBinding.BalanceOf(nil, testCase.Participants[0].Address())

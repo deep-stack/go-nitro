@@ -25,11 +25,25 @@ type PaymentChannelBalance struct {
 	RemainingFunds *hexutil.Big
 }
 
+type SwapChannelBalance struct {
+	AssetAddress types.Address
+	Me           types.Address
+	Them         types.Address
+	MyBalance    *hexutil.Big
+	TheirBalance *hexutil.Big
+}
+
 // PaymentChannelInfo contains balance and status info about a payment channel
 type PaymentChannelInfo struct {
 	ID      types.Destination
 	Status  ChannelStatus
 	Balance PaymentChannelBalance
+}
+
+type SwapChannelInfo struct {
+	ID       types.Destination
+	Status   ChannelStatus
+	Balances []SwapChannelBalance
 }
 
 // LedgerChannelInfo contains balance and status info about a ledger channel

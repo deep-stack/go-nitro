@@ -17,6 +17,7 @@ import (
 	"github.com/statechannels/go-nitro/protocols/directdefund"
 	"github.com/statechannels/go-nitro/protocols/directfund"
 	"github.com/statechannels/go-nitro/protocols/mirrorbridgeddefund"
+	"github.com/statechannels/go-nitro/protocols/swapfund"
 	"github.com/statechannels/go-nitro/protocols/virtualdefund"
 	"github.com/statechannels/go-nitro/protocols/virtualfund"
 	"github.com/statechannels/go-nitro/types"
@@ -103,6 +104,11 @@ func (ms *MemStore) SetObjective(obj protocols.Objective) error {
 	for _, rel := range obj.Related() {
 		switch ch := rel.(type) {
 		case *channel.VirtualChannel:
+			err := ms.SetChannel(&ch.Channel)
+			if err != nil {
+				return fmt.Errorf("error setting virtual channel %s from objective %s: %w", ch.Id, obj.Id(), err)
+			}
+		case *channel.SwapChannel:
 			err := ms.SetChannel(&ch.Channel)
 			if err != nil {
 				return fmt.Errorf("error setting virtual channel %s from objective %s: %w", ch.Id, obj.Id(), err)
@@ -486,6 +492,37 @@ func (ms *MemStore) populateChannelData(obj protocols.Objective) error {
 			o.ToMyRight = right
 		}
 		return nil
+	case *swapfund.Objective:
+		v, err := ms.getChannelById(o.S.Id)
+		if err != nil {
+			return fmt.Errorf("error retrieving swap channel data for objective %s: %w", id, err)
+		}
+		o.S = &channel.SwapChannel{Channel: v}
+
+		zeroAddress := types.Destination{}
+
+		if o.ToMyLeft != nil &&
+			o.ToMyLeft.Channel != nil &&
+			o.ToMyLeft.Channel.Id != zeroAddress {
+
+			left, err := ms.GetConsensusChannelById(o.ToMyLeft.Channel.Id)
+			if err != nil {
+				return fmt.Errorf("error retrieving left ledger channel data for objective %s: %w", id, err)
+			}
+			o.ToMyLeft.Channel = left
+		}
+
+		if o.ToMyRight != nil &&
+			o.ToMyRight.Channel != nil &&
+			o.ToMyRight.Channel.Id != zeroAddress {
+			right, err := ms.GetConsensusChannelById(o.ToMyRight.Channel.Id)
+			if err != nil {
+				return fmt.Errorf("error retrieving right ledger channel data for objective %s: %w", id, err)
+			}
+			o.ToMyRight.Channel = right
+		}
+
+		return nil
 	case *bridgedfund.Objective:
 		ch, err := ms.getChannelById(o.C.Id)
 		if err != nil {
@@ -553,6 +590,10 @@ func decodeObjective(id protocols.ObjectiveId, data []byte) (protocols.Objective
 		mbdfo := mirrorbridgeddefund.Objective{}
 		err := mbdfo.UnmarshalJSON(data)
 		return &mbdfo, err
+	case swapfund.IsSwapFundObjective(id):
+		sfo := swapfund.Objective{}
+		err := sfo.UnmarshalJSON(data)
+		return &sfo, err
 	default:
 		return nil, fmt.Errorf("objective id %s does not correspond to a known Objective type", id)
 

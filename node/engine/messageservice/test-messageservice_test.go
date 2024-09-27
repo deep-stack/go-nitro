@@ -37,7 +37,7 @@ func TestConnect(t *testing.T) {
 
 	prop := got.LedgerProposals[0]
 
-	objId, err := protocols.GetProposalObjectiveId(prop.Proposal)
+	objId, err := protocols.GetProposalObjectiveId(prop.Proposal, types.Virtual)
 
 	testhelpers.Ok(t, err)
 

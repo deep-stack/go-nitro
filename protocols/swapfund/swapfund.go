@@ -1,5 +1,4 @@
-// Package virtualfund implements an off-chain protocol to virtually fund a channel.
-package virtualfund // import "github.com/statechannels/go-nitro/virtualfund"
+package swapfund
 
 import (
 	"bytes"
@@ -31,15 +30,15 @@ const (
 
 var ErrUpdatingLedgerFunding = errors.New("error updating ledger funding")
 
-const ObjectivePrefix = "VirtualFund-"
+const ObjectivePrefix = "SwapFund-"
 
 // GuaranteeInfo contains the information used to generate the expected guarantees.
 type GuaranteeInfo struct {
 	Left                 types.Destination
 	Right                types.Destination
-	LeftAmount           types.Funds
-	RightAmount          types.Funds
 	GuaranteeDestination types.Destination
+	RightAmount          types.Funds
+	LeftAmount           types.Funds
 }
 type Connection struct {
 	Channel       *consensus_channel.ConsensusChannel
@@ -95,47 +94,50 @@ func (c *Connection) handleProposal(sp consensus_channel.SignedProposal) error {
 
 // IsFundingTheTarget computes whether the ledger channel on the receiver funds the guarantee expected by this connection
 func (c *Connection) IsFundingTheTarget() bool {
+	includedGuarantees := 0
 	g := c.getExpectedGuarantee()
-	return c.Channel.Includes(g)
+	for _, guarantee := range g {
+		if c.Channel.Includes(guarantee) {
+			includedGuarantees++
+		}
+	}
+	return includedGuarantees == len(g)
 }
 
 // getExpectedGuarantee returns a map of asset addresses to guarantees for a Connection.
-func (c *Connection) getExpectedGuarantee() consensus_channel.Guarantee {
-	amountFunds := c.GuaranteeInfo.LeftAmount.Add(c.GuaranteeInfo.RightAmount)
+func (c *Connection) getExpectedGuarantee() map[common.Address]consensus_channel.Guarantee {
+	assetGuaranteeMap := make(map[common.Address]consensus_channel.Guarantee)
 
-	// HACK: GuaranteeInfo stores amounts as types.Funds.
-	// We only expect a single asset type, and we want to know how much is to be
-	// diverted for that asset type.
-	// So, we loop through amountFunds and break after the first asset type ...
-	var amount *big.Int
-	for _, val := range amountFunds {
-		amount = val
-		break
-	}
+	amountFunds := c.GuaranteeInfo.LeftAmount.Add(c.GuaranteeInfo.RightAmount)
 
 	target := c.GuaranteeInfo.GuaranteeDestination
 	left := c.GuaranteeInfo.Left
 	right := c.GuaranteeInfo.Right
 
-	return consensus_channel.NewGuarantee(amount, target, left, right)
+	for asset, amount := range amountFunds {
+		gaurantee := consensus_channel.NewGuarantee(amount, target, left, right)
+		assetGuaranteeMap[asset] = gaurantee
+	}
+
+	return assetGuaranteeMap
 }
 
 // Objective is a cache of data computed by reading from the store. It stores (potentially) infinite data.
 type Objective struct {
 	Status protocols.ObjectiveStatus
-	V      *channel.VirtualChannel
+	S      *channel.SwapChannel
 
 	ToMyLeft  *Connection
 	ToMyRight *Connection
 
 	n      uint // number of intermediaries
-	MyRole uint // index in the virtual funding protocol. 0 for Alice, n+1 for Bob. Otherwise, one of the intermediaries.
+	MyRole uint // index in the swap funding protocol. 0 for Alice, n+1 for Bob. Otherwise, one of the intermediaries.
 
 	a0 types.Funds // Initial balance for Alice
 	b0 types.Funds // Initial balance for Bob
 }
 
-// NewObjective creates a new virtual funding objective from a given request.
+// NewObjective creates a new swap funding objective from a given request.
 func NewObjective(request ObjectiveRequest, preApprove bool, myAddress types.Address, chainId *big.Int, getTwoPartyConsensusLedger GetTwoPartyConsensusLedgerFunction) (Objective, error) {
 	var rightCC *consensus_channel.ConsensusChannel
 	ok := false
@@ -205,15 +207,15 @@ func constructFromState(
 		return Objective{}, errors.New("not a participant in V")
 	}
 
-	// Initialize virtual channel
-	v, err := channel.NewVirtualChannel(initialStateOfV, init.MyRole)
+	// Initialize swap channel
+	s, err := channel.NewSwapChannel(initialStateOfV, init.MyRole)
 	if err != nil {
 		return Objective{}, err
 	}
 
-	init.V = v
+	init.S = s
 
-	init.n = uint(len(initialStateOfV.Participants)) - 2 // NewSingleHopVirtualChannel will error unless there are at least 3 participants
+	init.n = uint(len(initialStateOfV.Participants)) - 2 // NewSingleHopSwapChannel will error unless there are at least 3 participants
 
 	init.a0 = make(map[types.Address]*big.Int)
 	init.b0 = make(map[types.Address]*big.Int)
@@ -244,16 +246,16 @@ func constructFromState(
 		init.ToMyLeft = &Connection{}
 
 		if consensusChannelToMyLeft == nil {
-			return Objective{}, fmt.Errorf("non-alice virtualfund objective requires non-nil left ledger channel")
+			return Objective{}, fmt.Errorf("non-alice swapfund objective requires non-nil left ledger channel")
 		}
 
 		init.ToMyLeft.Channel = consensusChannelToMyLeft
 		err = init.ToMyLeft.insertGuaranteeInfo(
 			init.a0,
 			init.b0,
-			init.V.Id,
-			types.AddressToDestination(init.V.Participants[init.MyRole-1]),
-			types.AddressToDestination(init.V.Participants[init.MyRole]),
+			init.S.Id,
+			types.AddressToDestination(init.S.Participants[init.MyRole-1]),
+			types.AddressToDestination(init.S.Participants[init.MyRole]),
 		)
 		if err != nil {
 			return Objective{}, err
@@ -264,16 +266,16 @@ func constructFromState(
 		init.ToMyRight = &Connection{}
 
 		if consensusChannelToMyRight == nil {
-			return Objective{}, fmt.Errorf("non-bob virtualfund objective requires non-nil right ledger channel")
+			return Objective{}, fmt.Errorf("non-bob swapfund objective requires non-nil right ledger channel")
 		}
 
 		init.ToMyRight.Channel = consensusChannelToMyRight
 		err = init.ToMyRight.insertGuaranteeInfo(
 			init.a0,
 			init.b0,
-			init.V.Id,
-			types.AddressToDestination(init.V.Participants[init.MyRole]),
-			types.AddressToDestination(init.V.Participants[init.MyRole+1]),
+			init.S.Id,
+			types.AddressToDestination(init.S.Participants[init.MyRole]),
+			types.AddressToDestination(init.S.Participants[init.MyRole+1]),
 		)
 		if err != nil {
 			return Objective{}, err
@@ -285,7 +287,7 @@ func constructFromState(
 
 // Id returns the objective id.
 func (o *Objective) Id() protocols.ObjectiveId {
-	return protocols.ObjectiveId(ObjectivePrefix + o.V.Id.String())
+	return protocols.ObjectiveId(ObjectivePrefix + o.S.Id.String())
 }
 
 // Approve returns an approved copy of the objective.
@@ -309,7 +311,7 @@ func (o *Objective) Reject() (protocols.Objective, protocols.SideEffects) {
 
 // OwnsChannel returns the channel that the objective is funding.
 func (o *Objective) OwnsChannel() types.Destination {
-	return o.V.Id
+	return o.S.Id
 }
 
 // GetStatus returns the status of the objective.
@@ -319,7 +321,7 @@ func (o *Objective) GetStatus() protocols.ObjectiveStatus {
 
 func (o *Objective) otherParticipants() []types.Address {
 	otherParticipants := make([]types.Address, 0)
-	for i, p := range o.V.Participants {
+	for i, p := range o.S.Participants {
 		if i != int(o.MyRole) {
 			otherParticipants = append(otherParticipants, p)
 		}
@@ -338,10 +340,15 @@ func (o *Objective) getPayload(raw protocols.ObjectivePayload) (*state.SignedSta
 }
 
 func (o *Objective) ReceiveProposal(sp consensus_channel.SignedProposal) (protocols.ProposalReceiver, error) {
-	pId, err := protocols.GetProposalObjectiveId(sp.Proposal, types.Virtual)
+	if sp.Proposal.Type() != consensus_channel.AddProposal {
+		return o, fmt.Errorf("invalid proposal type")
+	}
+
+	pId, err := protocols.GetProposalObjectiveId(sp.Proposal, types.Swap)
 	if err != nil {
 		return o, err
 	}
+
 	if o.Id() != pId {
 		return o, fmt.Errorf("sp and objective Ids do not match: %s and %s respectively", string(pId), string(o.Id()))
 	}
@@ -358,7 +365,8 @@ func (o *Objective) ReceiveProposal(sp consensus_channel.SignedProposal) (protoc
 		toMyRightId = o.ToMyRight.Channel.Id // Avoid this if it is nil
 	}
 
-	if sp.Proposal.Target() == o.V.Id {
+	if sp.Proposal.Target() == o.S.Id {
+		var err error
 
 		switch sp.Proposal.LedgerID {
 		case types.Destination{}:
@@ -378,7 +386,7 @@ func (o *Objective) ReceiveProposal(sp consensus_channel.SignedProposal) (protoc
 	return &updated, nil
 }
 
-// Update receives an protocols.ObjectiveEvent, applies all applicable event data to the VirtualFundObjective,
+// Update receives an protocols.ObjectiveEvent, applies all applicable event data to the SwapFundObjective,
 // and returns the updated state.
 func (o *Objective) Update(raw protocols.ObjectivePayload) (protocols.Objective, error) {
 	if o.Id() != raw.ObjectiveId {
@@ -391,7 +399,7 @@ func (o *Objective) Update(raw protocols.ObjectivePayload) (protocols.Objective,
 	updated := o.clone()
 
 	if ss := payload; len(ss.Signatures()) != 0 {
-		updated.V.AddSignedState(*ss)
+		updated.S.AddSignedState(*ss)
 	}
 
 	return &updated, nil
@@ -411,8 +419,8 @@ func (o *Objective) Crank(secretKey *[]byte) (protocols.Objective, protocols.Sid
 
 	// Prefunding
 
-	if !updated.V.PreFundSignedByMe() {
-		ss, err := updated.V.SignAndAddPrefund(secretKey)
+	if !updated.S.PreFundSignedByMe() {
+		ss, err := updated.S.SignAndAddPrefund(secretKey)
 		if err != nil {
 			return o, protocols.SideEffects{}, WaitingForNothing, err
 		}
@@ -425,7 +433,7 @@ func (o *Objective) Crank(secretKey *[]byte) (protocols.Objective, protocols.Sid
 		sideEffects.MessagesToSend = append(sideEffects.MessagesToSend, messages...)
 	}
 
-	if !updated.V.PreFundComplete() {
+	if !updated.S.PreFundComplete() {
 		return &updated, sideEffects, WaitingForCompletePrefund, nil
 	}
 
@@ -453,8 +461,8 @@ func (o *Objective) Crank(secretKey *[]byte) (protocols.Objective, protocols.Sid
 	}
 
 	// Postfunding
-	if !updated.V.PostFundSignedByMe() {
-		ss, err := updated.V.SignAndAddPostfund(secretKey)
+	if !updated.S.PostFundSignedByMe() {
+		ss, err := updated.S.SignAndAddPostfund(secretKey)
 		if err != nil {
 			return o, protocols.SideEffects{}, WaitingForNothing, err
 		}
@@ -471,7 +479,7 @@ func (o *Objective) Crank(secretKey *[]byte) (protocols.Objective, protocols.Sid
 	// If they need to recover funds, they can force V to close by challenging with the pre fund state.
 	// Alice and Bob may counter-challenge with a postfund state plus a redemption state.
 	// See ADR-0009.
-	if !updated.V.PostFundComplete() && (updated.isAlice() || updated.isBob()) {
+	if !updated.S.PostFundComplete() && (updated.isAlice() || updated.isBob()) {
 		return &updated, sideEffects, WaitingForCompletePostFund, nil
 	}
 
@@ -481,7 +489,7 @@ func (o *Objective) Crank(secretKey *[]byte) (protocols.Objective, protocols.Sid
 }
 
 func (o *Objective) Related() []protocols.Storable {
-	ret := []protocols.Storable{o.V}
+	ret := []protocols.Storable{o.S}
 
 	if o.ToMyLeft != nil {
 		ret = append(ret, o.ToMyLeft.Channel)
@@ -494,7 +502,7 @@ func (o *Objective) Related() []protocols.Storable {
 }
 
 //////////////////////////////////////////////////
-//  Private methods on the VirtualFundObjective //
+//  Private methods on the SwapFundObjective //
 //////////////////////////////////////////////////
 
 // fundingComplete returns true if the appropriate ledger channel guarantees sufficient funds for J
@@ -516,8 +524,8 @@ func (o *Objective) fundingComplete() bool {
 func (o *Objective) clone() Objective {
 	clone := Objective{}
 	clone.Status = o.Status
-	vClone := o.V.Clone()
-	clone.V = vClone
+	vClone := o.S.Clone()
+	clone.S = vClone
 
 	if o.ToMyLeft != nil {
 		lClone := o.ToMyLeft.Channel.Clone()
@@ -543,12 +551,12 @@ func (o *Objective) clone() Objective {
 	return clone
 }
 
-// isAlice returns true if the receiver represents participant 0 in the virtualfund protocol.
+// isAlice returns true if the receiver represents participant 0 in the swapfund protocol.
 func (o *Objective) isAlice() bool {
 	return o.MyRole == 0
 }
 
-// isBob returns true if the receiver represents participant n+1 in the virtualfund protocol.
+// isBob returns true if the receiver represents participant n+1 in the swapfund protocol.
 func (o *Objective) isBob() bool {
 	return o.MyRole == o.n+1
 }
@@ -629,26 +637,26 @@ func ConstructObjectiveFromPayload(
 	)
 }
 
-// IsVirtualFundObjective inspects a objective id and returns true if the objective id is for a virtual fund objective.
-func IsVirtualFundObjective(id protocols.ObjectiveId) bool {
+// IsSwapFundObjective inspects a objective id and returns true if the objective id is for a swap fund objective.
+func IsSwapFundObjective(id protocols.ObjectiveId) bool {
 	return strings.HasPrefix(string(id), ObjectivePrefix)
 }
 
-func (c *Connection) expectedProposal() consensus_channel.Proposal {
+// TODO: Return array instead of map
+func (c *Connection) expectedProposal() map[common.Address]consensus_channel.Proposal {
+	proposals := make(map[common.Address]consensus_channel.Proposal)
 	g := c.getExpectedGuarantee()
 
-	var leftAmount *big.Int
-
-	for _, val := range c.GuaranteeInfo.LeftAmount {
-		leftAmount = val
-		break
+	for asset, amount := range c.GuaranteeInfo.LeftAmount {
+		guarantee := g[asset]
+		if c.Channel.Includes(guarantee) {
+			continue
+		}
+		proposal := consensus_channel.NewAddProposal(c.Channel.Id, guarantee, amount, asset)
+		proposals[asset] = proposal
 	}
 
-	// Use first asset from outcome array for creating virtual channel
-	consensusState := c.Channel.SupportedSignedState().State()
-	proposal := consensus_channel.NewAddProposal(c.Channel.Id, g, leftAmount, consensusState.Outcome[0].Asset)
-
-	return proposal
+	return proposals
 }
 
 // proposeLedgerUpdate will propose a ledger update to the channel by crafting a new state
@@ -661,9 +669,14 @@ func (o *Objective) proposeLedgerUpdate(connection Connection, sk *[]byte) (prot
 
 	sideEffects := protocols.SideEffects{}
 
-	_, err := ledger.Propose(connection.expectedProposal(), *sk)
-	if err != nil {
-		return protocols.SideEffects{}, err
+	// TODO: expectedProposal return multiple proposals, loop through it and call propose on each proposal
+	proposals := connection.expectedProposal()
+
+	for _, p := range proposals {
+		_, err := ledger.Propose(p, *sk)
+		if err != nil {
+			return protocols.SideEffects{}, err
+		}
 	}
 
 	recipient := ledger.Follower()
@@ -678,14 +691,16 @@ func (o *Objective) proposeLedgerUpdate(connection Connection, sk *[]byte) (prot
 }
 
 // acceptLedgerUpdate checks for a ledger state proposal and accepts that proposal if it satisfies the expected guarantee.
-func (o *Objective) acceptLedgerUpdate(c Connection, sk *[]byte) (protocols.SideEffects, error) {
+func (o *Objective) acceptLedgerUpdate(c Connection, sk *[]byte, a common.Address) (protocols.SideEffects, error) {
 	ledger := c.Channel
-	sp, err := ledger.SignNextProposal(c.expectedProposal(), *sk)
+	sideEffects := protocols.SideEffects{}
+	expectedProposals := c.expectedProposal()
+
+	p := expectedProposals[a]
+	sp, err := ledger.SignNextProposal(p, *sk)
 	if err != nil {
 		return protocols.SideEffects{}, fmt.Errorf("no proposed state found for ledger channel %w", err)
 	}
-	sideEffects := protocols.SideEffects{}
-
 	// ledger sideEffect
 	if proposals := ledger.ProposalQueue(); len(proposals) != 0 {
 		sideEffects.ProposalsToProcess = append(sideEffects.ProposalsToProcess, proposals[0].Proposal)
@@ -695,6 +710,7 @@ func (o *Objective) acceptLedgerUpdate(c Connection, sk *[]byte) (protocols.Side
 	recipient := ledger.Leader()
 	message := protocols.CreateSignedProposalMessage(recipient, sp)
 	sideEffects.MessagesToSend = append(sideEffects.MessagesToSend, message)
+
 	return sideEffects, nil
 }
 
@@ -705,10 +721,23 @@ func (o *Objective) updateLedgerWithGuarantee(ledgerConnection Connection, sk *[
 	ledger := ledgerConnection.Channel
 
 	var sideEffects protocols.SideEffects
-	g := ledgerConnection.getExpectedGuarantee()
-	proposed, err := ledger.IsProposed(g)
-	if err != nil {
-		return protocols.SideEffects{}, err
+	// TODO: Fix error, changed method to send guarantee map
+	guarantee := ledgerConnection.getExpectedGuarantee()
+	proposed := false
+	for _, g := range guarantee {
+		if ledgerConnection.Channel.Includes(g) {
+			continue
+		}
+
+		p, err := ledger.IsProposed(g)
+		if err != nil {
+			return protocols.SideEffects{}, err
+		}
+
+		if p {
+			proposed = true
+			break
+		}
 	}
 
 	if ledger.IsLeader() { // If the user is the proposer craft a new proposal
@@ -721,26 +750,27 @@ func (o *Objective) updateLedgerWithGuarantee(ledgerConnection Connection, sk *[
 		}
 		sideEffects = se
 	} else {
-		if err != nil {
-			return protocols.SideEffects{}, err
-		}
 		// If the proposal is next in the queue we accept it
-		proposedNext, _ := ledger.IsProposedNext(g)
-		if proposedNext {
-
-			se, err := o.acceptLedgerUpdate(ledgerConnection, sk)
+		for a, g := range guarantee {
+			proposedNext, err := ledger.IsProposedNext(g)
 			if err != nil {
-				return protocols.SideEffects{}, fmt.Errorf("error proposing ledger update: %w", err)
+				return protocols.SideEffects{}, err
 			}
 
-			sideEffects = se
+			if proposedNext {
+				se, err := o.acceptLedgerUpdate(ledgerConnection, sk, a)
+				if err != nil {
+					return protocols.SideEffects{}, fmt.Errorf("error proposing ledger update: %w", err)
+				}
+				sideEffects = se
+			}
 		}
 	}
 
 	return sideEffects, nil
 }
 
-// ObjectiveRequest represents a request to create a new virtual funding objective.
+// ObjectiveRequest represents a request to create a new swap funding objective.
 type ObjectiveRequest struct {
 	Intermediaries    []types.Address
 	CounterParty      types.Address

@@ -9,6 +9,7 @@ import (
 	"github.com/statechannels/go-nitro/protocols/bridgeddefund"
 	"github.com/statechannels/go-nitro/protocols/directdefund"
 	"github.com/statechannels/go-nitro/protocols/directfund"
+	"github.com/statechannels/go-nitro/protocols/swapfund"
 	"github.com/statechannels/go-nitro/protocols/virtualdefund"
 	"github.com/statechannels/go-nitro/protocols/virtualfund"
 	"github.com/statechannels/go-nitro/types"
@@ -24,10 +25,12 @@ const (
 	CloseLedgerChannelRequestMethod   RequestMethod = "close_ledger_channel"
 	CloseBridgeChannelRequestMethod   RequestMethod = "close_bridge_channel"
 	MirrorBridgedDefundRequestMethod  RequestMethod = "mirror_bridged_defund"
+	CreateSwapChannelRequestMethod    RequestMethod = "create_swap_channel"
 	CreatePaymentChannelRequestMethod RequestMethod = "create_payment_channel"
 	ClosePaymentChannelRequestMethod  RequestMethod = "close_payment_channel"
 	PayRequestMethod                  RequestMethod = "pay"
 	GetPaymentChannelRequestMethod    RequestMethod = "get_payment_channel"
+	GetSwapChannelRequestMethod       RequestMethod = "get_swap_channel"
 	GetVoucherRequestMethod           RequestMethod = "get_voucher"
 	GetLedgerChannelRequestMethod     RequestMethod = "get_ledger_channel"
 	GetPaymentChannelsByLedgerMethod  RequestMethod = "get_payment_channels_by_ledger"
@@ -89,6 +92,11 @@ type CounterChallengeRequest struct {
 type GetPaymentChannelRequest struct {
 	Id types.Destination
 }
+
+type GetSwapChannelRequest struct {
+	Id types.Destination
+}
+
 type GetVoucherRequest struct {
 	Id types.Destination
 }
@@ -139,10 +147,12 @@ type RequestPayload interface {
 		MirrorBridgedDefundRequest |
 		virtualfund.ObjectiveRequest |
 		virtualdefund.ObjectiveRequest |
+		swapfund.ObjectiveRequest |
 		AuthRequest |
 		PaymentRequest |
 		GetLedgerChannelRequest |
 		GetPaymentChannelRequest |
+		GetSwapChannelRequest |
 		GetPaymentChannelsByLedgerRequest |
 		GetSignedStateRequest |
 		GetVoucherRequest |
@@ -191,9 +201,11 @@ type ResponsePayload interface {
 	directfund.ObjectiveResponse |
 		protocols.ObjectiveId |
 		virtualfund.ObjectiveResponse |
+		swapfund.ObjectiveResponse |
 		PaymentRequest |
 		query.PaymentChannelInfo |
 		query.LedgerChannelInfo |
+		query.SwapChannelInfo |
 		GetAllLedgersResponse |
 		GetPaymentChannelsByLedgerResponse |
 		payments.Voucher |

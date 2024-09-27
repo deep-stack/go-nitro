@@ -7,6 +7,7 @@ import (
 	"time"
 
 	"github.com/ethereum/go-ethereum/common"
+	"github.com/statechannels/go-nitro/channel/state/outcome"
 	"github.com/statechannels/go-nitro/internal/testactors"
 	td "github.com/statechannels/go-nitro/internal/testdata"
 	"github.com/statechannels/go-nitro/internal/testhelpers"
@@ -60,7 +61,7 @@ func TestComplexIntegrationScenario(t *testing.T) {
 	RunIntegrationTestCase(complexCase, t)
 }
 
-func TestMultiAssetLedgerChannel(t *testing.T) {
+func TestSwapFund(t *testing.T) {
 	testCase := TestCase{
 		Description:       "Direct defund with Challenge",
 		Chain:             AnvilChain,
@@ -82,7 +83,7 @@ func TestMultiAssetLedgerChannel(t *testing.T) {
 	defer infra.Close(t)
 
 	// TokenBinding
-	_, err := Token.NewToken(infra.anvilChain.ContractAddresses.TokenAddress, infra.anvilChain.EthClient)
+	_, err := Token.NewToken(infra.anvilChain.ContractAddresses.TokenAddresses[0], infra.anvilChain.EthClient)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -94,9 +95,12 @@ func TestMultiAssetLedgerChannel(t *testing.T) {
 	defer nodeB.Close()
 
 	outcomeEth := CreateLedgerOutcome(*nodeA.Address, *nodeB.Address, ledgerChannelDeposit, ledgerChannelDeposit, common.Address{})
-	outcomeCustomToken := CreateLedgerOutcome(*nodeA.Address, *nodeB.Address, ledgerChannelDeposit, ledgerChannelDeposit, infra.anvilChain.ContractAddresses.TokenAddress)
+	outcomeCustomToken := CreateLedgerOutcome(*nodeA.Address, *nodeB.Address, ledgerChannelDeposit, ledgerChannelDeposit, infra.anvilChain.ContractAddresses.TokenAddresses[0])
+
+	outcomeCustomToken2 := CreateLedgerOutcome(*nodeA.Address, *nodeB.Address, ledgerChannelDeposit, ledgerChannelDeposit, infra.anvilChain.ContractAddresses.TokenAddresses[1])
 
 	multiAssetOutcome := append(outcomeEth, outcomeCustomToken...)
+	multiAssetOutcome = append(multiAssetOutcome, outcomeCustomToken2...)
 
 	// Create ledger channel
 	ledgerResponse, err := nodeA.CreateLedgerChannel(*nodeB.Address, uint32(testCase.ChallengeDuration), multiAssetOutcome)
@@ -111,7 +115,65 @@ func TestMultiAssetLedgerChannel(t *testing.T) {
 	<-chA
 	<-chB
 
-	t.Log("Completed direct-fund objective")
+	multiassetSwapChannelOutcome := outcome.Exit{
+		outcome.SingleAssetExit{
+			Asset: common.Address{},
+			Allocations: outcome.Allocations{
+				outcome.Allocation{
+					Destination: types.AddressToDestination(*nodeA.Address),
+					Amount:      big.NewInt(int64(1001)),
+				},
+				outcome.Allocation{
+					Destination: types.AddressToDestination(*nodeB.Address),
+					Amount:      big.NewInt(int64(1002)),
+				},
+			},
+		},
+		outcome.SingleAssetExit{
+			Asset: infra.anvilChain.ContractAddresses.TokenAddresses[0],
+			Allocations: outcome.Allocations{
+				outcome.Allocation{
+					Destination: types.AddressToDestination(*nodeA.Address),
+					Amount:      big.NewInt(int64(501)),
+				},
+				outcome.Allocation{
+					Destination: types.AddressToDestination(*nodeB.Address),
+					Amount:      big.NewInt(int64(502)),
+				},
+			},
+		},
+		outcome.SingleAssetExit{
+			Asset: infra.anvilChain.ContractAddresses.TokenAddresses[1],
+			Allocations: outcome.Allocations{
+				outcome.Allocation{
+					Destination: types.AddressToDestination(*nodeA.Address),
+					Amount:      big.NewInt(int64(601)),
+				},
+				outcome.Allocation{
+					Destination: types.AddressToDestination(*nodeB.Address),
+					Amount:      big.NewInt(int64(602)),
+				},
+			},
+		},
+	}
+
+	swapChannelresponse, err := nodeA.CreateSwapChannel(
+		nil,
+		*nodeB.Address,
+		0,
+		multiassetSwapChannelOutcome,
+	)
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	chB = nodeB.ObjectiveCompleteChan(swapChannelresponse.Id)
+	<-nodeA.ObjectiveCompleteChan(swapChannelresponse.Id)
+	<-chB
+
+	t.Log("Completed swap-fund objective")
+
+	checkSwapChannel(t, swapChannelresponse.ChannelId, multiassetSwapChannelOutcome, query.Open, nodeA, nodeB)
 }
 
 // RunIntegrationTestCase runs the integration test case.

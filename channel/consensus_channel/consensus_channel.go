@@ -732,7 +732,8 @@ type Add struct {
 	// LeftDeposit is the portion of the Add's amount that will be deducted from left participant's ledger balance.
 	//
 	// The right participant's deduction is computed as the difference between the guarantee amount and LeftDeposit.
-	LeftDeposit *big.Int
+	LeftDeposit  *big.Int
+	AssetAddress common.Address
 }
 
 // Clone returns a deep copy of the receiver.
@@ -743,20 +744,22 @@ func (a *Add) Clone() Add {
 	return Add{
 		a.Guarantee.Clone(),
 		big.NewInt(0).Set(a.LeftDeposit),
+		a.AssetAddress,
 	}
 }
 
 // NewAdd constructs a new Add proposal.
-func NewAdd(g Guarantee, leftDeposit *big.Int) Add {
+func NewAdd(g Guarantee, leftDeposit *big.Int, assetAddress common.Address) Add {
 	return Add{
-		Guarantee:   g,
-		LeftDeposit: leftDeposit,
+		Guarantee:    g,
+		LeftDeposit:  leftDeposit,
+		AssetAddress: assetAddress,
 	}
 }
 
 // NewAddProposal constructs a proposal with a valid Add proposal and empty remove proposal.
-func NewAddProposal(ledgerID types.Destination, g Guarantee, leftDeposit *big.Int) Proposal {
-	return Proposal{ToAdd: NewAdd(g, leftDeposit), LedgerID: ledgerID}
+func NewAddProposal(ledgerID types.Destination, g Guarantee, leftDeposit *big.Int, assetAddress common.Address) Proposal {
+	return Proposal{ToAdd: NewAdd(g, leftDeposit, assetAddress), LedgerID: ledgerID}
 }
 
 // NewRemove constructs a new Remove proposal.
@@ -779,7 +782,7 @@ func (a Add) RightDeposit() *big.Int {
 }
 
 func (a Add) equal(a2 Add) bool {
-	return a.Guarantee.equal(a2.Guarantee) && types.Equal(a.LeftDeposit, a2.LeftDeposit)
+	return a.Guarantee.equal(a2.Guarantee) && types.Equal(a.LeftDeposit, a2.LeftDeposit) && a.AssetAddress == a2.AssetAddress
 }
 
 func (r Remove) equal(r2 Remove) bool {
@@ -819,8 +822,14 @@ func (vars *Vars) HandleProposal(p Proposal) error {
 // If an error is returned, the original vars is not mutated.
 // TODO: Pass `assetIndex` argument to select asset used for guarantee
 func (vars *Vars) Add(p Add) error {
+	var o LedgerOutcome
+	for _, outcome := range vars.Outcome {
+		if outcome.assetAddress == p.AssetAddress {
+			o = outcome
+		}
+	}
+
 	// CHECKS
-	o := vars.Outcome[0]
 
 	_, found := o.guarantees[p.target]
 	if found {
@@ -925,6 +934,7 @@ type Remove struct {
 	// LeftAmount is the amount to be credited (in the ledger channel) to the participant specified as the "left" in the guarantee.
 	//
 	// The amount for the "right" participant is calculated as the difference between the guarantee amount and LeftAmount.
+	// TODO: add assetAddress` similar to `Add` struct
 	LeftAmount *big.Int
 }
 

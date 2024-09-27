@@ -24,6 +24,7 @@ import (
 	"github.com/statechannels/go-nitro/protocols/directdefund"
 	"github.com/statechannels/go-nitro/protocols/directfund"
 	"github.com/statechannels/go-nitro/protocols/mirrorbridgeddefund"
+	"github.com/statechannels/go-nitro/protocols/swapfund"
 	"github.com/statechannels/go-nitro/protocols/virtualdefund"
 	"github.com/statechannels/go-nitro/protocols/virtualfund"
 	"github.com/statechannels/go-nitro/rand"
@@ -193,6 +194,25 @@ func (c *Node) ReceiveVoucher(v payments.Voucher) (payments.ReceiveVoucherSummar
 	return payments.ReceiveVoucherSummary{Total: total, Delta: delta}, err
 }
 
+func (n *Node) CreateSwapChannel(Intermediaries []types.Address, CounterParty types.Address, ChallengeDuration uint32, Outcome outcome.Exit) (swapfund.ObjectiveResponse, error) {
+	objectiveRequest := swapfund.NewObjectiveRequest(
+		Intermediaries,
+		CounterParty,
+		ChallengeDuration,
+		Outcome,
+		rand.Uint64(),
+		// Since no contract present for swap channels yet
+		// TODO: Handle sad path for swap channels
+		n.engine.GetConsensusAppAddress(),
+	)
+
+	// Send the event to the engine
+	n.engine.ObjectiveRequestsFromAPI <- objectiveRequest
+
+	objectiveRequest.WaitForObjectiveToStart()
+	return objectiveRequest.Response(*n.Address), nil
+}
+
 // CreatePaymentChannel creates a virtual channel with the counterParty using ledger channels
 // with the supplied intermediaries.
 func (n *Node) CreatePaymentChannel(Intermediaries []types.Address, CounterParty types.Address, ChallengeDuration uint32, Outcome outcome.Exit) (virtualfund.ObjectiveResponse, error) {
@@ -330,6 +350,10 @@ func (n *Node) Pay(channelId types.Destination, amount *big.Int) error {
 // If no ledger channel exists with the given id an error is returned.
 func (n *Node) GetPaymentChannel(id types.Destination) (query.PaymentChannelInfo, error) {
 	return query.GetPaymentChannelInfo(id, n.store, n.vm)
+}
+
+func (n *Node) GetSwapChannel(id types.Destination) (string, error) {
+	return query.GetSwapChannelInfo(id, n.store)
 }
 
 // GetPaymentChannelsByLedger returns all active payment channels that are funded by the given ledger channel.

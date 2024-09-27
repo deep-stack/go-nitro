@@ -169,7 +169,7 @@ func TestConsensusChannelStore(t *testing.T) {
 
 	// Generate a new proposal so we test that the proposal queue is being fetched properly
 	proposedGuarantee := cc.NewGuarantee(big.NewInt(1), types.Destination{2}, left.AsAllocation().Destination, right.AsAllocation().Destination)
-	proposal := cc.NewAddProposal(leader.Id, proposedGuarantee, big.NewInt(1))
+	proposal := cc.NewAddProposal(leader.Id, proposedGuarantee, big.NewInt(1), common.Address{})
 	_, err = leader.Propose(proposal, ta.Alice.PrivateKey)
 	if err != nil {
 		t.Fatal(err)
@@ -282,7 +282,7 @@ func TestBigNumberStorage(t *testing.T) {
 			},
 		}}
 		s := state.State{Outcome: reallyLargeOutcome}
-		c, err := channel.New(s, 0, channel.Ledger)
+		c, err := channel.New(s, 0, types.Ledger)
 		if err != nil {
 			t.Fatalf("error constructing channel: %v", err)
 		}

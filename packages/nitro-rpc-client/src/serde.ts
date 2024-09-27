@@ -90,6 +90,26 @@ const paymentChannelSchema = {
 } as const;
 type PaymentChannelSchemaType = JTDDataType<typeof paymentChannelSchema>;
 
+const swapChannelSchema = {
+  properties: {
+    ID: { type: "string" },
+    Status: { type: "string" },
+    Balances: {
+      // TODO: Check array inside properties
+      elements: {
+        properties: {
+          AssetAddress: { type: "string" },
+          NodeA: { type: "string" },
+          NodeB: { type: "string" },
+          AmountNodeA: { type: "string" },
+          AmountNodeB: { type: "string" },
+        },
+      },
+    },
+  },
+} as const;
+type SwapChannelSchemaType = JTDDataType<typeof swapChannelSchema>;
+
 const ledgerChannelsSchema = {
   elements: {
     ...ledgerChannelSchema,
@@ -148,6 +168,7 @@ type ResponseSchema =
   | typeof ledgerChannelsSchema
   | typeof paymentChannelSchema
   | typeof paymentChannelsSchema
+  | typeof swapChannelSchema
   | typeof paymentSchema
   | typeof voucherSchema
   | typeof receiveVoucherSchema
@@ -160,6 +181,7 @@ type ResponseSchemaType =
   | LedgerChannelSchemaType
   | LedgerChannelsSchemaType
   | PaymentChannelSchemaType
+  | SwapChannelSchemaType
   | PaymentChannelsSchemaType
   | PaymentSchemaType
   | VoucherSchemaType
@@ -184,6 +206,7 @@ export function getAndValidateResult<T extends RequestMethod>(
   switch (method) {
     case "create_ledger_channel":
     case "create_payment_channel":
+    case "create_swap_channel":
       return validateAndConvertResult(
         objectiveSchema,
         result,
@@ -202,6 +225,7 @@ export function getAndValidateResult<T extends RequestMethod>(
     case "get_address":
     case "get_signed_state":
     case "close_payment_channel":
+    case "get_swap_channel":
       return validateAndConvertResult(
         stringSchema,
         result,

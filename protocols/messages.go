@@ -65,11 +65,16 @@ func (se *SideEffects) Merge(other SideEffects) {
 }
 
 // GetProposalObjectiveId returns the objectiveId for a proposal.
-func GetProposalObjectiveId(p consensus_channel.Proposal) (ObjectiveId, error) {
+func GetProposalObjectiveId(p consensus_channel.Proposal, channelType types.ChannelType) (ObjectiveId, error) {
 	switch p.Type() {
 	case "AddProposal":
 		{
-			const prefix = "VirtualFund-"
+			var prefix string
+			if channelType == types.Swap {
+				prefix = "SwapFund-"
+			} else {
+				prefix = "VirtualFund-"
+			}
 			channelId := p.ToAdd.Guarantee.Target().String()
 			return ObjectiveId(prefix + channelId), nil
 
@@ -175,8 +180,10 @@ type PaymentSummary struct {
 	ChannelId string
 }
 
+type getChannelByIdFn func(channelId types.Destination) (types.ChannelType, error)
+
 // Summarize returns a MessageSummary for the message that is suitable for logging
-func (m Message) Summarize() MessageSummary {
+func (m Message) Summarize(getChannelById getChannelByIdFn) MessageSummary {
 	s := MessageSummary{}
 	s.To = m.To.String()[0:8]
 	s.From = m.From.String()[0:8]
@@ -188,11 +195,19 @@ func (m Message) Summarize() MessageSummary {
 
 	s.ProposalSummaries = make([]ProposalSummary, len(m.LedgerProposals))
 	for i, p := range m.LedgerProposals {
-		objId, err := GetProposalObjectiveId(p.Proposal)
-		objIdString := string(objId)
+		var objIdString string
+
+		t, err := getChannelById(p.Proposal.Target())
 		if err != nil {
 			objIdString = err.Error() // Use error message as objective id
+		} else {
+			objId, err := GetProposalObjectiveId(p.Proposal, t)
+			objIdString = string(objId)
+			if err != nil {
+				objIdString = err.Error() // Use error message as objective id
+			}
 		}
+
 		s.ProposalSummaries[i] = ProposalSummary{
 			ObjectiveId:  objIdString,
 			LedgerId:     p.ChannelID().String(),

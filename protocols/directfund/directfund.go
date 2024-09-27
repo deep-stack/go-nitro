@@ -102,6 +102,10 @@ func ChannelsExistWithCounterparty(counterparty types.Address, getChannels GetCh
 	for _, c := range channels {
 		// We only want to find directly funded channels that would have two participants
 		if len(c.Participants) == 2 {
+			// We only want to find directly funded channels that are not finalized
+			if c.OnChain.ChannelMode == channel.Finalized {
+				return false, nil
+			}
 			return true, nil
 		}
 	}
@@ -158,7 +162,7 @@ func ConstructFromPayload(
 	}
 
 	init.C = &channel.Channel{}
-	init.C, err = channel.New(initialState, myIndex, channel.Ledger)
+	init.C, err = channel.New(initialState, myIndex, types.Ledger)
 	if err != nil {
 		return Objective{}, fmt.Errorf("failed to initialize channel for direct-fund objective: %w", err)
 	}

@@ -17,6 +17,7 @@ import (
 	"github.com/statechannels/go-nitro/protocols/bridgeddefund"
 	"github.com/statechannels/go-nitro/protocols/directdefund"
 	"github.com/statechannels/go-nitro/protocols/directfund"
+	"github.com/statechannels/go-nitro/protocols/swapfund"
 	"github.com/statechannels/go-nitro/protocols/virtualdefund"
 	"github.com/statechannels/go-nitro/protocols/virtualfund"
 	"github.com/statechannels/go-nitro/rpc/serde"
@@ -24,7 +25,10 @@ import (
 	"github.com/statechannels/go-nitro/types"
 )
 
-const DISABLE_BRIDGE_DEFUND = true
+const (
+	DISABLE_BRIDGE_DEFUND = true
+	DISABLE_SWAP_FUND     = true
+)
 
 type NodeRpcServer struct {
 	*BaseRpcServer
@@ -158,6 +162,15 @@ func (nrs *NodeRpcServer) registerHandlers() (err error) {
 
 				return nrs.node.MirrorBridgedDefund(req.ChannelId, l2SignedState, req.IsChallenge)
 			})
+		case serde.CreateSwapChannelRequestMethod:
+			return processRequest(nrs.BaseRpcServer, permSign, requestData, func(req swapfund.ObjectiveRequest) (swapfund.ObjectiveResponse, error) {
+				// TODO: Remove after implementing swap defund
+				if DISABLE_SWAP_FUND {
+					return swapfund.ObjectiveResponse{}, fmt.Errorf("swap fund is currently disabled")
+				}
+
+				return nrs.node.CreateSwapChannel(req.Intermediaries, req.CounterParty, req.ChallengeDuration, req.Outcome)
+			})
 		case serde.CreatePaymentChannelRequestMethod:
 			return processRequest(nrs.BaseRpcServer, permSign, requestData, func(req virtualfund.ObjectiveRequest) (virtualfund.ObjectiveResponse, error) {
 				return nrs.node.CreatePaymentChannel(req.Intermediaries, req.CounterParty, req.ChallengeDuration, req.Outcome)
@@ -185,6 +198,13 @@ func (nrs *NodeRpcServer) registerHandlers() (err error) {
 					return query.PaymentChannelInfo{}, err
 				}
 				return nrs.node.GetPaymentChannel(req.Id)
+			})
+		case serde.GetSwapChannelRequestMethod:
+			return processRequest(nrs.BaseRpcServer, permRead, requestData, func(req serde.GetSwapChannelRequest) (string, error) {
+				if err := serde.ValidateGetSwapChannelRequest(req); err != nil {
+					return "", err
+				}
+				return nrs.node.GetSwapChannel(req.Id)
 			})
 		case serde.GetLedgerChannelRequestMethod:
 			return processRequest(nrs.BaseRpcServer, permRead, requestData, func(req serde.GetLedgerChannelRequest) (query.LedgerChannelInfo, error) {

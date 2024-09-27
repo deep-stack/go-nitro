@@ -1,10 +1,12 @@
 package query
 
 import (
+	"encoding/json"
 	"errors"
 	"fmt"
 	"math/big"
 
+	"github.com/ethereum/go-ethereum/common"
 	"github.com/ethereum/go-ethereum/common/hexutil"
 	"github.com/statechannels/go-nitro/channel"
 	"github.com/statechannels/go-nitro/channel/consensus_channel"
@@ -54,6 +56,40 @@ func getPaymentChannelBalance(participants []types.Address, outcome outcome.Exit
 		PaidSoFar:      (*hexutil.Big)(paidSoFar),
 		RemainingFunds: (*hexutil.Big)(remaining),
 	}
+}
+
+func getSwapChannelBalances(participants []types.Address, outcome outcome.Exit, myAddress common.Address) ([]SwapChannelBalance, error) {
+	numParticipants := len(participants)
+	var scb []SwapChannelBalance
+
+	for _, sao := range outcome {
+		asset := sao.Asset
+		var me, them common.Address
+		var myBalance, theirBalance *big.Int
+		if participants[0] == myAddress {
+			me = participants[0]
+			them = participants[numParticipants-1]
+			myBalance = big.NewInt(0).Set(sao.Allocations[0].Amount)
+			theirBalance = big.NewInt(0).Set(sao.Allocations[1].Amount)
+		} else if participants[numParticipants-1] == myAddress {
+			me = participants[numParticipants-1]
+			them = participants[0]
+			myBalance = big.NewInt(0).Set(sao.Allocations[1].Amount)
+			theirBalance = big.NewInt(0).Set(sao.Allocations[0].Amount)
+		} else {
+			return []SwapChannelBalance{}, fmt.Errorf("could not find my address %v in participants %v", myAddress, participants)
+		}
+
+		scb = append(scb, SwapChannelBalance{
+			AssetAddress: asset,
+			Me:           me,
+			Them:         them,
+			MyBalance:    (*hexutil.Big)(myBalance),
+			TheirBalance: (*hexutil.Big)(theirBalance),
+		})
+	}
+
+	return scb, nil
 }
 
 // getLatestSupportedOrPreFund returns the latest supported state of the channel
@@ -146,6 +182,30 @@ func GetPaymentChannelInfo(id types.Destination, store store.Store, vm *payments
 		return ConstructPaymentInfo(c, paid, remaining)
 	}
 	return PaymentChannelInfo{}, fmt.Errorf("could not find channel with id %v", id)
+}
+
+func GetSwapChannelInfo(id types.Destination, store store.Store) (string, error) {
+	if (id == types.Destination{}) {
+		return "", errors.New("a valid channel id must be provided")
+	}
+
+	c, channelFound := store.GetChannelById(id)
+
+	if channelFound {
+		SwapChannelInfo, err := ConstructSwapInfo(c, *store.GetAddress())
+		if err != nil {
+			return "", err
+		}
+
+		marshalledSwapChannelInfo, err := json.Marshal(SwapChannelInfo)
+		if err != nil {
+			return "", err
+		}
+
+		return string(marshalledSwapChannelInfo), nil
+	}
+
+	return "", fmt.Errorf("could not find channel with id %v", id)
 }
 
 // GetAllLedgerChannels returns a `LedgerChannelInfo` for each ledger channel in the store.
@@ -296,5 +356,24 @@ func ConstructPaymentInfo(c *channel.Channel, paid, remaining *big.Int) (Payment
 		ID:      c.Id,
 		Status:  status,
 		Balance: balance,
+	}, nil
+}
+
+func ConstructSwapInfo(c *channel.Channel, myAddress common.Address) (SwapChannelInfo, error) {
+	status := getStatusFromChannel(c)
+
+	latest, err := getLatestSupportedOrPreFund(c)
+	if err != nil {
+		return SwapChannelInfo{}, err
+	}
+	balances, err := getSwapChannelBalances(c.Participants, latest.Outcome, myAddress)
+	if err != nil {
+		return SwapChannelInfo{}, err
+	}
+
+	return SwapChannelInfo{
+		ID:       c.Id,
+		Status:   status,
+		Balances: balances,
 	}, nil
 }

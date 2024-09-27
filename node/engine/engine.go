@@ -31,6 +31,7 @@ import (
 	"github.com/statechannels/go-nitro/protocols/directdefund"
 	"github.com/statechannels/go-nitro/protocols/directfund"
 	"github.com/statechannels/go-nitro/protocols/mirrorbridgeddefund"
+	"github.com/statechannels/go-nitro/protocols/swapfund"
 	"github.com/statechannels/go-nitro/protocols/virtualdefund"
 	"github.com/statechannels/go-nitro/protocols/virtualfund"
 	"github.com/statechannels/go-nitro/types"
@@ -64,6 +65,7 @@ var nonFatalErrors = []error{
 	store.ErrLoadVouchers,
 	directfund.ErrLedgerChannelExists,
 	virtualfund.ErrUpdatingLedgerFunding,
+	swapfund.ErrUpdatingLedgerFunding,
 	errEmptyDroppedEvent,
 }
 
@@ -273,7 +275,8 @@ func (e *Engine) run(ctx context.Context) {
 // a running ledger channel by pulling its corresponding objective
 // from the store and attempting progress.
 func (e *Engine) handleProposal(proposal consensus_channel.Proposal) (EngineEvent, error) {
-	id := getProposalObjectiveId(proposal)
+	c, _ := e.store.GetChannelById(proposal.Target())
+	id := getProposalObjectiveId(proposal, c.Type)
 
 	obj, err := e.store.GetObjectiveById(id)
 	if err != nil {
@@ -379,7 +382,8 @@ func (e *Engine) handleMessage(message protocols.Message) (EngineEvent, error) {
 
 	for _, entry := range message.LedgerProposals { // The ledger protocol requires us to process these proposals in turnNum order.
 		// Here we rely on the sender having packed them into the message in that order, and do not apply any checks or sorting of our own.
-		id := getProposalObjectiveId(entry.Proposal)
+		c, _ := e.store.GetChannelById(entry.Proposal.Target())
+		id := getProposalObjectiveId(entry.Proposal, c.Type)
 
 		o, err := e.store.GetObjectiveById(id)
 		if err != nil {
@@ -550,7 +554,7 @@ func (e *Engine) handleChainEvent(chainEvent chainservice.Event) (EngineEvent, e
 	// When a challenge is registered on a virtual channel, identify the related ledger channel and its associated objective, and then process it.
 	// Challenge registered on virtual channels are handled only by the one who raised the challenge
 	_, isChallengeRegisteredEvent := chainEvent.(chainservice.ChallengeRegisteredEvent)
-	if isChallengeRegisteredEvent && c.Type == channel.Virtual && c.OnChain.IsChallengeInitiatedByMe {
+	if isChallengeRegisteredEvent && c.Type == types.Virtual && c.OnChain.IsChallengeInitiatedByMe {
 		myAddress := *e.store.GetAddress()
 		counterParty := common.Address{}
 
@@ -676,6 +680,17 @@ func (e *Engine) handleObjectiveRequest(or protocols.ObjectiveRequest) (EngineEv
 			return failedEngineEvent, fmt.Errorf("could not register channel with payment/receipt manager: %w", err)
 		}
 		return e.attemptProgress(&vfo)
+
+	case swapfund.ObjectiveRequest:
+		sfo, err := swapfund.NewObjective(request, true, myAddress, chainId, e.store.GetConsensusChannel)
+		if err != nil {
+			return failedEngineEvent, fmt.Errorf("handleAPIEvent: Could not create swapfund objective for %+v: %w", request, err)
+		}
+
+		if err != nil {
+			return failedEngineEvent, fmt.Errorf("could not register channel with swap manager: %w", err)
+		}
+		return e.attemptProgress(&sfo)
 
 	case virtualdefund.ObjectiveRequest:
 		minAmount := big.NewInt(0)
@@ -867,7 +882,7 @@ func (e *Engine) sendMessages(msgs []protocols.Message) {
 		message.From = *e.store.GetAddress()
 		err := e.msg.Send(message)
 		if err != nil {
-			e.logger.Error("could not send message", "message", message.Summarize())
+			e.logger.Error("could not send message", "message", message.Summarize(e.getChannelTypeById))
 			e.logger.Error(err.Error())
 
 			return
@@ -995,6 +1010,8 @@ func (e *Engine) generateNotifications(o protocols.Objective) (EngineEvent, erro
 				return outgoing, err
 			}
 			outgoing.LedgerChannelUpdates = append(outgoing.LedgerChannelUpdates, l)
+		case *channel.SwapChannel:
+			// TODO: Add notification for swap channel
 		default:
 			return outgoing, fmt.Errorf("handleNotifications: Unknown related type %T", c)
 		}
@@ -1146,6 +1163,13 @@ func (e *Engine) constructObjectiveFromMessage(id protocols.ObjectiveId, p proto
 			return &virtualfund.Objective{}, fmt.Errorf("could not register channel with payment/receipt manager.\n\ttarget channel: %s\n\terr: %w", id, err)
 		}
 		return &vfo, nil
+	case swapfund.IsSwapFundObjective(id):
+		sfo, err := swapfund.ConstructObjectiveFromPayload(p, false, *e.store.GetAddress(), e.store.GetConsensusChannel)
+		if err != nil {
+			return &swapfund.Objective{}, fromMsgErr(id, err)
+		}
+
+		return &sfo, nil
 	case virtualdefund.IsVirtualDefundObjective(id):
 		vId, err := virtualdefund.GetVirtualChannelFromObjectiveId(id)
 		if err != nil {
@@ -1205,17 +1229,25 @@ func fromMsgErr(id protocols.ObjectiveId, err error) error {
 }
 
 // getProposalObjectiveId returns the objectiveId for a proposal.
-func getProposalObjectiveId(p consensus_channel.Proposal) protocols.ObjectiveId {
+func getProposalObjectiveId(p consensus_channel.Proposal, channelType types.ChannelType) protocols.ObjectiveId {
 	switch p.Type() {
 	case consensus_channel.AddProposal:
 		{
-			const prefix = virtualfund.ObjectivePrefix
+			var prefix string
+
+			if channelType == types.Swap {
+				prefix = swapfund.ObjectivePrefix
+			} else {
+				prefix = virtualfund.ObjectivePrefix
+			}
+
 			channelId := p.ToAdd.Guarantee.Target().String()
 			return protocols.ObjectiveId(prefix + channelId)
 
 		}
 	case consensus_channel.RemoveProposal:
 		{
+			// TODO: Handle swap defund
 			const prefix = virtualdefund.ObjectivePrefix
 			channelId := p.ToRemove.Target.String()
 			return protocols.ObjectiveId(prefix + channelId)
@@ -1248,9 +1280,9 @@ const (
 // logMessage logs a message to the engine's logger
 func (e *Engine) logMessage(msg protocols.Message, direction messageDirection) {
 	if direction == Incoming {
-		e.logger.Debug("Received message", "msg", msg.Summarize())
+		e.logger.Debug("Received message", "msg", msg.Summarize(e.getChannelTypeById))
 	} else {
-		e.logger.Debug("Sent message", "msg", msg.Summarize())
+		e.logger.Debug("Sent message", "msg", msg.Summarize(e.getChannelTypeById))
 	}
 }
 
@@ -1273,7 +1305,7 @@ func (e *Engine) processStoreChannels(latestblock chainservice.Block) error {
 		}
 
 		// Liquidate assets for finalized ledger channels
-		if ch.Type == channel.Ledger && ch.OnChain.ChannelMode == channel.Finalized {
+		if ch.Type == types.Ledger && ch.OnChain.ChannelMode == channel.Finalized {
 			obj, ok := e.store.GetObjectiveByChannelId(ch.Id)
 
 			if !ok {
@@ -1322,4 +1354,13 @@ func (e *Engine) GetNodeInfo() types.NodeInfo {
 		SCAddress:            e.store.GetAddress().String(),
 		MessageServicePeerId: e.msg.Id().String(),
 	}
+}
+
+func (e *Engine) getChannelTypeById(channelId types.Destination) (types.ChannelType, error) {
+	c, ok := e.store.GetChannelById(channelId)
+	if ok {
+		return c.Type, nil
+	}
+
+	return -1, fmt.Errorf("could not find channel for given channel ID: %v", channelId)
 }

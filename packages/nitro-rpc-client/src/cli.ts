@@ -503,6 +503,69 @@ yargs(hideBin(process.argv))
     }
   )
   .command(
+    "swap-fund <counterparty> [intermediaries...]",
+    "Creates a swap channel",
+    (yargsBuilder) => {
+      return yargsBuilder
+        .positional("counterparty", {
+          describe: "The counterparty's address",
+          type: "string",
+          demandOption: true,
+        })
+        .array("intermediaries")
+        .option("asset", {
+          describe:
+            "Asset data in the format '0xAddress:alphaAmount,betaAmount'",
+          type: "array",
+          string: true,
+        });
+    },
+    async (yargs) => {
+      const rpcPort = yargs.p;
+      const rpcHost = yargs.h;
+      const isSecure = yargs.s;
+
+      const rpcClient = await NitroRpcClient.CreateHttpNitroClient(
+        getRPCUrl(rpcHost, rpcPort),
+        isSecure
+      );
+
+      // Parse all intermediary args to strings
+      const intermediaries =
+        yargs.intermediaries?.map((intermediary) => {
+          if (typeof intermediary === "string") {
+            return intermediary;
+          }
+          return intermediary.toString(16);
+        }) ?? [];
+
+      if (!yargs.asset) {
+        throw new Error("assets are required");
+      }
+
+      const assets = yargs.asset.map((a) => {
+        if (typeof a === "string") {
+          return a;
+        }
+        throw new Error("Incorrect asset type");
+      });
+
+      const assetsData = parseAssetsData(assets);
+
+      const sfObjective = await rpcClient.CreateSwapChannel(
+        yargs.counterparty,
+        intermediaries,
+        assetsData
+      );
+
+      const { Id } = sfObjective;
+      console.log(`Objective started ${Id}`);
+      // TODO: Wait for swapfund to complete
+      await rpcClient.Close();
+      process.exit(0);
+    }
+  )
+  .command(
     "virtual-fund <counterparty> [intermediaries...]",
     "Creates a virtually funded payment channel",
     (yargsBuilder) => {
@@ -633,6 +696,31 @@ yargs(hideBin(process.argv))
         yargs.channelId
       );
       console.log(paymentChannelInfo);
+      await rpcClient.Close();
+      process.exit(0);
+    }
+  )
+  .command(
+    "get-swap-channel <channelId>",
+    "Gets information about a swap channel",
+    (yargsBuilder) => {
+      return yargsBuilder.positional("channelId", {
+        describe: "The channel ID of the payment channel",
+        type: "string",
+        demandOption: true,
+      });
+    },
+    async (yargs) => {
+      const rpcPort = yargs.p;
+      const rpcHost = yargs.h;
+      const isSecure = yargs.s;
+
+      const rpcClient = await NitroRpcClient.CreateHttpNitroClient(
+        getRPCUrl(rpcHost, rpcPort),
+        isSecure
+      );
+      const swapChannelInfo = await rpcClient.GetSwapChannel(yargs.channelId);
+      console.log(swapChannelInfo);
       await rpcClient.Close();
       process.exit(0);
     }
