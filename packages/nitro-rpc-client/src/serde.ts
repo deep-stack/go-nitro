@@ -132,6 +132,21 @@ const paymentSchema = {
 } as const;
 type PaymentSchemaType = JTDDataType<typeof paymentSchema>;
 
+const swapSchema = {
+  properties: {
+    SwapAssetsData: {
+      properties: {
+        TokenIn: { type: "string" },
+        TokenOut: { type: "string" },
+        AmountIn: { type: "uint32" },
+        AmountOut: { type: "uint32" },
+      },
+    },
+    Channel: { type: "string" },
+  },
+} as const;
+type swapSchemaType = JTDDataType<typeof swapSchema>;
+
 const voucherSchema = {
   properties: {
     ChannelId: { type: "string" },
@@ -171,6 +186,7 @@ type ResponseSchema =
   | typeof swapChannelSchema
   | typeof paymentSchema
   | typeof voucherSchema
+  | typeof swapSchema
   | typeof receiveVoucherSchema
   | typeof counterChallengeSchema
   | typeof getNodeInfoSchema;
@@ -185,6 +201,7 @@ type ResponseSchemaType =
   | PaymentChannelsSchemaType
   | PaymentSchemaType
   | VoucherSchemaType
+  | swapSchemaType
   | ReceiveVoucherSchemaType
   | CounterChallengeSchemaType
   | GetNodeInfoSchemaType;
@@ -273,6 +290,12 @@ export function getAndValidateResult<T extends RequestMethod>(
         paymentSchema,
         result,
         (result: PaymentSchemaType) => result
+      );
+    case "swap":
+      return validateAndConvertResult(
+        swapSchema,
+        result,
+        (result: swapSchemaType) => result
       );
     case "receive_voucher":
       return validateAndConvertResult(

@@ -8,6 +8,7 @@ import {
   PaymentChannelInfo,
   RequestMethod,
   RPCRequestAndResponses,
+  SwapAssetsData,
 } from "./types";
 
 export const RPC_PATH = "api/v1";
@@ -141,4 +142,26 @@ export function parseAssetData(assets: string[]): AssetData[] {
       betaAmount,
     };
   });
+}
+
+export function parseSwapAssetsData(
+  assetIn: string,
+  assetOut: string
+): SwapAssetsData {
+  const [tokenIn, amountIn] = assetIn.split(":");
+  if (!tokenIn || !amountIn) {
+    throw new Error(`Invalid format for asset entry: ${assetIn}`);
+  }
+
+  const [tokenOut, amountOut] = assetOut.split(":");
+  if (!tokenOut || !amountOut) {
+    throw new Error(`Invalid format for asset entry: ${assetOut}`);
+  }
+
+  return {
+    TokenIn: tokenIn,
+    TokenOut: tokenOut,
+    AmountIn: Number(amountIn),
+    AmountOut: Number(amountOut),
+  };
 }

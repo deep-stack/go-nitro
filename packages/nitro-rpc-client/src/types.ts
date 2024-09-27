@@ -60,6 +60,11 @@ export type PaymentPayload = {
   Channel: string;
 };
 
+export type SwapPayload = {
+  SwapAssetsData: SwapAssetsData;
+  Channel: string;
+};
+
 export enum CounterChallengeAction {
   checkpoint,
   challenge,
@@ -137,6 +142,9 @@ export type RetryTxRequest = JsonRpcRequest<
   }
 >;
 export type PaymentRequest = JsonRpcRequest<"pay", PaymentPayload>;
+
+export type SwapRequest = JsonRpcRequest<"swap", SwapPayload>;
+
 export type CounterChallengeRequest = JsonRpcRequest<
   "counter_challenge",
   CounterChallengePayload
@@ -244,6 +252,7 @@ export type GetPaymentChannelResponse = JsonRpcResponse<PaymentChannelInfo>;
 export type GetSwapChannelResponse = JsonRpcResponse<string>;
 export type GetVoucherResponse = JsonRpcResponse<Voucher>;
 export type PaymentResponse = JsonRpcResponse<PaymentPayload>;
+export type SwapResponse = JsonRpcResponse<SwapPayload>;
 export type CounterChallengeResponse = JsonRpcResponse<CounterChallengeResult>;
 export type GetLedgerChannelResponse = JsonRpcResponse<LedgerChannelInfo>;
 export type VirtualFundResponse = JsonRpcResponse<ObjectiveResponse>;
@@ -294,6 +303,7 @@ export type RPCRequestAndResponses = {
   get_swap_channel: [GetSwapChannelRequest, GetSwapChannelResponse];
   get_voucher: [GetVoucherRequest, GetVoucherResponse];
   pay: [PaymentRequest, PaymentResponse];
+  swap: [SwapRequest, SwapResponse];
   counter_challenge: [CounterChallengeRequest, CounterChallengeResponse];
   close_payment_channel: [VirtualDefundRequest, VirtualDefundResponse];
   close_swap_channel: [SwapDefundRequest, SwapDefundResponse];
@@ -458,4 +468,11 @@ export type AssetData = {
   assetAddress: string;
   alphaAmount: number;
   betaAmount: number;
+};
+
+export type SwapAssetsData = {
+  TokenIn: string;
+  TokenOut: string;
+  AmountIn: number;
+  AmountOut: number;
 };

@@ -14,6 +14,7 @@ import {
   getRPCUrl,
   logOutChannelUpdates,
   parseAssetData as parseAssetsData,
+  parseSwapAssetsData,
 } from "./utils";
 import { AssetData, CounterChallengeAction } from "./types";
 import { ZERO_ETHEREUM_ADDRESS } from "./constants";
@@ -787,6 +788,53 @@ yargs(hideBin(process.argv))
         yargs.amount
       );
       console.log(paymentChannelInfo);
+      await rpcClient.Close();
+      process.exit(0);
+    }
+  )
+  .command(
+    "swap <channelId>",
+    "Swaps assets on a given swap channel",
+    (yargsBuilder) => {
+      return yargsBuilder
+        .positional("channelId", {
+          describe: "The channel ID of the payment channel",
+          type: "string",
+          demandOption: true,
+        })
+        .option("AssetDetailsIn", {
+          describe: "Input asset details in the format of '0xAddress:amount'",
+          type: "string",
+          demandOption: true,
+        })
+        .option("AssetDetailsOut", {
+          describe: "Output asset details in the format of '0xAddress:amount'",
+          type: "string",
+          demandOption: true,
+        });
+    },
+    async (yargs) => {
+      const rpcPort = yargs.p;
+      const rpcHost = yargs.h;
+      const isSecure = yargs.s;
+
+      const rpcClient = await NitroRpcClient.CreateHttpNitroClient(
+        getRPCUrl(rpcHost, rpcPort),
+        isSecure
+      );
+      if (yargs.n) logOutChannelUpdates(rpcClient);
+
+      const swapAssetsData = parseSwapAssetsData(
+        yargs.AssetDetailsIn,
+        yargs.AssetDetailsOut
+      );
+
+      const swapInfo = await rpcClient.SwapAssets(
+        yargs.channelId,
+        swapAssetsData
+      );
+
+      console.log(swapInfo);
       await rpcClient.Close();
       process.exit(0);
     }
