@@ -965,9 +965,12 @@ func (e *Engine) attemptProgress(objective protocols.Objective) (outgoing Engine
 	// Probably should have a better check that only adds it to CompletedObjectives if it was completed in this crank
 	if waitingFor == "WaitingForNothing" {
 		outgoing.CompletedObjectives = append(outgoing.CompletedObjectives, crankedObjective)
-		err = e.store.ReleaseChannelFromOwnership(crankedObjective.OwnsChannel())
-		if err != nil {
-			return
+		_, ok := crankedObjective.(*swap.Objective)
+		if !ok {
+			err = e.store.ReleaseChannelFromOwnership(crankedObjective.OwnsChannel())
+			if err != nil {
+				return
+			}
 		}
 		err = e.spawnConsensusChannelIfDirectFundObjective(crankedObjective) // Here we assume that every directfund.Objective is for a ledger channel.
 		if err != nil {
