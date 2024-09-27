@@ -74,8 +74,8 @@ func (ms *MemStore) GetChannelSecretKey() *[]byte {
 	return &val
 }
 
-func (ms *MemStore) GetSwapPrimitiveByNonce(nonce uint64) (channel.SwapPrimitive, error) {
-	spJSON, ok := ms.objectives.Load(string(nonce))
+func (ms *MemStore) GetSwapPrimitiveById(id types.Destination) (channel.SwapPrimitive, error) {
+	spJSON, ok := ms.swapPrimitives.Load(id.String())
 	if !ok {
 		return channel.SwapPrimitive{}, fmt.Errorf("error loading swap primitive")
 	}
@@ -95,7 +95,7 @@ func (ms *MemStore) SetSwapPrimitive(sp channel.SwapPrimitive) error {
 		return fmt.Errorf("error marshalling swap primitive")
 	}
 
-	ms.swapPrimitives.Store(string(sp.Nonce), spJSON)
+	ms.swapPrimitives.Store(sp.Id().String(), spJSON)
 	return nil
 }
 
@@ -541,7 +541,7 @@ func (ms *MemStore) populateChannelData(obj protocols.Objective) error {
 
 		swapPrimitive := o.C.SwapPrimitives.Values()
 		for _, sp := range swapPrimitive {
-			swapPrimitive, err := ms.GetSwapPrimitiveByNonce(sp.Nonce)
+			swapPrimitive, err := ms.GetSwapPrimitiveById(sp.Id())
 			if err != nil {
 				return fmt.Errorf("error getting swap primitive by nonce: %w", err)
 			}

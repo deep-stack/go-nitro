@@ -117,6 +117,15 @@ func (sp SwapPrimitive) Clone() SwapPrimitive {
 	}
 }
 
+func (sp SwapPrimitive) Id() types.Destination {
+	spHash, err := sp.Hash()
+	if err != nil {
+		return types.Destination{}
+	}
+
+	return types.Destination(spHash)
+}
+
 // Hash returns the keccak256 hash of the State
 func (sp SwapPrimitive) Hash() (types.Bytes32, error) {
 	encoded, err := sp.encode()
