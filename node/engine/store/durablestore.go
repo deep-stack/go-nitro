@@ -12,6 +12,7 @@ import (
 	"github.com/statechannels/go-nitro/channel"
 	"github.com/statechannels/go-nitro/channel/consensus_channel"
 	"github.com/statechannels/go-nitro/crypto"
+	"github.com/statechannels/go-nitro/internal/queue"
 	"github.com/statechannels/go-nitro/payments"
 	"github.com/statechannels/go-nitro/protocols"
 	"github.com/statechannels/go-nitro/protocols/bridgeddefund"
@@ -35,6 +36,7 @@ type DurableStore struct {
 	channelToObjective *buntdb.DB
 	vouchers           *buntdb.DB
 	lastBlockNumSeen   *buntdb.DB
+	swapPrimitives     *buntdb.DB
 
 	key     string // the signing key of the store's engine
 	address string // the (Ethereum) address associated to the signing key
@@ -84,6 +86,11 @@ func NewDurableStore(key []byte, folder string, config buntdb.Config) (Store, er
 		return nil, err
 	}
 
+	ps.swapPrimitives, err = ps.openDB("swap", config)
+	if err != nil {
+		return nil, err
+	}
+
 	return &ps, nil
 }
 
@@ -127,6 +134,39 @@ func (ds *DurableStore) GetAddress() *types.Address {
 func (ds *DurableStore) GetChannelSecretKey() *[]byte {
 	val := common.Hex2Bytes(ds.key)
 	return &val
+}
+
+func (ds *DurableStore) GetSwapPrimitiveById(id types.Destination) (channel.SwapPrimitive, error) {
+	var spJSON string
+	err := ds.swapPrimitives.View(func(tx *buntdb.Tx) error {
+		var err error
+		spJSON, err = tx.Get(id.String())
+		return err
+	})
+
+	if errors.Is(err, buntdb.ErrNotFound) {
+		return channel.SwapPrimitive{}, ErrNoSuchSwap
+	}
+	var sp channel.SwapPrimitive
+	err = json.Unmarshal([]byte(spJSON), &sp)
+	if err != nil {
+		return channel.SwapPrimitive{}, fmt.Errorf("error unmarshaling swap primitive %s", id)
+	}
+
+	return sp, nil
+}
+
+func (ds *DurableStore) SetSwapPrimitive(sp channel.SwapPrimitive) error {
+	spJSON, err := json.Marshal(sp)
+	if err != nil {
+		return err
+	}
+
+	err = ds.swapPrimitives.Update(func(tx *buntdb.Tx) error {
+		_, _, err := tx.Set(sp.Id.String(), string(spJSON), nil)
+		return err
+	})
+	return err
 }
 
 func (ds *DurableStore) GetObjectiveById(id protocols.ObjectiveId) (protocols.Objective, error) {
@@ -182,6 +222,15 @@ func (ds *DurableStore) SetObjective(obj protocols.Objective) error {
 			if err != nil {
 				return fmt.Errorf("error setting virtual channel %s from objective %s: %w", ch.Id, obj.Id(), err)
 			}
+
+			swapPrimitives := ch.SwapPrimitives.Values()
+			for _, sp := range swapPrimitives {
+				err := ds.SetSwapPrimitive(sp)
+				if err != nil {
+					return fmt.Errorf("error storing swap primitive: %w", err)
+				}
+			}
+
 		case *channel.Channel:
 			err := ds.SetChannel(ch)
 			if err != nil {
@@ -622,7 +671,19 @@ func (ds *DurableStore) populateChannelData(obj protocols.Objective) error {
 			return fmt.Errorf("error retrieving channel data for objective %s: %w", id, err)
 		}
 
-		o.C = &channel.SwapChannel{Channel: ch}
+		SwapPrimitives := queue.NewFixedQueue[channel.SwapPrimitive](channel.MaxSwapPrimitiveStorageLimit)
+
+		swapPrimitive := o.C.SwapPrimitives.Values()
+		for _, sp := range swapPrimitive {
+			swapPrimitive, err := ds.GetSwapPrimitiveById(sp.Id)
+			if err != nil {
+				return fmt.Errorf("error getting swap primitive by nonce: %w", err)
+			}
+
+			SwapPrimitives.Enqueue(swapPrimitive)
+		}
+
+		o.C = &channel.SwapChannel{Channel: ch, SwapPrimitives: *SwapPrimitives}
 		return nil
 	case *swapfund.Objective:
 		v, err := ds.getChannelById(o.S.Id)
