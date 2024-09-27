@@ -15,12 +15,12 @@ import (
 	"github.com/statechannels/go-nitro/types"
 )
 
-const MaxSwapPrimitiveStorageLimit = 5
+const MaxSwapStorageLimit = 5
 
 type SwapChannel struct {
 	Channel
 
-	SwapPrimitives queue.FixedQueue[SwapPrimitive]
+	Swaps queue.FixedQueue[Swap]
 }
 
 func NewSwapChannel(s state.State, myIndex uint) (*SwapChannel, error) {
@@ -36,7 +36,7 @@ func NewSwapChannel(s state.State, myIndex uint) (*SwapChannel, error) {
 
 	c, err := New(s, myIndex, types.Swap)
 
-	return &SwapChannel{*c, *queue.NewFixedQueue[SwapPrimitive](MaxSwapPrimitiveStorageLimit)}, err
+	return &SwapChannel{*c, *queue.NewFixedQueue[Swap](MaxSwapStorageLimit)}, err
 }
 
 // Clone returns a pointer to a new, deep copy of the receiver, or a nil pointer if the receiver is nil.
@@ -45,12 +45,12 @@ func (v *SwapChannel) Clone() *SwapChannel {
 		return nil
 	}
 
-	// TODO: Add clone to swap primitives queue
-	w := SwapChannel{*v.Channel.Clone(), v.SwapPrimitives}
+	// TODO: Add clone to swap queue
+	w := SwapChannel{*v.Channel.Clone(), v.Swaps}
 	return &w
 }
 
-type SwapPrimitive struct {
+type Swap struct {
 	Id        types.Destination
 	ChannelId types.Destination
 	Exchange  Exchange
@@ -58,8 +58,8 @@ type SwapPrimitive struct {
 	Nonce     uint64
 }
 
-func NewSwapPrimitive(channelId types.Destination, tokenIn, tokenOut common.Address, amountIn, amountOut *big.Int, nonce uint64) SwapPrimitive {
-	sp := SwapPrimitive{
+func NewSwap(channelId types.Destination, tokenIn, tokenOut common.Address, amountIn, amountOut *big.Int, nonce uint64) Swap {
+	swap := Swap{
 		ChannelId: channelId,
 		Exchange: Exchange{
 			tokenIn,
@@ -70,16 +70,14 @@ func NewSwapPrimitive(channelId types.Destination, tokenIn, tokenOut common.Addr
 		Sigs:  make(map[uint]state.Signature, 2),
 		Nonce: nonce,
 	}
-	sp.Id = sp.SwapId()
-	return sp
+	swap.Id = swap.SwapId()
+	return swap
 }
 
-// TODO: Check need of custom marshall and unmarshall methods for swap primitive
-
 // encodes the state into a []bytes value
-func (sp SwapPrimitive) encode() (types.Bytes, error) {
-	// TODO: Check whether we need to encode array of swap primitive
-	// TODO: Check need of app data for sad path will be array of swap primitive
+func (s Swap) encode() (types.Bytes, error) {
+	// TODO: Check whether we need to encode array of swap
+	// TODO: Check need of app data for sad path will be array of swap
 	return ethAbi.Arguments{
 		{Type: abi.Destination}, // channel id
 		{Type: abi.Address},     // tokenIn
@@ -88,74 +86,74 @@ func (sp SwapPrimitive) encode() (types.Bytes, error) {
 		{Type: abi.Uint256},     // amountOut
 		{Type: abi.Uint256},     // nonce
 	}.Pack(
-		sp.ChannelId,
-		sp.Exchange.TokenIn,
-		sp.Exchange.TokenOut,
-		sp.Exchange.AmountIn,
-		sp.Exchange.AmountOut,
-		new(big.Int).SetUint64(sp.Nonce),
+		s.ChannelId,
+		s.Exchange.TokenIn,
+		s.Exchange.TokenOut,
+		s.Exchange.AmountIn,
+		s.Exchange.AmountOut,
+		new(big.Int).SetUint64(s.Nonce),
 	)
 }
 
-func (sp SwapPrimitive) Equal(target SwapPrimitive) bool {
-	return sp.ChannelId == target.ChannelId && sp.Exchange.Equal(target.Exchange) && sp.Nonce == target.Nonce
+func (s Swap) Equal(target Swap) bool {
+	return s.ChannelId == target.ChannelId && s.Exchange.Equal(target.Exchange) && s.Nonce == target.Nonce
 }
 
-func (sp SwapPrimitive) Clone() SwapPrimitive {
-	clonedSigs := make(map[uint]state.Signature, len(sp.Sigs))
-	for i, sig := range sp.Sigs {
+func (s Swap) Clone() Swap {
+	clonedSigs := make(map[uint]state.Signature, len(s.Sigs))
+	for i, sig := range s.Sigs {
 		clonedSigs[i] = sig
 	}
 
-	return SwapPrimitive{
-		ChannelId: sp.ChannelId,
+	return Swap{
+		ChannelId: s.ChannelId,
 		Exchange: Exchange{
-			TokenIn:   sp.Exchange.TokenIn,
-			TokenOut:  sp.Exchange.TokenOut,
-			AmountIn:  sp.Exchange.AmountIn,
-			AmountOut: sp.Exchange.AmountOut,
+			TokenIn:   s.Exchange.TokenIn,
+			TokenOut:  s.Exchange.TokenOut,
+			AmountIn:  s.Exchange.AmountIn,
+			AmountOut: s.Exchange.AmountOut,
 		},
 		Sigs:  clonedSigs,
-		Nonce: sp.Nonce,
-		Id:    sp.Id,
+		Nonce: s.Nonce,
+		Id:    s.Id,
 	}
 }
 
-func (sp SwapPrimitive) SwapId() types.Destination {
-	spHash, err := sp.Hash()
+func (s Swap) SwapId() types.Destination {
+	swapHash, err := s.Hash()
 	if err != nil {
 		return types.Destination{}
 	}
 
-	return types.Destination(spHash)
+	return types.Destination(swapHash)
 }
 
 // Hash returns the keccak256 hash of the State
-func (sp SwapPrimitive) Hash() (types.Bytes32, error) {
+func (sp Swap) Hash() (types.Bytes32, error) {
 	encoded, err := sp.encode()
 	if err != nil {
-		return types.Bytes32{}, fmt.Errorf("failed to encode swap primitive: %w", err)
+		return types.Bytes32{}, fmt.Errorf("failed to encode swap: %w", err)
 	}
 	return crypto.Keccak256Hash(encoded), nil
 }
 
-// Sign generates an ECDSA signature on the swap primitive using the supplied private key
-func (sp SwapPrimitive) Sign(secretKey []byte) (state.Signature, error) {
-	hash, error := sp.Hash()
+// Sign generates an ECDSA signature on the swap using the supplied private key
+func (s Swap) Sign(secretKey []byte) (state.Signature, error) {
+	hash, error := s.Hash()
 	if error != nil {
 		return state.Signature{}, error
 	}
 	return nc.SignEthereumMessage(hash.Bytes(), secretKey)
 }
 
-func (sp SwapPrimitive) AddSignature(sig state.Signature, myIndex uint) error {
-	sp.Sigs[myIndex] = sig
+func (s Swap) AddSignature(sig state.Signature, myIndex uint) error {
+	s.Sigs[myIndex] = sig
 	return nil
 }
 
-// RecoverSigner computes the Ethereum address which generated Signature sig on State state
-func (sp SwapPrimitive) RecoverSigner(sig state.Signature) (types.Address, error) {
-	hash, error := sp.Hash()
+// RecoverSigner computes the Ethereum address which generated Signature sig on Swap
+func (s Swap) RecoverSigner(sig state.Signature) (types.Address, error) {
+	hash, error := s.Hash()
 	if error != nil {
 		return types.Address{}, error
 	}
