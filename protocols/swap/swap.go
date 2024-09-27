@@ -9,6 +9,7 @@ import (
 	"github.com/ethereum/go-ethereum/common"
 	"github.com/statechannels/go-nitro/channel"
 	"github.com/statechannels/go-nitro/channel/state"
+	"github.com/statechannels/go-nitro/internal/queue"
 	"github.com/statechannels/go-nitro/protocols"
 	"github.com/statechannels/go-nitro/types"
 )
@@ -48,8 +49,10 @@ func NewObjective(request ObjectiveRequest, preApprove bool, isSwapper bool, get
 	if !ok {
 		return obj, fmt.Errorf("swap objective creation failed, swap channel not found")
 	}
+
 	obj.C = &channel.SwapChannel{
-		Channel: *swapChannel,
+		Channel:        *swapChannel,
+		SwapPrimitives: *queue.NewFixedQueue[channel.SwapPrimitive](channel.MaxSwapPrimitiveStorageLimit),
 	}
 
 	if preApprove {
@@ -214,7 +217,8 @@ func (o *Objective) Crank(secretKey *[]byte) (protocols.Objective, protocols.Sid
 		return &updated, protocols.SideEffects{}, WaitingForSwapping, fmt.Errorf("error updating swap channel state %w", err)
 	}
 
-	// TODO: Add swap primitives to swap channel
+	// Add swap primitives to swap channel
+	updated.C.SwapPrimitives.Enqueue(updated.SwapPrimitive)
 
 	// Completion
 	updated.Status = protocols.Completed
@@ -326,21 +330,29 @@ func (o *Objective) FindParticipantIndex(address common.Address) (int, error) {
 }
 
 type jsonObjective struct {
-	Status        protocols.ObjectiveStatus
-	C             types.Destination
-	SwapPrimitive channel.SwapPrimitive
-	SwapperIndex  uint
-	Nonce         uint64
-	StateSigs     map[uint]state.Signature
+	Status         protocols.ObjectiveStatus
+	C              types.Destination
+	SwapPrimitive  channel.SwapPrimitive
+	SwapperIndex   uint
+	Nonce          uint64
+	StateSigs      map[uint]state.Signature
+	SwapPrimitives []uint64
 }
 
 func (o Objective) MarshalJSON() ([]byte, error) {
+	swapPrimitives := o.C.SwapPrimitives.Values()
+	SwapPrimitives := make([]uint64, len(swapPrimitives))
+	for _, sp := range swapPrimitives {
+		SwapPrimitives = append(SwapPrimitives, sp.Nonce)
+	}
+
 	jsonSO := jsonObjective{
-		Status:        o.Status,
-		C:             o.C.Id,
-		SwapPrimitive: o.SwapPrimitive,
-		SwapperIndex:  o.SwapperIndex,
-		StateSigs:     o.StateSigs,
+		Status:         o.Status,
+		C:              o.C.Id,
+		SwapPrimitive:  o.SwapPrimitive,
+		SwapperIndex:   o.SwapperIndex,
+		StateSigs:      o.StateSigs,
+		SwapPrimitives: SwapPrimitives,
 	}
 
 	return json.Marshal(jsonSO)
@@ -359,9 +371,19 @@ func (o *Objective) UnmarshalJSON(data []byte) error {
 	o.Status = jsonSo.Status
 	o.SwapperIndex = jsonSo.SwapperIndex
 	o.SwapPrimitive = jsonSo.SwapPrimitive
+	o.StateSigs = jsonSo.StateSigs
+
 	o.C = &channel.SwapChannel{}
 	o.C.Id = jsonSo.C
-	o.StateSigs = jsonSo.StateSigs
+	swapPrimitives := queue.NewFixedQueue[channel.SwapPrimitive](channel.MaxSwapPrimitiveStorageLimit)
+	for _, nonce := range jsonSo.SwapPrimitives {
+		sp := channel.SwapPrimitive{
+			Nonce: nonce,
+		}
+
+		swapPrimitives.Enqueue(sp)
+	}
+	o.C.SwapPrimitives = *swapPrimitives
 
 	return nil
 }

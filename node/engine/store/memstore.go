@@ -9,6 +9,7 @@ import (
 	"github.com/statechannels/go-nitro/channel"
 	"github.com/statechannels/go-nitro/channel/consensus_channel"
 	"github.com/statechannels/go-nitro/crypto"
+	"github.com/statechannels/go-nitro/internal/queue"
 	"github.com/statechannels/go-nitro/internal/safesync"
 	"github.com/statechannels/go-nitro/payments"
 	"github.com/statechannels/go-nitro/protocols"
@@ -36,6 +37,7 @@ type MemStore struct {
 	consensusChannels  safesync.Map[[]byte]
 	channelToObjective safesync.Map[protocols.ObjectiveId]
 	vouchers           safesync.Map[[]byte]
+	swapPrimitives     safesync.Map[[]byte]
 	lastBlockSeen      blockData
 
 	key     string // the signing key of the store's engine
@@ -53,6 +55,7 @@ func NewMemStore(key []byte) Store {
 	ms.channelToObjective = safesync.Map[protocols.ObjectiveId]{}
 	ms.vouchers = safesync.Map[[]byte]{}
 	ms.lastBlockSeen = blockData{}
+	ms.swapPrimitives = safesync.Map[[]byte]{}
 	return &ms
 }
 
@@ -69,6 +72,31 @@ func (ms *MemStore) GetAddress() *types.Address {
 func (ms *MemStore) GetChannelSecretKey() *[]byte {
 	val := common.Hex2Bytes(ms.key)
 	return &val
+}
+
+func (ms *MemStore) GetSwapPrimitiveByNonce(nonce uint64) (channel.SwapPrimitive, error) {
+	spJSON, ok := ms.objectives.Load(string(nonce))
+	if !ok {
+		return channel.SwapPrimitive{}, fmt.Errorf("error loading swap primitive")
+	}
+
+	sp := channel.SwapPrimitive{}
+	err := json.Unmarshal(spJSON, &sp)
+	if err != nil {
+		return channel.SwapPrimitive{}, fmt.Errorf("error unmarshalling swap primitive")
+	}
+
+	return sp, nil
+}
+
+func (ms *MemStore) SetSwapPrimitive(sp channel.SwapPrimitive) error {
+	spJSON, err := json.Marshal(sp)
+	if err != nil {
+		return fmt.Errorf("error marshalling swap primitive")
+	}
+
+	ms.swapPrimitives.Store(string(sp.Nonce), spJSON)
+	return nil
 }
 
 func (ms *MemStore) GetObjectiveById(id protocols.ObjectiveId) (protocols.Objective, error) {
@@ -115,6 +143,15 @@ func (ms *MemStore) SetObjective(obj protocols.Objective) error {
 			if err != nil {
 				return fmt.Errorf("error setting virtual channel %s from objective %s: %w", ch.Id, obj.Id(), err)
 			}
+
+			swapPrimitives := ch.SwapPrimitives.Values()
+			for _, sp := range swapPrimitives {
+				err := ms.SetSwapPrimitive(sp)
+				if err != nil {
+					return fmt.Errorf("error storing swap primitive: %w", err)
+				}
+			}
+
 		case *channel.Channel:
 			err := ms.SetChannel(ch)
 			if err != nil {
@@ -500,7 +537,19 @@ func (ms *MemStore) populateChannelData(obj protocols.Objective) error {
 			return fmt.Errorf("error retrieving channel data for objective %s: %w", id, err)
 		}
 
-		o.C = &channel.SwapChannel{Channel: ch}
+		SwapPrimitives := queue.NewFixedQueue[channel.SwapPrimitive](channel.MaxSwapPrimitiveStorageLimit)
+
+		swapPrimitive := o.C.SwapPrimitives.Values()
+		for _, sp := range swapPrimitive {
+			swapPrimitive, err := ms.GetSwapPrimitiveByNonce(sp.Nonce)
+			if err != nil {
+				return fmt.Errorf("error getting swap primitive by nonce: %w", err)
+			}
+
+			SwapPrimitives.Enqueue(swapPrimitive)
+		}
+
+		o.C = &channel.SwapChannel{Channel: ch, SwapPrimitives: *SwapPrimitives}
 		return nil
 
 	case *swapfund.Objective:
