@@ -23,6 +23,8 @@ import {
   SwapFundPayload,
   SwapAssetsData,
   SwapPayload,
+  ConfirmSwapAction,
+  ConfirmSwapResult,
 } from "./types";
 import { Transport } from "./transport";
 import { createOutcome, generateRequest } from "./utils";
@@ -280,6 +282,18 @@ export class NitroRpcClient implements RpcClientApi {
       StringifiedL2SignedState: signedState,
     };
     return this.sendRequest("counter_challenge", payload);
+  }
+
+  public async ConfirmSwap(
+    objectiveId: string,
+    action: ConfirmSwapAction
+  ): Promise<ConfirmSwapResult> {
+    const payload = {
+      ObjectiveId: objectiveId,
+      Action: action,
+    };
+
+    return this.sendRequest("confirm_swap", payload);
   }
 
   public async ClosePaymentChannel(channelId: string): Promise<string> {

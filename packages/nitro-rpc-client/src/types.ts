@@ -65,6 +65,21 @@ export type SwapPayload = {
   Channel: string;
 };
 
+export enum ConfirmSwapAction {
+  accepted = 1,
+  rejected,
+}
+
+export type ConfirmSwapResult = {
+  ObjectiveId: string;
+  Action: keyof typeof ConfirmSwapAction;
+};
+
+export type ConfirmSwapPayload = {
+  ObjectiveId: string;
+  Action: ConfirmSwapAction;
+};
+
 export enum CounterChallengeAction {
   checkpoint,
   challenge,
@@ -144,6 +159,11 @@ export type RetryTxRequest = JsonRpcRequest<
 export type PaymentRequest = JsonRpcRequest<"pay", PaymentPayload>;
 
 export type SwapRequest = JsonRpcRequest<"swap", SwapPayload>;
+
+export type ConfirmSwapRequest = JsonRpcRequest<
+  "confirm_swap",
+  ConfirmSwapPayload
+>;
 
 export type CounterChallengeRequest = JsonRpcRequest<
   "counter_challenge",
@@ -254,6 +274,7 @@ export type GetVoucherResponse = JsonRpcResponse<Voucher>;
 export type PaymentResponse = JsonRpcResponse<PaymentPayload>;
 export type SwapResponse = JsonRpcResponse<SwapPayload>;
 export type CounterChallengeResponse = JsonRpcResponse<CounterChallengeResult>;
+export type ConfirmSwapResponse = JsonRpcResponse<ConfirmSwapResult>;
 export type GetLedgerChannelResponse = JsonRpcResponse<LedgerChannelInfo>;
 export type VirtualFundResponse = JsonRpcResponse<ObjectiveResponse>;
 export type SwapFundResponse = JsonRpcResponse<ObjectiveResponse>;
@@ -304,6 +325,7 @@ export type RPCRequestAndResponses = {
   get_voucher: [GetVoucherRequest, GetVoucherResponse];
   pay: [PaymentRequest, PaymentResponse];
   swap: [SwapRequest, SwapResponse];
+  confirm_swap: [ConfirmSwapRequest, ConfirmSwapResponse];
   counter_challenge: [CounterChallengeRequest, CounterChallengeResponse];
   close_payment_channel: [VirtualDefundRequest, VirtualDefundResponse];
   close_swap_channel: [SwapDefundRequest, SwapDefundResponse];
