@@ -262,7 +262,7 @@ func (ds *DurableStore) SetObjective(obj protocols.Objective) error {
 		return err
 	}
 
-	if status := obj.GetStatus(); status == protocols.Approved {
+	if status := obj.GetStatus(); status == protocols.Approved && !obj.OwnsChannel().IsZero() {
 		if !isOwned {
 			err := ds.channelToObjective.Update(func(tx *buntdb.Tx) error {
 				_, _, err := tx.Set(string(obj.OwnsChannel().String()), string(obj.Id()), nil)
@@ -274,7 +274,7 @@ func (ds *DurableStore) SetObjective(obj protocols.Objective) error {
 
 		}
 		if isOwned && prevOwner != obj.Id() {
-			return fmt.Errorf("cannot transfer ownership of channel to from objective %s to %s", prevOwner, obj.Id())
+			return fmt.Errorf("cannot transfer ownership of channel from objective %s to %s", prevOwner, obj.Id())
 		}
 	}
 
