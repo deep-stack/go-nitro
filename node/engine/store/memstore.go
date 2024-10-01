@@ -322,8 +322,8 @@ func (ms *MemStore) GetChannelsByAppDefinition(appDef types.Address) ([]*channel
 	return toReturn, nil
 }
 
-func (ms *MemStore) GetPendingSwapByChannelId(id types.Destination) (channel.Swap, error) {
-	var pendingSwap channel.Swap
+func (ms *MemStore) GetPendingSwapByChannelId(id types.Destination) (*channel.Swap, error) {
+	var pendingSwap *channel.Swap
 	ms.objectives.Range(func(key string, objJSON []byte) bool {
 		objId := protocols.ObjectiveId(key)
 
@@ -338,7 +338,7 @@ func (ms *MemStore) GetPendingSwapByChannelId(id types.Destination) (channel.Swa
 		}
 
 		if obj.C.Id == id && obj.SwapStatus == types.PendingConfirmation {
-			pendingSwap = obj.Swap
+			pendingSwap = &obj.Swap
 			return false // objective found, stop iteration
 		}
 

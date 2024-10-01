@@ -247,7 +247,7 @@ func (n *Node) SwapAssets(channelId types.Destination, tokenIn common.Address, t
 		return swap.ObjectiveResponse{}, err
 	}
 
-	if !s.Id.IsZero() {
+	if s != nil && !s.Id.IsZero() {
 		return swap.ObjectiveResponse{}, fmt.Errorf("swap objective exists for the given channel %+v", channelId)
 	}
 
@@ -398,7 +398,7 @@ func (n *Node) GetPaymentChannelsByLedger(ledgerId types.Destination) ([]query.P
 	return query.GetPaymentChannelsByLedger(ledgerId, n.store, n.vm)
 }
 
-func (n *Node) GetPendingSwapByChannelId(swapChannelId types.Destination) (channel.Swap, error) {
+func (n *Node) GetPendingSwapByChannelId(swapChannelId types.Destination) (*channel.Swap, error) {
 	return n.store.GetPendingSwapByChannelId(swapChannelId)
 }
 

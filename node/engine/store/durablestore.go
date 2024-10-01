@@ -856,8 +856,8 @@ func (ds *DurableStore) DestroyObjective(id protocols.ObjectiveId) error {
 	})
 }
 
-func (ds *DurableStore) GetPendingSwapByChannelId(id types.Destination) (channel.Swap, error) {
-	var pendingSwap channel.Swap
+func (ds *DurableStore) GetPendingSwapByChannelId(id types.Destination) (*channel.Swap, error) {
+	var pendingSwap *channel.Swap
 	err := ds.objectives.View(func(tx *buntdb.Tx) error {
 		err := tx.Ascend("", func(key, objJSON string) bool {
 			objId := protocols.ObjectiveId(key)
@@ -872,7 +872,7 @@ func (ds *DurableStore) GetPendingSwapByChannelId(id types.Destination) (channel
 			}
 
 			if obj.C.Id == id && obj.Status == protocols.Approved {
-				pendingSwap = obj.Swap
+				pendingSwap = &obj.Swap
 				return false // objective found, stop iteration
 			}
 
@@ -881,7 +881,7 @@ func (ds *DurableStore) GetPendingSwapByChannelId(id types.Destination) (channel
 		return err
 	})
 	if err != nil {
-		return channel.Swap{}, err
+		return nil, err
 	}
 
 	return pendingSwap, nil
