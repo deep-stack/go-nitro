@@ -77,9 +77,55 @@ func NewObjective(request ObjectiveRequest, preApprove bool, isSwapper bool, get
 		obj.SwapperIndex = 1 - uint(myIndex)
 	}
 
+	isValid := obj.isValidSwap(request.swap)
+	if !isValid {
+		return obj, fmt.Errorf("swap objective creation failed, invalid swap")
+	}
+	obj.Swap = request.swap
 	obj.StateSigs = make(map[uint]state.Signature, 2)
 
 	return obj, nil
+}
+
+func (o *Objective) isValidSwap(swap channel.Swap) bool {
+	tokenIn := swap.Exchange.TokenIn
+	tokenOut := swap.Exchange.TokenOut
+
+	if swap.Exchange.AmountIn.Cmp(big.NewInt(0)) < 0 {
+		return false
+	}
+
+	if swap.Exchange.AmountOut.Cmp(big.NewInt(0)) < 0 {
+		return false
+	}
+
+	s, err := o.C.LatestSupportedState()
+	if err != nil {
+		return false
+	}
+	updateSupportedState := s.Clone()
+	updateOutcome := updateSupportedState.Outcome.Clone()
+
+	for _, assetOutcome := range updateOutcome {
+		swapperAllocation := assetOutcome.Allocations[o.SwapperIndex]
+		swappeAllocation := assetOutcome.Allocations[1-o.SwapperIndex]
+
+		if assetOutcome.Asset == tokenIn {
+			res := swapperAllocation.Amount.Sub(swapperAllocation.Amount, swap.Exchange.AmountIn)
+			if res.Cmp(big.NewInt(0)) < 0 {
+				return false
+			}
+		}
+
+		if assetOutcome.Asset == tokenOut {
+			res := swappeAllocation.Amount.Sub(swappeAllocation.Amount, swap.Exchange.AmountOut)
+			if res.Cmp(big.NewInt(0)) < 0 {
+				return false
+			}
+		}
+	}
+
+	return true
 }
 
 // Id returns the objective id.
