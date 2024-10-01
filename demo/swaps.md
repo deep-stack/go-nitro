@@ -179,8 +179,12 @@
   # Channel Open 0xc7b652e6c0a5e2c1c691597397d44fc0d40a73297f9997062299b102cc8d4e96
 
   # Export Ledger channel ID from above output
-  export LEDGER_CHANNEL_ID=<ledger-channel-id>
   ```
+  - Set environment variable for ledger channel
+
+    ```bash
+    export LEDGER_CHANNEL_ID=<ledger-channel-id>
+    ```
 
 - Check ledger channel info
 
@@ -219,10 +223,14 @@
   # Example output
   # Objective started SwapFund-0x9e1950864b8c704411a6dd790008302c3d5a875a544235cc5f423682d012adc1
   # Channel open 0x9e1950864b8c704411a6dd790008302c3d5a875a544235cc5f423682d012adc1
-
-  # Export swap channel ID from above output
-  export SWAP_CHANNEL_ID=<swap-channel-id>
   ```
+
+  - Set environment variable for swap channel Id
+
+    ```bash
+    # Export swap channel ID from above output
+    export SWAP_CHANNEL_ID=<swap-channel-id>
+    ```
 
 - Check swap channel info
 
@@ -252,7 +260,7 @@
   # }
   ```
 
-- Conduct swap through swap channel
+- Initiate swap through swap channel
 
   ```bash
   nitro-rpc-client swap-initiate $SWAP_CHANNEL_ID  --AssetIn "$ASSET_ADDRESS_1:20" --AssetOut "$ASSET_ADDRESS_2:10" -p 4006
@@ -299,19 +307,22 @@
 
 - Bob decides to accept / reject the incoming swap
 
-  ```bash
-  # To accept incoming swap
-  nitro-rpc-client swap-accept $SWAP_ID -p 4007
+  - To accept incoming swap
 
-  # Example output
-  # Confirming Swap with accepted
+    ```bash
+    nitro-rpc-client swap-accept $SWAP_ID -p 4007
+    # Example output
+    # Confirming Swap with accepted
+    ```
 
-  # To reject incoming swap
-  nitro-rpc-client swap-reject $SWAP_ID -p 4007
+  - To reject incoming swap
 
-  # Example output
-  # Confirming Swap with rejected
-  ```
+    ```bash
+    nitro-rpc-client swap-reject $SWAP_ID -p 4007
+
+    # Example output
+    # Confirming Swap with rejected
+    ```
 
 - Check swap channel info
 
