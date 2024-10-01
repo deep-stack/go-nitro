@@ -182,6 +182,20 @@ func (nrs *NodeRpcServer) registerHandlers() (err error) {
 			return processRequest(nrs.BaseRpcServer, permSign, requestData, func(req serde.NoPayloadRequest) (types.NodeInfo, error) {
 				return nrs.node.GetNodeInfo(), nil
 			})
+		case serde.GetPendingSwapRequestMethod:
+			return processRequest(nrs.BaseRpcServer, permSign, requestData, func(req serde.GetSwapChannelRequest) (string, error) {
+				swap, err := nrs.node.GetPendingSwapByChannelId(req.Id)
+				if err != nil {
+					return "", err
+				}
+
+				swapJson, err := json.Marshal(swap)
+				if err != nil {
+					return "", err
+				}
+
+				return string(swapJson), nil
+			})
 		case serde.PayRequestMethod:
 			return processRequest(nrs.BaseRpcServer, permSign, requestData, func(req serde.PaymentRequest) (serde.PaymentRequest, error) {
 				if err := serde.ValidatePaymentRequest(req); err != nil {
@@ -189,6 +203,20 @@ func (nrs *NodeRpcServer) registerHandlers() (err error) {
 				}
 
 				err := nrs.node.Pay(req.Channel, big.NewInt(int64(req.Amount)))
+				return req, err
+			})
+		case serde.SwapInitiateRequestMethod:
+			return processRequest(nrs.BaseRpcServer, permSign, requestData, func(req serde.SwapInitiateRequest) (serde.SwapInitiateRequest, error) {
+				if err := serde.ValidateSwapInitiateRequest(req); err != nil {
+					return serde.SwapInitiateRequest{}, err
+				}
+
+				_, err := nrs.node.SwapAssets(req.Channel, req.SwapAssetsData.TokenIn, req.SwapAssetsData.TokenOut, big.NewInt(int64(req.SwapAssetsData.AmountIn)), big.NewInt(int64(req.SwapAssetsData.AmountOut)))
+				return req, err
+			})
+		case serde.ConfirmSwapRequestMethod:
+			return processRequest(nrs.BaseRpcServer, permSign, requestData, func(req serde.ConfirmSwapRequest) (serde.ConfirmSwapRequest, error) {
+				err := nrs.node.ConfirmSwap(req.SwapId, req.Action)
 				return req, err
 			})
 		case serde.GetPaymentChannelRequestMethod:

@@ -9,6 +9,7 @@ import (
 	"github.com/statechannels/go-nitro/channel"
 	"github.com/statechannels/go-nitro/channel/consensus_channel"
 	"github.com/statechannels/go-nitro/crypto"
+	"github.com/statechannels/go-nitro/internal/queue"
 	"github.com/statechannels/go-nitro/internal/safesync"
 	"github.com/statechannels/go-nitro/payments"
 	"github.com/statechannels/go-nitro/protocols"
@@ -17,6 +18,7 @@ import (
 	"github.com/statechannels/go-nitro/protocols/directdefund"
 	"github.com/statechannels/go-nitro/protocols/directfund"
 	"github.com/statechannels/go-nitro/protocols/mirrorbridgeddefund"
+	"github.com/statechannels/go-nitro/protocols/swap"
 	"github.com/statechannels/go-nitro/protocols/swapdefund"
 	"github.com/statechannels/go-nitro/protocols/swapfund"
 	"github.com/statechannels/go-nitro/protocols/virtualdefund"
@@ -35,6 +37,7 @@ type MemStore struct {
 	consensusChannels  safesync.Map[[]byte]
 	channelToObjective safesync.Map[protocols.ObjectiveId]
 	vouchers           safesync.Map[[]byte]
+	swaps              safesync.Map[[]byte]
 	lastBlockSeen      blockData
 
 	key     string // the signing key of the store's engine
@@ -52,6 +55,7 @@ func NewMemStore(key []byte) Store {
 	ms.channelToObjective = safesync.Map[protocols.ObjectiveId]{}
 	ms.vouchers = safesync.Map[[]byte]{}
 	ms.lastBlockSeen = blockData{}
+	ms.swaps = safesync.Map[[]byte]{}
 	return &ms
 }
 
@@ -68,6 +72,31 @@ func (ms *MemStore) GetAddress() *types.Address {
 func (ms *MemStore) GetChannelSecretKey() *[]byte {
 	val := common.Hex2Bytes(ms.key)
 	return &val
+}
+
+func (ms *MemStore) GetSwapById(id types.Destination) (channel.Swap, error) {
+	sJSON, ok := ms.swaps.Load(id.String())
+	if !ok {
+		return channel.Swap{}, fmt.Errorf("error loading swap")
+	}
+
+	swap := channel.Swap{}
+	err := json.Unmarshal(sJSON, &swap)
+	if err != nil {
+		return channel.Swap{}, fmt.Errorf("error unmarshalling swap")
+	}
+
+	return swap, nil
+}
+
+func (ms *MemStore) SetSwap(swap channel.Swap) error {
+	sJSON, err := json.Marshal(swap)
+	if err != nil {
+		return fmt.Errorf("error marshalling swap")
+	}
+
+	ms.swaps.Store(swap.Id.String(), sJSON)
+	return nil
 }
 
 func (ms *MemStore) GetObjectiveById(id protocols.ObjectiveId) (protocols.Objective, error) {
@@ -114,6 +143,16 @@ func (ms *MemStore) SetObjective(obj protocols.Objective) error {
 			if err != nil {
 				return fmt.Errorf("error setting virtual channel %s from objective %s: %w", ch.Id, obj.Id(), err)
 			}
+			// TODO: Remove old swaps from store
+			// Get swap by channel id and filter and add the latest swap
+			swaps := ch.Swaps.Values()
+			for _, swap := range swaps {
+				err := ms.SetSwap(swap)
+				if err != nil {
+					return fmt.Errorf("error storing swap: %w", err)
+				}
+			}
+
 		case *channel.Channel:
 			err := ms.SetChannel(ch)
 			if err != nil {
@@ -131,12 +170,12 @@ func (ms *MemStore) SetObjective(obj protocols.Objective) error {
 
 	// Objective ownership can only be transferred if the channel is not owned by another objective
 	prevOwner, isOwned := ms.channelToObjective.Load(obj.OwnsChannel().String())
-	if status := obj.GetStatus(); status == protocols.Approved {
+	if status := obj.GetStatus(); status == protocols.Approved && !obj.OwnsChannel().IsZero() {
 		if !isOwned {
 			ms.channelToObjective.Store(obj.OwnsChannel().String(), obj.Id())
 		}
 		if isOwned && prevOwner != obj.Id() {
-			return fmt.Errorf("cannot transfer ownership of channel to from objective %s to %s", prevOwner, obj.Id())
+			return fmt.Errorf("cannot transfer ownership of channel from objective %s to %s", prevOwner, obj.Id())
 		}
 	}
 
@@ -281,6 +320,32 @@ func (ms *MemStore) GetChannelsByAppDefinition(appDef types.Address) ([]*channel
 	}
 
 	return toReturn, nil
+}
+
+func (ms *MemStore) GetPendingSwapByChannelId(id types.Destination) (channel.Swap, error) {
+	var pendingSwap channel.Swap
+	ms.objectives.Range(func(key string, objJSON []byte) bool {
+		objId := protocols.ObjectiveId(key)
+
+		if !swap.IsSwapObjective(objId) {
+			return true // objective not found, continue looking
+		}
+
+		var obj swap.Objective
+		err := json.Unmarshal(objJSON, &obj)
+		if err != nil {
+			return true // objective not found, continue looking
+		}
+
+		if obj.C.Id == id && obj.SwapStatus == types.PendingConfirmation {
+			pendingSwap = obj.Swap
+			return false // objective found, stop iteration
+		}
+
+		return true // objective not found: continue looking
+	})
+
+	return pendingSwap, nil
 }
 
 // GetChannelsByParticipant returns any channels that include the given participant
@@ -493,6 +558,26 @@ func (ms *MemStore) populateChannelData(obj protocols.Objective) error {
 			o.ToMyRight = right
 		}
 		return nil
+	case *swap.Objective:
+		ch, err := ms.getChannelById(o.C.Id)
+		if err != nil {
+			return fmt.Errorf("error retrieving channel data for objective %s: %w", id, err)
+		}
+		processedSwaps := o.C.Swaps.Values()
+		swaps := queue.NewFixedQueue[channel.Swap](channel.MAX_SWAP_STORAGE_LIMIT)
+
+		for _, swap := range processedSwaps {
+			swap, err := ms.GetSwapById(swap.Id)
+			if err != nil {
+				return fmt.Errorf("error getting swap by id: %w", err)
+			}
+
+			swaps.Enqueue(swap)
+		}
+
+		o.C = &channel.SwapChannel{Channel: ch, Swaps: *swaps}
+		return nil
+
 	case *swapfund.Objective:
 		v, err := ms.getChannelById(o.S.Id)
 		if err != nil {
@@ -628,6 +713,10 @@ func decodeObjective(id protocols.ObjectiveId, data []byte) (protocols.Objective
 		sdfo := swapdefund.Objective{}
 		err := sdfo.UnmarshalJSON(data)
 		return &sdfo, err
+	case swap.IsSwapObjective(id):
+		so := swap.Objective{}
+		err := so.UnmarshalJSON(data)
+		return &so, err
 	default:
 		return nil, fmt.Errorf("objective id %s does not correspond to a known Objective type", id)
 

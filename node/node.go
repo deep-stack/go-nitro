@@ -8,6 +8,8 @@ import (
 	"runtime/debug"
 	"time"
 
+	"github.com/ethereum/go-ethereum/common"
+	"github.com/statechannels/go-nitro/channel"
 	"github.com/statechannels/go-nitro/channel/state"
 	"github.com/statechannels/go-nitro/channel/state/outcome"
 	"github.com/statechannels/go-nitro/internal/safesync"
@@ -24,6 +26,7 @@ import (
 	"github.com/statechannels/go-nitro/protocols/directdefund"
 	"github.com/statechannels/go-nitro/protocols/directfund"
 	"github.com/statechannels/go-nitro/protocols/mirrorbridgeddefund"
+	"github.com/statechannels/go-nitro/protocols/swap"
 	"github.com/statechannels/go-nitro/protocols/swapdefund"
 	"github.com/statechannels/go-nitro/protocols/swapfund"
 	"github.com/statechannels/go-nitro/protocols/virtualdefund"
@@ -233,6 +236,30 @@ func (n *Node) CreatePaymentChannel(Intermediaries []types.Address, CounterParty
 	return objectiveRequest.Response(*n.Address), nil
 }
 
+func (n *Node) SwapAssets(channelId types.Destination, tokenIn common.Address, tokenOut common.Address, amountIn *big.Int, amountOut *big.Int) (swap.ObjectiveResponse, error) {
+	swapChannel, ok := n.store.GetChannelById(channelId)
+	if !ok {
+		return swap.ObjectiveResponse{}, fmt.Errorf("no swap channel found for channel ID %v", channelId)
+	}
+
+	s, err := n.store.GetPendingSwapByChannelId(channelId)
+	if err != nil {
+		return swap.ObjectiveResponse{}, err
+	}
+
+	if !s.Id.IsZero() {
+		return swap.ObjectiveResponse{}, fmt.Errorf("swap objective exists for the given channel %+v", channelId)
+	}
+
+	objectiveRequest := swap.NewObjectiveRequest(channelId, tokenIn, tokenOut, amountIn, amountOut, swapChannel.FixedPart, rand.Uint64())
+
+	// Send the event to the engine
+	n.engine.ObjectiveRequestsFromAPI <- objectiveRequest
+
+	objectiveRequest.WaitForObjectiveToStart()
+	return objectiveRequest.Response(), nil
+}
+
 // ClosePaymentChannel attempts to close and defund the given virtually funded channel.
 func (n *Node) ClosePaymentChannel(channelId types.Destination) (protocols.ObjectiveId, error) {
 	objectiveRequest := virtualdefund.NewObjectiveRequest(channelId)
@@ -371,6 +398,10 @@ func (n *Node) GetPaymentChannelsByLedger(ledgerId types.Destination) ([]query.P
 	return query.GetPaymentChannelsByLedger(ledgerId, n.store, n.vm)
 }
 
+func (n *Node) GetPendingSwapByChannelId(swapChannelId types.Destination) (channel.Swap, error) {
+	return n.store.GetPendingSwapByChannelId(swapChannelId)
+}
+
 func (n *Node) GetVoucher(id types.Destination) payments.Voucher {
 	var voucher payments.Voucher
 	voucherInfo, voucherFound := n.vm.GetVoucherIfAmountPresent(id)
@@ -444,6 +475,31 @@ func (n *Node) handleError(err error) {
 
 func (n *Node) CounterChallenge(id types.Destination, action types.CounterChallengeAction, payload state.SignedState) {
 	n.engine.CounterChallengeRequestsFromAPI <- engine.CounterChallengeRequest{ChannelId: id, Action: action, Payload: payload}
+}
+
+func (n *Node) ConfirmSwap(swapId types.Destination, action types.SwapStatus) error {
+	// TODO: Get swap instead of objective from store
+	obj, err := n.store.GetObjectiveById(protocols.ObjectiveId(swap.ObjectivePrefix + swapId.String()))
+	if err != nil {
+		return err
+	}
+
+	o, ok := obj.(*swap.Objective)
+	if !ok {
+		return fmt.Errorf("not a swap objective")
+	}
+
+	if o.Status != protocols.Approved {
+		return fmt.Errorf("swap with ID %s is not approved", swapId.String())
+	}
+
+	if o.C.MyIndex == o.SwapperIndex {
+		return fmt.Errorf("swap cannot be confirmed by swapper")
+	}
+
+	n.engine.ConfirmSwapRequestFromAPI <- types.ConfirmSwapRequest{SwapId: swapId, Action: action}
+
+	return nil
 }
 
 func (n *Node) RetryObjectiveTx(objectiveId protocols.ObjectiveId) {

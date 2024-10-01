@@ -43,7 +43,9 @@ go test ./... -count=2 -shuffle=on -timeout 1m -v -failfast
 
 The on-chain component of Nitro (i.e. the solidity contracts) are housed in the [`nitro-protocol`](./packages/nitro-protocol/readme.md) directory. This directory contains an yarn workspace with a hardhat / typechain / jest toolchain.
 
-## Steps to perform payments between two go-nitro nodes
+## Demo
+
+### Setup
 
 - Follow this [doc](https://book.getfoundry.sh/getting-started/installation) to set up foundry to run anvil chain
 
@@ -56,13 +58,17 @@ The on-chain component of Nitro (i.e. the solidity contracts) are housed in the 
 - Start anvil chain:
 
   ```bash
-  anvil  --chain-id 1337 --block-time 1
+  anvil  --chain-id 1337 --block-time 1 --port 8545
   ```
 
 - Install dependencies
 
   ```bash
-  yarn
+  # Install Node.js dependencies and build the repo
+  yarn && yarn build
+
+  # Install go dependencies
+  go mod tidy && go build
   ```
 
 - Deploy the Nitro protocol contracts:
@@ -73,16 +79,52 @@ The on-chain component of Nitro (i.e. the solidity contracts) are housed in the 
     cd packages/nitro-protocol
     ```
 
-  - Deploy nitro contracts
+  - Deploy nitro contracts and custom token
 
     ```bash
-    yarn contracts:deploy-localhost
+    # Set environment variables
+    export GETH_URL="http://127.0.0.1:8545"
+    export GETH_CHAIN_ID=1337
+    export GETH_DEPLOYER_PK=0xac0974bec39a17e36ba4a6b4d238ff944bacb478cbed5efcae784d7bf4f2ff80
+    export DISABLE_DETERMINISTIC_DEPLOYMENT=true
+
+    # variables for token name, token symbol and initial supply
+    export TOKEN_NAME="TestToken1"
+    export TOKEN_SYMBOL="TT"
+
+    # Note: Token supply denotes actual number of tokens and not the supply in Wei
+    export INITIAL_TOKEN_SUPPLY="10000000"
+
+    # Deploy contracts
+    yarn contracts:deploy-geth
+
+    # Deploy custom token 1
+    # Note the address of custom token 1
+    yarn contracts:deploy-token-geth
+
+    # Deploy custom token 2
+    # Note the address of custom token 2
+    export TOKEN_NAME="TestToken2"
+    yarn contracts:deploy-token-geth
     ```
 
     Note: On restarting the chain, make sure to remove `packages/nitro-protocol/hardhat-deployments` when redeploying contracts
 
     ```bash
     rm -rf hardhat-deployments
+    ```
+
+  - Send custom tokens to Bob
+
+    ```bash
+    # Export variables for token addresses and Bob address
+    export ASSET_ADDRESS_1="<Custom token 1 Address>"
+    export ASSET_ADDRESS_2="<Custom token 2 Address>"
+    export B_CHAIN_ADDRESS="0x70997970C51812dc3A010C7d01b50e0d17dc79C8"
+
+    # Send tokens to Bob
+    yarn hardhat transfer --contract $ASSET_ADDRESS_1 --to $B_CHAIN_ADDRESS --amount 1000 --network geth
+    yarn hardhat transfer --contract $ASSET_ADDRESS_2 --to $B_CHAIN_ADDRESS --amount 1000 --network geth
     ```
 
   - Change directory to root directory
@@ -107,45 +149,64 @@ The on-chain component of Nitro (i.e. the solidity contracts) are housed in the 
     cd ../
     ```
 
-- Run go-nitro node for Alice:
+- Install nitro-rpc-client package globally:
 
-  - Load contract addresses from environment file to current shell session
+  ```bash
+  # In go-nitro
+  npm install -g ./packages/nitro-rpc-client
+
+  # Confirm global installation by running
+  nitro-rpc-client --version
+  ```
+
+- Run go-nitro node for Alice in new terminal:
+
+  - Create node config for Alice
 
     ```bash
-    source packages/nitro-protocol/hardhat-deployments/localhost/.contracts.env
+    cat <<EOF > cmd/test-configs/alice.toml
+    usedurablestore = true
+    msgport = 3006
+    rpcport = 4006
+    pk = "2d999770f7b5d49b694080f987b82bbc9fc9ac2b4dcc10b0f8aba7d700f69c6d"
+    chainpk = "ac0974bec39a17e36ba4a6b4d238ff944bacb478cbed5efcae784d7bf4f2ff80"
+    chainurl = "ws://127.0.0.1:8545"
+    EOF
     ```
 
-  - Run node for Alice
+  - Start node for Alice
 
-    ```bash
-    export NITRO_CHAIN_URL=ws://127.0.0.1:8545
-    export ALICE_ADDRESS=0xAAA6628Ec44A8a742987EF3A114dDFE2D4F7aDCE
-    export ALICE_PK=2d999770f7b5d49b694080f987b82bbc9fc9ac2b4dcc10b0f8aba7d700f69c6d
-    export ALICE_CHAIN_PK=ac0974bec39a17e36ba4a6b4d238ff944bacb478cbed5efcae784d7bf4f2ff80
+    ```
+    source ./packages/nitro-protocol/hardhat-deployments/geth/.contracts.env
 
-    go run . -chainurl ${NITRO_CHAIN_URL} -msgport 3006 -rpcport 4006 -pk $ALICE_PK -chainpk $ALICE_CHAIN_PK -naaddress $NA_ADDRESS -vpaaddress $VPA_ADDRESS -caaddress $CA_ADDRESS -tlskeyfilepath ./tls/statechannels.org_key.pem -tlscertfilepath ./tls/statechannels.org.pem
+    ./go-nitro -config cmd/test-configs/alice.toml -naaddress $NA_ADDRESS -vpaaddress $VPA_ADDRESS -caaddress $CA_ADDRESS
     ```
 
 - Run go-nitro node for Bob in new terminal:
 
-  - Load contract addresses from environment file to current shell session
+  - Create node config for Bob
 
     ```bash
-    source packages/nitro-protocol/hardhat-deployments/localhost/.contracts.env
+    cat <<EOF > cmd/test-configs/bob.toml
+    usedurablestore = true
+    msgport = 3007
+    rpcport = 4007
+    pk = "0279651921cd800ac560c21ceea27aab0107b67daf436cdd25ce84cad30159b4"
+    chainpk = "59c6995e998f97a5a0044966f0945389dc9e86dae88c7a8412f4603b6b78690d"
+    chainurl = "ws://127.0.0.1:8545"
+    bootpeers = "/ip4/127.0.0.1/tcp/3006/p2p/16Uiu2HAmSjXJqsyBJgcBUU2HQmykxGseafSatbpq5471XmuaUqyv"
+    EOF
     ```
 
-  - Run node for Bob
+  - Start node for Bob
 
-    ```bash
-    export NITRO_CHAIN_URL=ws://127.0.0.1:8545
-    export BOB_ADDRESS=0xBBB676f9cFF8D242e9eaC39D063848807d3D1D94
-    export BOB_PK=0279651921cd800ac560c21ceea27aab0107b67daf436cdd25ce84cad30159b4
-    export BOB_CHAIN_PK=59c6995e998f97a5a0044966f0945389dc9e86dae88c7a8412f4603b6b78690d
+    ```
+    source ./packages/nitro-protocol/hardhat-deployments/geth/.contracts.env
 
-    go run . -chainurl ${NITRO_CHAIN_URL} -msgport 3007 -rpcport 4007 -pk $BOB_PK -chainpk $BOB_CHAIN_PK -naaddress $NA_ADDRESS -vpaaddress $VPA_ADDRESS -caaddress $CA_ADDRESS  -bootpeers "/ip4/127.0.0.1/tcp/3006/p2p/16Uiu2HAmSjXJqsyBJgcBUU2HQmykxGseafSatbpq5471XmuaUqyv" -tlskeyfilepath ./tls/statechannels.org_key.pem -tlscertfilepath ./tls/statechannels.org.pem
+    ./go-nitro -config cmd/test-configs/bob.toml -naaddress $NA_ADDRESS -vpaaddress $VPA_ADDRESS -caaddress $CA_ADDRESS
     ```
 
-    Note: Alice's P2P multiaddr is provided as bootpeer to Bob
+### Steps to demo payment between two go-nitro nodes
 
 - In a new terminal change directory to `packages/nitro-rpc-client`
 
@@ -425,6 +486,272 @@ The on-chain component of Nitro (i.e. the solidity contracts) are housed in the 
 
   ```bash
   Result: 1000050
+  ```
+
+### Steps to demo swap between two go-nitro nodes
+
+- In a new terminal, set `NODE_EXTRA_CA_CERTS` environment variable to the path of a root certificate file (rootCA.pem) generated by mkcert
+
+  ```bash
+  export NODE_EXTRA_CA_CERTS="$(mkcert -CAROOT)/rootCA.pem"
+  ```
+
+- Set environment variables
+
+  ```bash
+  export BOB_ADDRESS="0xBBB676f9cFF8D242e9eaC39D063848807d3D1D94"
+  export ASSET_ADDRESS_1=<deployed custom token address 1>
+  export ASSET_ADDRESS_2=<deployed custom token address 2>
+
+  ```
+
+- Create a multi assets ledger channel
+
+  ```bash
+  nitro-rpc-client direct-fund $BOB_ADDRESS --asset "$ASSET_ADDRESS_1:500,500" --asset "$ASSET_ADDRESS_2:500,500" -p 4006
+
+  export LEDGER_CHANNEL_ID=<ledger-channel-id>
+  ```
+
+  Example ouput
+
+  ```bash
+  Objective started DirectFunding-0xc7b652e6c0a5e2c1c691597397d44fc0d40a73297f9997062299b102cc8d4e96
+  Channel Open 0xc7b652e6c0a5e2c1c691597397d44fc0d40a73297f9997062299b102cc8d4e96
+  ```
+
+- Check ledger channel info
+
+  ```bash
+  nitro-rpc-client get-ledger-channel $LEDGER_CHANNEL_ID -p 4006
+  ```
+
+  Example output
+
+  ```bash
+  {
+    ID: '0xc7b652e6c0a5e2c1c691597397d44fc0d40a73297f9997062299b102cc8d4e96',
+    Status: 'Open',
+    Balances: [
+      {
+        AssetAddress: '0xcf7ed3acca5a467e9e704c703e8d87f634fb0fc9',
+        Me: '0xaaa6628ec44a8a742987ef3a114ddfe2d4f7adce',
+        Them: '0xbbb676f9cff8d242e9eac39d063848807d3d1d94',
+        MyBalance: 500n,
+        TheirBalance: 500n
+      },
+      {
+        AssetAddress: '0xdc64a140aa3e981100a9beca4e685f962f0cf6c9',
+        Me: '0xaaa6628ec44a8a742987ef3a114ddfe2d4f7adce',
+        Them: '0xbbb676f9cff8d242e9eac39d063848807d3d1d94',
+        MyBalance: 500n,
+        TheirBalance: 500n
+      }
+    ],
+    ChannelMode: 'Open'
+  }
+  ```
+
+- Create a multi assets swap channel
+
+  ```bash
+  nitro-rpc-client swap-fund $BOB_ADDRESS --asset "$ASSET_ADDRESS_1:200,200" --asset "$ASSET_ADDRESS_2:100,100" -p 4006
+
+  export SWAP_CHANNEL_ID=<swap-channel-id>
+  ```
+
+  Example output
+
+  ```bash
+  Objective started SwapFund-0x9e1950864b8c704411a6dd790008302c3d5a875a544235cc5f423682d012adc1
+  Channel open 0x9e1950864b8c704411a6dd790008302c3d5a875a544235cc5f423682d012adc1
+  ```
+
+- Check swap channel info
+
+  ```bash
+  nitro-rpc-client get-swap-channel $SWAP_CHANNEL_ID -p 4006
+  ```
+
+  Example output
+
+  ```bash
+  {
+   ID: '0x9e1950864b8c704411a6dd790008302c3d5a875a544235cc5f423682d012adc1',
+   Status: 'Open',
+   Balances: [
+     {
+       AssetAddress: '0xcf7ed3acca5a467e9e704c703e8d87f634fb0fc9',
+       Me: '0xaaa6628ec44a8a742987ef3a114ddfe2d4f7adce',
+       Them: '0xbbb676f9cff8d242e9eac39d063848807d3d1d94',
+       MyBalance: 200n,
+       TheirBalance: 200n
+     },
+     {
+       AssetAddress: '0xdc64a140aa3e981100a9beca4e685f962f0cf6c9',
+       Me: '0xaaa6628ec44a8a742987ef3a114ddfe2d4f7adce',
+       Them: '0xbbb676f9cff8d242e9eac39d063848807d3d1d94',
+       MyBalance: 100n,
+       TheirBalance: 100n
+     }
+   ]
+  }
+  ```
+
+- Conduct swap through swap channel
+
+  ```bash
+  nitro-rpc-client swap $SWAP_CHANNEL_ID  --AssetIn "$ASSET_ADDRESS_1:20" --AssetOut "$ASSET_ADDRESS_2:10" -p 4006
+  ```
+
+  Example ouput
+
+  ```bash
+  {
+   SwapAssetsData: {
+     TokenIn: '0xcf7ed3acca5a467e9e704c703e8d87f634fb0fc9',
+     TokenOut: '0xdc64a140aa3e981100a9beca4e685f962f0cf6c9',
+     AmountIn: 20,
+     AmountOut: 10
+   },
+   Channel: '0x9e1950864b8c704411a6dd790008302c3d5a875a544235cc5f423682d012adc1'
+  }
+  ```
+
+- Check pending swap awaiting confirmation for this swap channel
+
+  ```bash
+  nitro-rpc-client get-pending-swap $SWAP_CHANNEL_ID  -p 4007
+  ```
+
+  Example ouput
+
+  ```bash
+  {
+   Id: '0xb9e809059a92be1c22339d1e6a6d58b908f4dbd0006c0722793b2eec21475614',
+   ChannelId: '0x9e1950864b8c704411a6dd790008302c3d5a875a544235cc5f423682d012adc1',
+   Exchange: {
+     TokenIn: '0xcf7ed3acca5a467e9e704c703e8d87f634fb0fc9',
+     TokenOut: '0xdc64a140aa3e981100a9beca4e685f962f0cf6c9',
+     AmountIn: 20,
+     AmountOut: 10
+   },
+   Sigs: {
+     '0': '0x8cfa6c7c8aec9089fc57b1fe649d64dcd8205905f92b1f6b6b104f64e8967e285d1d751620ef2757287993b6347237e26ab315d31ab98feaf98cd71022d0e4321c'
+   },
+   Nonce: 736609862712516500
+  }
+  ```
+
+  - Set environment variable for swap Id using Id field from the output above
+
+    ```bash
+    export SWAP_ID=<swap id>
+    ```
+
+- Bob decides to accept / reject the incoming swap
+
+  ```bash
+  # To accept incoming swap
+  nitro-rpc-client confirm-swap $SWAP_ID accepted -p 4007
+
+  # Example output
+  # Confirming Swap with accepted
+
+  # To reject incoming swap
+  nitro-rpc-client confirm-swap $SWAP_ID rejected -p 4007
+
+  # Example output
+  # Confirming Swap with rejected
+  ```
+
+- Check swap channel info
+
+  ```bash
+  nitro-rpc-client get-swap-channel $SWAP_CHANNEL_ID -p 4007
+  ```
+
+  Example output
+
+  ```bash
+  {
+   ID: '0x9e1950864b8c704411a6dd790008302c3d5a875a544235cc5f423682d012adc1',
+   Status: 'Open',
+   Balances: [
+     {
+       AssetAddress: '0xcf7ed3acca5a467e9e704c703e8d87f634fb0fc9',
+       Me: '0xbbb676f9cff8d242e9eac39d063848807d3d1d94',
+       Them: '0xaaa6628ec44a8a742987ef3a114ddfe2d4f7adce',
+       MyBalance: 220n,
+       TheirBalance: 180n
+     },
+     {
+       AssetAddress: '0xdc64a140aa3e981100a9beca4e685f962f0cf6c9',
+       Me: '0xbbb676f9cff8d242e9eac39d063848807d3d1d94',
+       Them: '0xaaa6628ec44a8a742987ef3a114ddfe2d4f7adce',
+       MyBalance: 90n,
+       TheirBalance: 110n
+     }
+   ]
+  }
+  ```
+
+- Defund the swap channel
+
+  ```bash
+  nitro-rpc-client swap-defund $SWAP_CHANNEL_ID -p 4006
+  ```
+
+  Example output
+
+  ```bash
+  Objective started SwapDefund-0x9e1950864b8c704411a6dd790008302c3d5a875a544235cc5f423682d012adc1
+  Objective complete SwapDefund-0x9e1950864b8c704411a6dd790008302c3d5a875a544235cc5f423682d012adc1
+  ```
+
+- Defund the ledger channel
+
+  ```bash
+  nitro-rpc-client direct-defund $LEDGER_CHANNEL_ID -p 4006
+  ```
+
+  Example output
+
+  ```bash
+  Objective started DirectDefunding-0xc7b652e6c0a5e2c1c691597397d44fc0d40a73297f9997062299b102cc8d4e96
+  Objective Complete 0xc7b652e6c0a5e2c1c691597397d44fc0d40a73297f9997062299b102cc8d4e96
+  ```
+
+- Check ledger channel info
+
+  ```bash
+  nitro-rpc-client get-ledger-channel $LEDGER_CHANNEL_ID -p 4006
+  ```
+
+  Example output
+
+  ```bash
+  {
+   ID: '0xc7b652e6c0a5e2c1c691597397d44fc0d40a73297f9997062299b102cc8d4e96',
+   Status: 'Complete',
+   Balances: [
+     {
+       AssetAddress: '0xcf7ed3acca5a467e9e704c703e8d87f634fb0fc9',
+       Me: '0xaaa6628ec44a8a742987ef3a114ddfe2d4f7adce',
+       Them: '0xbbb676f9cff8d242e9eac39d063848807d3d1d94',
+       MyBalance: 480n,
+       TheirBalance: 520n
+     },
+     {
+       AssetAddress: '0xdc64a140aa3e981100a9beca4e685f962f0cf6c9',
+       Me: '0xaaa6628ec44a8a742987ef3a114ddfe2d4f7adce',
+       Them: '0xbbb676f9cff8d242e9eac39d063848807d3d1d94',
+       MyBalance: 510n,
+       TheirBalance: 490n
+     }
+   ],
+   ChannelMode: 'Open'
+  }
   ```
 
 ## Steps to retry dropped txs

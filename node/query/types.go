@@ -50,7 +50,7 @@ type SwapChannelInfo struct {
 type LedgerChannelInfo struct {
 	ID          types.Destination
 	Status      ChannelStatus
-	Balance     LedgerChannelBalance
+	Balances    []LedgerChannelBalance
 	ChannelMode channel.ChannelMode
 }
 
@@ -74,7 +74,19 @@ func (lcb LedgerChannelBalance) Equal(other LedgerChannelBalance) bool {
 
 // Equal returns true if the other LedgerChannelInfo is equal to this one
 func (li LedgerChannelInfo) Equal(other LedgerChannelInfo) bool {
-	return li.ID == other.ID && li.Status == other.Status && li.Balance.Equal(other.Balance) && li.ChannelMode == other.ChannelMode
+	areBalancesEqual := true
+
+	if len(li.Balances) != len(other.Balances) {
+		areBalancesEqual = false
+	}
+
+	for i, balance := range li.Balances {
+		if !balance.Equal(other.Balances[i]) {
+			areBalancesEqual = false
+		}
+	}
+
+	return li.ID == other.ID && li.Status == other.Status && areBalancesEqual && li.ChannelMode == other.ChannelMode
 }
 
 // Equal returns true if the other PaymentChannelInfo is equal to this one

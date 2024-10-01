@@ -21,6 +21,12 @@ import {
   GetNodeInfo,
   AssetData,
   SwapFundPayload,
+  SwapAssetsData,
+  SwapInitiatePayload,
+  GetPendingSwap,
+  ConfirmSwapAction,
+  ConfirmSwapResult,
+  SwapChannelInfo,
 } from "./types";
 import { Transport } from "./transport";
 import { createOutcome, generateRequest } from "./utils";
@@ -181,6 +187,30 @@ export class NitroRpcClient implements RpcClientApi {
     return this.sendRequest("create_swap_channel", payload);
   }
 
+  public async SwapAssets(
+    channelId: string,
+    swapAssetsData: SwapAssetsData
+  ): Promise<SwapInitiatePayload> {
+    const payload = {
+      SwapAssetsData: swapAssetsData,
+      Channel: channelId,
+    };
+    const request = generateRequest(
+      "swap_initiate",
+      payload,
+      this.authToken || ""
+    );
+    const res = await this.transport.sendRequest<"swap_initiate">(request);
+    return getAndValidateResult(res, "swap_initiate");
+  }
+
+  public async GetPendingSwap(channelId: string): Promise<string> {
+    const payload: GetPendingSwap = {
+      Id: channelId,
+    };
+    return this.sendRequest("get_pending_swap", payload);
+  }
+
   public async CreatePaymentChannel(
     counterParty: string,
     intermediaries: string[],
@@ -267,6 +297,18 @@ export class NitroRpcClient implements RpcClientApi {
     return this.sendRequest("counter_challenge", payload);
   }
 
+  public async ConfirmSwap(
+    swapId: string,
+    action: ConfirmSwapAction
+  ): Promise<ConfirmSwapResult> {
+    const payload = {
+      SwapId: swapId,
+      Action: action,
+    };
+
+    return this.sendRequest("confirm_swap", payload);
+  }
+
   public async ClosePaymentChannel(channelId: string): Promise<string> {
     const payload: DefundObjectiveRequest = { ChannelId: channelId };
     return this.sendRequest("close_payment_channel", payload);
@@ -316,7 +358,7 @@ export class NitroRpcClient implements RpcClientApi {
     return this.sendRequest("get_payment_channel", { Id: channelId });
   }
 
-  public async GetSwapChannel(channelId: string): Promise<string> {
+  public async GetSwapChannel(channelId: string): Promise<SwapChannelInfo> {
     return this.sendRequest("get_swap_channel", { Id: channelId });
   }
 

@@ -31,6 +31,8 @@ const (
 	ClosePaymentChannelRequestMethod  RequestMethod = "close_payment_channel"
 	CloseSwapChannelRequestMethod     RequestMethod = "close_swap_channel"
 	PayRequestMethod                  RequestMethod = "pay"
+	SwapInitiateRequestMethod         RequestMethod = "swap_initiate"
+	ConfirmSwapRequestMethod          RequestMethod = "confirm_swap"
 	GetPaymentChannelRequestMethod    RequestMethod = "get_payment_channel"
 	GetSwapChannelRequestMethod       RequestMethod = "get_swap_channel"
 	GetVoucherRequestMethod           RequestMethod = "get_voucher"
@@ -38,6 +40,7 @@ const (
 	GetPaymentChannelsByLedgerMethod  RequestMethod = "get_payment_channels_by_ledger"
 	GetAllLedgerChannelsMethod        RequestMethod = "get_all_ledger_channels"
 	GetNodeInfoRequestMethod          RequestMethod = "get_node_info"
+	GetPendingSwapRequestMethod       RequestMethod = "get_pending_swap"
 	CreateVoucherRequestMethod        RequestMethod = "create_voucher"
 	ReceiveVoucherRequestMethod       RequestMethod = "receive_voucher"
 	CounterChallengeRequestMethod     RequestMethod = "counter_challenge"
@@ -77,6 +80,23 @@ type AuthRequest struct {
 type PaymentRequest struct {
 	Amount  uint64
 	Channel types.Destination
+}
+
+type SwapAssetsData struct {
+	TokenIn   common.Address
+	TokenOut  common.Address
+	AmountIn  uint64
+	AmountOut uint64
+}
+
+type SwapInitiateRequest struct {
+	SwapAssetsData SwapAssetsData
+	Channel        types.Destination
+}
+
+type ConfirmSwapRequest struct {
+	SwapId types.Destination
+	Action types.SwapStatus
 }
 
 type MirrorBridgedDefundRequest struct {
@@ -153,6 +173,8 @@ type RequestPayload interface {
 		swapdefund.ObjectiveRequest |
 		AuthRequest |
 		PaymentRequest |
+		SwapInitiateRequest |
+		ConfirmSwapRequest |
 		GetLedgerChannelRequest |
 		GetPaymentChannelRequest |
 		GetSwapChannelRequest |
@@ -206,6 +228,8 @@ type ResponsePayload interface {
 		virtualfund.ObjectiveResponse |
 		swapfund.ObjectiveResponse |
 		PaymentRequest |
+		SwapInitiateRequest |
+		ConfirmSwapRequest |
 		query.PaymentChannelInfo |
 		query.LedgerChannelInfo |
 		query.SwapChannelInfo |

@@ -1,8 +1,11 @@
 import Ajv, { JTDDataType } from "ajv/dist/jtd";
 
 import {
+  Balance,
   ChannelMode,
   ChannelStatus,
+  ConfirmSwapAction,
+  ConfirmSwapResult,
   CounterChallengeAction,
   CounterChallengeResult,
   LedgerChannelInfo,
@@ -10,6 +13,7 @@ import {
   RPCNotification,
   RPCRequestAndResponses,
   RequestMethod,
+  SwapChannelInfo,
 } from "./types";
 
 const ajv = new Ajv();
@@ -55,18 +59,28 @@ const counterChallengeSchema = {
 } as const;
 type CounterChallengeSchemaType = JTDDataType<typeof counterChallengeSchema>;
 
+const confirmSwapSchema = {
+  properties: {
+    SwapId: { type: "string" },
+    Action: { type: "int32" },
+  },
+} as const;
+type ConfirmSwapSchemaType = JTDDataType<typeof confirmSwapSchema>;
+
 const ledgerChannelSchema = {
   properties: {
     ID: { type: "string" },
     Status: { type: "string" },
     ChannelMode: { type: "int32" },
-    Balance: {
-      properties: {
-        AssetAddress: { type: "string" },
-        Them: { type: "string" },
-        Me: { type: "string" },
-        MyBalance: { type: "string" },
-        TheirBalance: { type: "string" },
+    Balances: {
+      elements: {
+        properties: {
+          AssetAddress: { type: "string" },
+          Them: { type: "string" },
+          Me: { type: "string" },
+          MyBalance: { type: "string" },
+          TheirBalance: { type: "string" },
+        },
       },
     },
   },
@@ -132,6 +146,21 @@ const paymentSchema = {
 } as const;
 type PaymentSchemaType = JTDDataType<typeof paymentSchema>;
 
+const swapSchema = {
+  properties: {
+    SwapAssetsData: {
+      properties: {
+        TokenIn: { type: "string" },
+        TokenOut: { type: "string" },
+        AmountIn: { type: "uint32" },
+        AmountOut: { type: "uint32" },
+      },
+    },
+    Channel: { type: "string" },
+  },
+} as const;
+type swapSchemaType = JTDDataType<typeof swapSchema>;
+
 const voucherSchema = {
   properties: {
     ChannelId: { type: "string" },
@@ -171,8 +200,10 @@ type ResponseSchema =
   | typeof swapChannelSchema
   | typeof paymentSchema
   | typeof voucherSchema
+  | typeof swapSchema
   | typeof receiveVoucherSchema
   | typeof counterChallengeSchema
+  | typeof confirmSwapSchema
   | typeof getNodeInfoSchema;
 
 type ResponseSchemaType =
@@ -185,8 +216,10 @@ type ResponseSchemaType =
   | PaymentChannelsSchemaType
   | PaymentSchemaType
   | VoucherSchemaType
+  | swapSchemaType
   | ReceiveVoucherSchemaType
   | CounterChallengeSchemaType
+  | ConfirmSwapSchemaType
   | GetNodeInfoSchemaType;
 
 /**
@@ -226,11 +259,17 @@ export function getAndValidateResult<T extends RequestMethod>(
     case "get_signed_state":
     case "close_payment_channel":
     case "close_swap_channel":
-    case "get_swap_channel":
+    case "get_pending_swap":
       return validateAndConvertResult(
         stringSchema,
         result,
         (result: StringSchemaType) => result
+      );
+    case "get_swap_channel":
+      return validateAndConvertResult(
+        stringSchema,
+        result,
+        convertToSwapChannelInfoType
       );
     case "get_ledger_channel":
       return validateAndConvertResult(
@@ -243,6 +282,12 @@ export function getAndValidateResult<T extends RequestMethod>(
         counterChallengeSchema,
         result,
         convertToCounterChallengeResultType
+      );
+    case "confirm_swap":
+      return validateAndConvertResult(
+        confirmSwapSchema,
+        result,
+        convertToConfirmSwapResultType
       );
     case "get_all_ledger_channels":
       return validateAndConvertResult(
@@ -273,6 +318,12 @@ export function getAndValidateResult<T extends RequestMethod>(
         paymentSchema,
         result,
         (result: PaymentSchemaType) => result
+      );
+    case "swap_initiate":
+      return validateAndConvertResult(
+        swapSchema,
+        result,
+        (result: swapSchemaType) => result
       );
     case "receive_voucher":
       return validateAndConvertResult(
@@ -316,8 +367,8 @@ export function getAndValidateNotification<T extends RPCNotification["method"]>(
         data as PaymentChannelSchemaType
       );
     case "ledger_channel_updated":
-      return convertToInternalPaymentChannelType(
-        data as PaymentChannelSchemaType
+      return convertToInternalLedgerChannelType(
+        data as LedgerChannelSchemaType
       );
     case "objective_completed":
       return data as string;
@@ -378,13 +429,28 @@ function convertToInternalLedgerChannelType(
     ...result,
     Status: result.Status as ChannelStatus,
     ChannelMode: ChannelMode[result.ChannelMode] as keyof typeof ChannelMode,
-    Balance: {
-      ...result.Balance,
-      TheirBalance: BigInt(result.Balance.TheirBalance),
-      MyBalance: BigInt(result.Balance.MyBalance),
-    },
+    Balances: result.Balances.map((balance) => ({
+      ...balance,
+      MyBalance: BigInt(balance.MyBalance ?? 0),
+      TheirBalance: BigInt(balance.TheirBalance ?? 0),
+    })),
   };
 }
+
+export const convertToSwapChannelInfoType = (
+  result: string
+): SwapChannelInfo => {
+  const swapChannelInfo = JSON.parse(result);
+  const modifiedSwapChannelInfo: SwapChannelInfo = {
+    ...swapChannelInfo,
+    Balances: swapChannelInfo.Balances.map((balance: Balance) => ({
+      ...balance,
+      MyBalance: BigInt(balance.MyBalance),
+      TheirBalance: BigInt(balance.TheirBalance),
+    })),
+  };
+  return modifiedSwapChannelInfo;
+};
 
 function convertToCounterChallengeResultType(
   result: CounterChallengeSchemaType
@@ -394,6 +460,15 @@ function convertToCounterChallengeResultType(
     Action: CounterChallengeAction[
       result.Action
     ] as keyof typeof CounterChallengeAction,
+  };
+}
+
+function convertToConfirmSwapResultType(
+  result: ConfirmSwapSchemaType
+): ConfirmSwapResult {
+  return {
+    SwapId: result.SwapId,
+    Action: ConfirmSwapAction[result.Action] as keyof typeof ConfirmSwapAction,
   };
 }
 

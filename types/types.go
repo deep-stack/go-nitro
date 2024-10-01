@@ -44,6 +44,19 @@ type RetryObjectiveTxRequest struct {
 	ObjectiveId string
 }
 
+type SwapStatus int8
+
+const (
+	PendingConfirmation SwapStatus = iota
+	Accepted
+	Rejected
+)
+
+type ConfirmSwapRequest struct {
+	SwapId Destination
+	Action SwapStatus
+}
+
 type NodeInfo struct {
 	SCAddress            string
 	MessageServicePeerId string

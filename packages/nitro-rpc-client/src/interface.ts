@@ -8,6 +8,9 @@ import {
   PaymentChannelInfo,
   PaymentPayload,
   ReceiveVoucherResult,
+  SwapAssetsData,
+  SwapChannelInfo,
+  SwapInitiatePayload,
   Voucher,
 } from "./types";
 
@@ -165,7 +168,7 @@ interface swapAPI {
    * @param channelId - The ID of the channel to query for
    * @returns A JSON object containing the channel's information
    */
-  GetSwapChannel(channelId: string): Promise<string>;
+  GetSwapChannel(channelId: string): Promise<SwapChannelInfo>;
   /**
    * CloseSwapChannel defunds a swap channel.
    *
@@ -173,6 +176,16 @@ interface swapAPI {
    * @returns The ID of the objective that was created
    */
   CloseSwapChannel(channelId: string): Promise<string>;
+  /**
+   * SwapAssets exchanges the asset.
+   *
+   * @param channelId - The ID of the swap channel
+   * @returns The data used for swapping the assets
+   */
+  SwapAssets(
+    channelId: string,
+    swapAssetsData: SwapAssetsData
+  ): Promise<SwapInitiatePayload>;
 }
 
 interface syncAPI {

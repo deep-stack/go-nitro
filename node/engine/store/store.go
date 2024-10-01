@@ -18,6 +18,7 @@ import (
 const (
 	ErrNoSuchObjective  = types.ConstError("store: no such objective")
 	ErrNoSuchChannel    = types.ConstError("store: failed to find required channel data")
+	ErrNoSuchSwap       = types.ConstError("store: failed to find required swap data")
 	ErrLoadVouchers     = types.ConstError("store: could not load vouchers")
 	lastBlockNumSeenKey = "lastBlockNumSeen"
 )
@@ -40,6 +41,8 @@ type Store interface {
 	ReleaseChannelFromOwnership(types.Destination) error                         // Release channel from being owned by any objective
 	GetLastBlockNumSeen() (uint64, error)
 	SetLastBlockNumSeen(uint64) error
+	GetPendingSwapByChannelId(id types.Destination) (channel.Swap, error)
+	GetSwapById(id types.Destination) (channel.Swap, error)
 
 	ConsensusChannelStore
 	payments.VoucherStore

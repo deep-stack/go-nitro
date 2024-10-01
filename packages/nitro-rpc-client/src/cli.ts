@@ -14,8 +14,9 @@ import {
   getRPCUrl,
   logOutChannelUpdates,
   parseAssetData as parseAssetsData,
+  parseSwapAssetsData,
 } from "./utils";
-import { AssetData, CounterChallengeAction } from "./types";
+import { AssetData, ConfirmSwapAction, CounterChallengeAction } from "./types";
 import { ZERO_ETHEREUM_ADDRESS } from "./constants";
 
 yargs(hideBin(process.argv))
@@ -558,9 +559,12 @@ yargs(hideBin(process.argv))
         assetsData
       );
 
-      const { Id } = sfObjective;
+      const { Id, ChannelId } = sfObjective;
       console.log(`Objective started ${Id}`);
-      // TODO: Wait for swapfund to complete
+
+      await rpcClient.WaitForObjectiveToComplete(Id);
+      console.log(`Channel open ${ChannelId}`);
+
       await rpcClient.Close();
       process.exit(0);
     }
@@ -590,7 +594,10 @@ yargs(hideBin(process.argv))
       const id = await rpcClient.CloseSwapChannel(yargs.channelId);
 
       console.log(`Objective started ${id}`);
-      // TODO: Wait for swap-defund to complete
+
+      await rpcClient.WaitForObjectiveToComplete(id);
+      console.log(`Objective complete ${id}`);
+
       await rpcClient.Close();
       process.exit(0);
     }
@@ -787,6 +794,146 @@ yargs(hideBin(process.argv))
         yargs.amount
       );
       console.log(paymentChannelInfo);
+      await rpcClient.Close();
+      process.exit(0);
+    }
+  )
+  .command(
+    "get-pending-swap <channelId>",
+    "Gets the pending swap awaiting confirmation for this swap channel",
+    (yargsBuilder) => {
+      return yargsBuilder.positional("channelId", {
+        describe: "The channel ID of the payment channel",
+        type: "string",
+        demandOption: true,
+      });
+    },
+    async (yargs) => {
+      const rpcPort = yargs.p;
+      const rpcHost = yargs.h;
+      const isSecure = yargs.s;
+
+      const rpcClient = await NitroRpcClient.CreateHttpNitroClient(
+        getRPCUrl(rpcHost, rpcPort),
+        isSecure
+      );
+
+      // TODO: Generate JSON schema for get current swap
+      const pendingSwap = await rpcClient.GetPendingSwap(yargs.channelId);
+      console.log(JSON.parse(pendingSwap));
+      await rpcClient.Close();
+      process.exit(0);
+    }
+  )
+  .command(
+    "swap-initiate <channelId>",
+    "Swaps assets on a given swap channel",
+    (yargsBuilder) => {
+      return yargsBuilder
+        .positional("channelId", {
+          describe: "The channel ID of the payment channel",
+          type: "string",
+          demandOption: true,
+        })
+        .option("AssetIn", {
+          describe: "Input asset details in the format of '0xAddress:amount'",
+          type: "string",
+          demandOption: true,
+        })
+        .option("AssetOut", {
+          describe: "Output asset details in the format of '0xAddress:amount'",
+          type: "string",
+          demandOption: true,
+        });
+    },
+    async (yargs) => {
+      const rpcPort = yargs.p;
+      const rpcHost = yargs.h;
+      const isSecure = yargs.s;
+
+      const rpcClient = await NitroRpcClient.CreateHttpNitroClient(
+        getRPCUrl(rpcHost, rpcPort),
+        isSecure
+      );
+      if (yargs.n) logOutChannelUpdates(rpcClient);
+
+      const swapAssetsData = parseSwapAssetsData(yargs.AssetIn, yargs.AssetOut);
+
+      const swapInfo = await rpcClient.SwapAssets(
+        yargs.channelId,
+        swapAssetsData
+      );
+
+      console.log(swapInfo);
+      await rpcClient.Close();
+      process.exit(0);
+    }
+  )
+  // TODO: Separate out methods to accept and reject swaps
+  .command(
+    "swap-accept <SwapId>",
+    "Accept the received swap",
+    (yargsBuilder) => {
+      return yargsBuilder.positional("SwapId", {
+        describe: "The Id of swap",
+        type: "string",
+        demandOption: true,
+      });
+    },
+    async (yargs) => {
+      const rpcPort = yargs.p;
+      const rpcHost = yargs.h;
+      const isSecure = yargs.s;
+
+      const rpcClient = await NitroRpcClient.CreateHttpNitroClient(
+        getRPCUrl(rpcHost, rpcPort),
+        isSecure
+      );
+      if (yargs.n) logOutChannelUpdates(rpcClient);
+
+      const response = await rpcClient.ConfirmSwap(
+        yargs.SwapId,
+        ConfirmSwapAction.accepted
+      );
+
+      console.log(`Confirming Swap with ${response.Action}`);
+      await rpcClient.WaitForObjectiveToComplete(`Swap-${yargs.SwapId}`);
+      console.log(`Objective complete Swap-${yargs.SwapId}`);
+
+      await rpcClient.Close();
+      process.exit(0);
+    }
+  )
+  .command(
+    "swap-reject <SwapId>",
+    "Reject the received swap",
+    (yargsBuilder) => {
+      return yargsBuilder.positional("SwapId", {
+        describe: "The Id of swap",
+        type: "string",
+        demandOption: true,
+      });
+    },
+    async (yargs) => {
+      const rpcPort = yargs.p;
+      const rpcHost = yargs.h;
+      const isSecure = yargs.s;
+
+      const rpcClient = await NitroRpcClient.CreateHttpNitroClient(
+        getRPCUrl(rpcHost, rpcPort),
+        isSecure
+      );
+      if (yargs.n) logOutChannelUpdates(rpcClient);
+
+      const response = await rpcClient.ConfirmSwap(
+        yargs.SwapId,
+        ConfirmSwapAction.rejected
+      );
+
+      console.log(`Confirming Swap with ${response.Action}`);
+      await rpcClient.WaitForObjectiveToComplete(`Swap-${yargs.SwapId}`);
+      console.log(`Objective complete Swap-${yargs.SwapId}`);
+
       await rpcClient.Close();
       process.exit(0);
     }

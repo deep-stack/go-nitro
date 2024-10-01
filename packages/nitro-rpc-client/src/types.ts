@@ -60,6 +60,26 @@ export type PaymentPayload = {
   Channel: string;
 };
 
+export type SwapInitiatePayload = {
+  SwapAssetsData: SwapAssetsData;
+  Channel: string;
+};
+
+export enum ConfirmSwapAction {
+  accepted = 1,
+  rejected,
+}
+
+export type ConfirmSwapResult = {
+  SwapId: string;
+  Action: keyof typeof ConfirmSwapAction;
+};
+
+export type ConfirmSwapPayload = {
+  SwapId: string;
+  Action: ConfirmSwapAction;
+};
+
 export enum CounterChallengeAction {
   checkpoint,
   challenge,
@@ -75,6 +95,20 @@ export type CounterChallengeResult = {
   ChannelId: string;
   Action: keyof typeof CounterChallengeAction;
 };
+
+export interface Balance {
+  AssetAddress: string;
+  Me: string;
+  Them: string;
+  MyBalance: string | bigint;
+  TheirBalance: string | bigint;
+}
+
+export interface SwapChannelInfo {
+  ID: string;
+  Status: string;
+  Balances: Balance[];
+}
 
 export type Voucher = {
   ChannelId: string;
@@ -108,6 +142,9 @@ export type ReceiveVoucherResult = {
   Total: bigint;
   Delta: bigint;
 };
+export type GetPendingSwap = {
+  Id: string;
+};
 
 /**
  * RPC Requests
@@ -137,6 +174,14 @@ export type RetryTxRequest = JsonRpcRequest<
   }
 >;
 export type PaymentRequest = JsonRpcRequest<"pay", PaymentPayload>;
+
+export type SwapRequest = JsonRpcRequest<"swap_initiate", SwapInitiatePayload>;
+
+export type ConfirmSwapRequest = JsonRpcRequest<
+  "confirm_swap",
+  ConfirmSwapPayload
+>;
+
 export type CounterChallengeRequest = JsonRpcRequest<
   "counter_challenge",
   CounterChallengePayload
@@ -173,6 +218,10 @@ export type GetSwapChannelRequest = JsonRpcRequest<
 export type GetVoucherRequest = JsonRpcRequest<
   "get_voucher",
   GetChannelRequest
+>;
+export type GetPendingSwapRequest = JsonRpcRequest<
+  "get_pending_swap",
+  GetPendingSwap
 >;
 export type GetPaymentChannelsByLedgerRequest = JsonRpcRequest<
   "get_payment_channels_by_ledger",
@@ -241,10 +290,13 @@ export type GetNodeInfoRequest = JsonRpcRequest<
  */
 export type GetAuthTokenResponse = JsonRpcResponse<string>;
 export type GetPaymentChannelResponse = JsonRpcResponse<PaymentChannelInfo>;
-export type GetSwapChannelResponse = JsonRpcResponse<string>;
+export type GetSwapChannelResponse = JsonRpcResponse<SwapChannelInfo>;
 export type GetVoucherResponse = JsonRpcResponse<Voucher>;
+export type GetPendingSwapResponse = JsonRpcResponse<string>;
 export type PaymentResponse = JsonRpcResponse<PaymentPayload>;
+export type SwapResponse = JsonRpcResponse<SwapInitiatePayload>;
 export type CounterChallengeResponse = JsonRpcResponse<CounterChallengeResult>;
+export type ConfirmSwapResponse = JsonRpcResponse<ConfirmSwapResult>;
 export type GetLedgerChannelResponse = JsonRpcResponse<LedgerChannelInfo>;
 export type VirtualFundResponse = JsonRpcResponse<ObjectiveResponse>;
 export type SwapFundResponse = JsonRpcResponse<ObjectiveResponse>;
@@ -293,7 +345,10 @@ export type RPCRequestAndResponses = {
   get_payment_channel: [GetPaymentChannelRequest, GetPaymentChannelResponse];
   get_swap_channel: [GetSwapChannelRequest, GetSwapChannelResponse];
   get_voucher: [GetVoucherRequest, GetVoucherResponse];
+  get_pending_swap: [GetPendingSwapRequest, GetPendingSwapResponse];
   pay: [PaymentRequest, PaymentResponse];
+  swap_initiate: [SwapRequest, SwapResponse];
+  confirm_swap: [ConfirmSwapRequest, ConfirmSwapResponse];
   counter_challenge: [CounterChallengeRequest, CounterChallengeResponse];
   close_payment_channel: [VirtualDefundRequest, VirtualDefundResponse];
   close_swap_channel: [SwapDefundRequest, SwapDefundResponse];
@@ -360,7 +415,7 @@ export type ObjectiveCompleteNotification = JsonRpcNotification<
 export type LedgerChannelInfo = {
   ID: string;
   Status: ChannelStatus;
-  Balance: LedgerChannelBalance;
+  Balances: LedgerChannelBalance[];
   ChannelMode: keyof typeof ChannelMode;
 };
 
@@ -416,12 +471,6 @@ export type PaymentChannelInfo = {
   Balance: PaymentChannelBalance;
 };
 
-export type SwapChannelInfo = {
-  ID: string;
-  Status: ChannelStatus;
-  Balances: SwapChannelBalance[];
-};
-
 export type Outcome = SingleAssetOutcome[];
 
 export type SingleAssetOutcome = {
@@ -458,4 +507,11 @@ export type AssetData = {
   assetAddress: string;
   alphaAmount: number;
   betaAmount: number;
+};
+
+export type SwapAssetsData = {
+  TokenIn: string;
+  TokenOut: string;
+  AmountIn: number;
+  AmountOut: number;
 };

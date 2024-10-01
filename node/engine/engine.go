@@ -31,6 +31,7 @@ import (
 	"github.com/statechannels/go-nitro/protocols/directdefund"
 	"github.com/statechannels/go-nitro/protocols/directfund"
 	"github.com/statechannels/go-nitro/protocols/mirrorbridgeddefund"
+	"github.com/statechannels/go-nitro/protocols/swap"
 	"github.com/statechannels/go-nitro/protocols/swapdefund"
 	"github.com/statechannels/go-nitro/protocols/swapfund"
 	"github.com/statechannels/go-nitro/protocols/virtualdefund"
@@ -79,6 +80,7 @@ type Engine struct {
 	PaymentRequestsFromAPI          chan PaymentRequest
 	CounterChallengeRequestsFromAPI chan CounterChallengeRequest
 	RetryObjectiveTxRequestFromAPI  chan types.RetryObjectiveTxRequest
+	ConfirmSwapRequestFromAPI       chan types.ConfirmSwapRequest
 
 	fromChain             <-chan chainservice.Event
 	droppedEventFromChain <-chan protocols.DroppedEventInfo
@@ -164,6 +166,7 @@ func New(vm *payments.VoucherManager, msg messageservice.MessageService, chain c
 	e.PaymentRequestsFromAPI = make(chan PaymentRequest)
 	e.CounterChallengeRequestsFromAPI = make(chan CounterChallengeRequest)
 	e.RetryObjectiveTxRequestFromAPI = make(chan types.RetryObjectiveTxRequest)
+	e.ConfirmSwapRequestFromAPI = make(chan types.ConfirmSwapRequest)
 
 	e.fromChain = chain.EventEngineFeed()
 	e.droppedEventFromChain = chain.DroppedEventEngineFeed()
@@ -235,6 +238,8 @@ func (e *Engine) run(ctx context.Context) {
 			err = e.handleCounterChallengeRequest(counterChallengeReq)
 		case retryObjectiveTxReq := <-e.RetryObjectiveTxRequestFromAPI:
 			err = e.handleRetryObjectiveTxRequest(retryObjectiveTxReq)
+		case confirmSwapReq := <-e.ConfirmSwapRequestFromAPI:
+			res, err = e.handleConfirmSwapRequest(confirmSwapReq)
 		case <-blockTicker:
 			blockNum := e.chain.GetLastConfirmedBlockNum()
 			err = e.store.SetLastBlockNumSeen(blockNum)
@@ -682,6 +687,14 @@ func (e *Engine) handleObjectiveRequest(or protocols.ObjectiveRequest) (EngineEv
 		}
 		return e.attemptProgress(&vfo)
 
+	case swap.ObjectiveRequest:
+		so, err := swap.NewObjective(request, true, true, e.store.GetChannelById, *e.store.GetAddress())
+		if err != nil {
+			return failedEngineEvent, fmt.Errorf("handleAPIEvent: Could not create swap objective for %+v: %w", request, err)
+		}
+
+		return e.attemptProgress(&so)
+
 	case swapfund.ObjectiveRequest:
 		sfo, err := swapfund.NewObjective(request, true, myAddress, chainId, e.store.GetConsensusChannel)
 		if err != nil {
@@ -849,6 +862,21 @@ func (e *Engine) handleCounterChallengeRequest(request CounterChallengeRequest) 
 	return nil
 }
 
+func (e *Engine) handleConfirmSwapRequest(request types.ConfirmSwapRequest) (EngineEvent, error) {
+	objective, err := e.store.GetObjectiveById(protocols.ObjectiveId(swap.ObjectivePrefix + request.SwapId.String()))
+	if err != nil {
+		return EngineEvent{}, err
+	}
+	o, ok := objective.(*swap.Objective)
+	if !ok {
+		return EngineEvent{}, fmt.Errorf("not a swap objective")
+	}
+
+	o.SwapStatus = request.Action
+
+	return e.attemptProgress(o)
+}
+
 func (e *Engine) handleRetryObjectiveTxRequest(request types.RetryObjectiveTxRequest) error {
 	// Get objective from objective id
 	obj, err := e.store.GetObjectiveById(protocols.ObjectiveId(request.ObjectiveId))
@@ -956,9 +984,15 @@ func (e *Engine) attemptProgress(objective protocols.Objective) (outgoing Engine
 	// Probably should have a better check that only adds it to CompletedObjectives if it was completed in this crank
 	if waitingFor == "WaitingForNothing" {
 		outgoing.CompletedObjectives = append(outgoing.CompletedObjectives, crankedObjective)
-		err = e.store.ReleaseChannelFromOwnership(crankedObjective.OwnsChannel())
-		if err != nil {
-			return
+
+		// Only release the channel if the objective owns one
+		// Swap objective does not own a channel
+		channel := crankedObjective.OwnsChannel()
+		if !channel.IsZero() {
+			err = e.store.ReleaseChannelFromOwnership(crankedObjective.OwnsChannel())
+			if err != nil {
+				return
+			}
 		}
 		err = e.spawnConsensusChannelIfDirectFundObjective(crankedObjective) // Here we assume that every directfund.Objective is for a ledger channel.
 		if err != nil {
@@ -1178,6 +1212,9 @@ func (e *Engine) constructObjectiveFromMessage(id protocols.ObjectiveId, p proto
 		}
 
 		return &sfo, nil
+	case swap.IsSwapObjective(id):
+		so, err := swap.ConstructObjectiveFromPayload(p, false, e.store.GetChannelById, *e.store.GetAddress())
+		return &so, err
 	case virtualdefund.IsVirtualDefundObjective(id):
 		vId, err := virtualdefund.GetVirtualChannelFromObjectiveId(id)
 		if err != nil {
