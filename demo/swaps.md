@@ -321,6 +321,7 @@
 
     ```bash
     nitro-rpc-client swap-accept $SWAP_ID -p 4007
+
     # Example output
     # Confirming Swap with accepted
     ```

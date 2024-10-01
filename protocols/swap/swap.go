@@ -77,6 +77,7 @@ func NewObjective(request ObjectiveRequest, preApprove bool, isSwapper bool, get
 
 	isValid := obj.isValidSwap(request.swap)
 	if !isValid {
+		// TODO: Change this error to non-fatal error
 		return obj, fmt.Errorf("swap objective creation failed, invalid swap")
 	}
 	obj.Swap = request.swap
