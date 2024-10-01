@@ -69,8 +69,6 @@ func NewObjective(request ObjectiveRequest, preApprove bool, isSwapper bool, get
 		return obj, err
 	}
 
-	obj.Swap = request.swap
-
 	if isSwapper {
 		obj.SwapperIndex = uint(myIndex)
 	} else {
@@ -190,7 +188,19 @@ func (o *Objective) Update(raw protocols.ObjectivePayload) (protocols.Objective,
 	}
 
 	updated.Swap = swapPayload.Swap
-	// TODO: Validation for state sigs
+
+	// Ensure the incoming state sig is valid
+	counterPartyStateSig := swapPayload.StateSigs[1-updated.C.MyIndex]
+	state, err := updated.GetUpdatedSwapState()
+	counterPartyAddressFromStateSig, err := state.RecoverSigner(counterPartyStateSig)
+	if err != nil {
+		return &updated, err
+	}
+
+	if counterPartyAddressFromStateSig != o.C.Participants[1-o.C.MyIndex] {
+		return &updated, fmt.Errorf("missing counterparty's signature in state signatures")
+	}
+
 	updated.StateSigs = swapPayload.StateSigs
 
 	return &updated, nil
