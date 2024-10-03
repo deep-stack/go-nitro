@@ -393,11 +393,15 @@ func (o *Objective) isBob() bool {
 func (o *Objective) ledgerProposal(ledger *consensus_channel.ConsensusChannel) []consensus_channel.Proposal {
 	var proposals []consensus_channel.Proposal
 
-	for i, out := range ledger.ConsensusVars().Outcome {
-		for _, a := range out.AsOutcome()[0].Allocations {
-			if a.AllocationType == outcome.GuaranteeAllocationType {
-				left := o.S.OffChain.SignedStateForTurnNum[uint64(FinalTurnNum)].State().Outcome[i].Allocations[0].Amount
-				p := consensus_channel.NewRemoveProposal(ledger.Id, o.VId(), left, out.AsOutcome()[0].Asset)
+	for _, ledgerOut := range ledger.ConsensusVars().Outcome {
+		if len(ledgerOut.AsOutcome()[0].Allocations) != 3 {
+			continue
+		}
+
+		for _, swapOut := range o.S.OffChain.SignedStateForTurnNum[uint64(FinalTurnNum)].State().Outcome {
+			if ledgerOut.AsOutcome()[0].Asset == swapOut.Asset {
+				left := swapOut.Allocations[0].Amount
+				p := consensus_channel.NewRemoveProposal(ledger.Id, o.VId(), left, swapOut.Asset)
 
 				proposals = append(proposals, p)
 			}
