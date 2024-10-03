@@ -286,9 +286,6 @@ func (o *Objective) Crank(secretKey *[]byte) (protocols.Objective, protocols.Sid
 		return &updated, protocols.SideEffects{}, WaitingForConsensus, fmt.Errorf("error updating swap channel state %w", err)
 	}
 
-	// Add swap to swap channel
-	updated.C.Swaps.Enqueue(updated.Swap)
-
 	// Completion
 	updated.Status = protocols.Completed
 	return &updated, sideEffects, WaitingForNothing, nil
@@ -350,7 +347,7 @@ func (o *Objective) GetUpdatedSwapState() (state.State, error) {
 }
 
 func (o *Objective) Related() []protocols.Storable {
-	ret := []protocols.Storable{o.C}
+	ret := []protocols.Storable{o.C, &o.Swap}
 
 	return ret
 }
@@ -404,31 +401,23 @@ func (o *Objective) AcceptSwap() {
 }
 
 type jsonObjective struct {
-	Status                      protocols.ObjectiveStatus
-	C                           types.Destination
-	Swap                        channel.Swap
-	SwapperIndex                uint
-	SwapStatus                  types.SwapStatus
-	Nonce                       uint64
-	StateSigs                   map[uint]state.Signature
-	ProcessedSwapsInSwapChannel []types.Destination
+	Status       protocols.ObjectiveStatus
+	C            types.Destination
+	Swap         types.Destination
+	SwapperIndex uint
+	SwapStatus   types.SwapStatus
+	Nonce        uint64
+	StateSigs    map[uint]state.Signature
 }
 
 func (o Objective) MarshalJSON() ([]byte, error) {
-	processedSwapsInSwapChannel := o.C.Swaps.Values()
-	swaps := make([]types.Destination, 0)
-	for _, s := range processedSwapsInSwapChannel {
-		swaps = append(swaps, s.Id)
-	}
-
 	jsonSO := jsonObjective{
-		Status:                      o.Status,
-		C:                           o.C.Id,
-		Swap:                        o.Swap,
-		SwapStatus:                  o.SwapStatus,
-		SwapperIndex:                o.SwapperIndex,
-		StateSigs:                   o.StateSigs,
-		ProcessedSwapsInSwapChannel: swaps,
+		Status:       o.Status,
+		C:            o.C.Id,
+		Swap:         o.Swap.Id,
+		SwapStatus:   o.SwapStatus,
+		SwapperIndex: o.SwapperIndex,
+		StateSigs:    o.StateSigs,
 	}
 	return json.Marshal(jsonSO)
 }
@@ -446,20 +435,13 @@ func (o *Objective) UnmarshalJSON(data []byte) error {
 	o.Status = jsonSo.Status
 	o.SwapperIndex = jsonSo.SwapperIndex
 	o.SwapStatus = jsonSo.SwapStatus
-	o.Swap = jsonSo.Swap
+	o.Swap = channel.Swap{}
+	o.Swap.Id = jsonSo.Swap
 	o.StateSigs = jsonSo.StateSigs
 
 	o.C = &channel.SwapChannel{}
 	o.C.Id = jsonSo.C
-	swaps := queue.NewFixedQueue[channel.Swap](channel.MAX_SWAP_STORAGE_LIMIT)
-	for _, sId := range jsonSo.ProcessedSwapsInSwapChannel {
-		swap := channel.Swap{
-			Id: sId,
-		}
 
-		swaps.Enqueue(swap)
-	}
-	o.C.Swaps = *swaps
 	return nil
 }
 

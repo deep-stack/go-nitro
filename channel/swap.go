@@ -1,6 +1,7 @@
 package channel
 
 import (
+	"encoding/json"
 	"errors"
 	"fmt"
 	"math/big"
@@ -156,6 +157,41 @@ func (s Swap) RecoverSigner(sig state.Signature) (types.Address, error) {
 		return types.Address{}, error
 	}
 	return nc.RecoverEthereumMessageSigner(hash[:], sig)
+}
+
+type JsonSwap struct {
+	Id        types.Destination
+	ChannelId types.Destination
+	Exchange  Exchange
+	Sigs      map[uint]state.Signature // keyed by participant index in swap channel
+	Nonce     uint64
+}
+
+func (s *Swap) MarshalJSON() ([]byte, error) {
+	jsonSwap := JsonSwap{
+		Id:        s.Id,
+		ChannelId: s.ChannelId,
+		Exchange:  s.Exchange,
+		Sigs:      s.Sigs,
+		Nonce:     s.Nonce,
+	}
+	return json.Marshal(jsonSwap)
+}
+
+func (s *Swap) UnmarshalJSON(data []byte) error {
+	var jsonSwap JsonSwap
+	err := json.Unmarshal(data, &jsonSwap)
+	if err != nil {
+		return fmt.Errorf("error unmarshaling swap: %w", err)
+	}
+
+	s.Id = jsonSwap.Id
+	s.ChannelId = jsonSwap.ChannelId
+	s.Exchange = jsonSwap.Exchange
+	s.Sigs = jsonSwap.Sigs
+	s.Nonce = jsonSwap.Nonce
+
+	return nil
 }
 
 type Exchange struct {

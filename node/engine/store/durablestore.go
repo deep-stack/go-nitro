@@ -12,7 +12,6 @@ import (
 	"github.com/statechannels/go-nitro/channel"
 	"github.com/statechannels/go-nitro/channel/consensus_channel"
 	"github.com/statechannels/go-nitro/crypto"
-	"github.com/statechannels/go-nitro/internal/queue"
 	"github.com/statechannels/go-nitro/payments"
 	"github.com/statechannels/go-nitro/protocols"
 	"github.com/statechannels/go-nitro/protocols/bridgeddefund"
@@ -223,13 +222,10 @@ func (ds *DurableStore) SetObjective(obj protocols.Objective) error {
 				return fmt.Errorf("error setting virtual channel %s from objective %s: %w", ch.Id, obj.Id(), err)
 			}
 
-			// TODO: Remove old swaps from store
-			swaps := ch.Swaps.Values()
-			for _, swap := range swaps {
-				err := ds.SetSwap(swap)
-				if err != nil {
-					return fmt.Errorf("error storing swap: %w", err)
-				}
+		case *channel.Swap:
+			err := ds.SetSwap(*ch)
+			if err != nil {
+				return fmt.Errorf("error setting swap %s from objective %s: %w", ch.Id, obj.Id(), err)
 			}
 
 		case *channel.Channel:
@@ -672,19 +668,13 @@ func (ds *DurableStore) populateChannelData(obj protocols.Objective) error {
 			return fmt.Errorf("error retrieving channel data for objective %s: %w", id, err)
 		}
 
-		swaps := queue.NewFixedQueue[channel.Swap](channel.MAX_SWAP_STORAGE_LIMIT)
-
-		processedSwaps := o.C.Swaps.Values()
-		for _, swap := range processedSwaps {
-			swap, err := ds.GetSwapById(swap.Id)
-			if err != nil {
-				return fmt.Errorf("error getting swap by nonce: %w", err)
-			}
-
-			swaps.Enqueue(swap)
+		swap, err := ds.GetSwapById(o.Swap.Id)
+		if err != nil {
+			return fmt.Errorf("error getting swap by Id: %w", err)
 		}
 
-		o.C = &channel.SwapChannel{Channel: ch, Swaps: *swaps}
+		o.Swap = swap
+		o.C = &channel.SwapChannel{Channel: ch}
 		return nil
 	case *swapfund.Objective:
 		v, err := ds.getChannelById(o.S.Id)
@@ -857,7 +847,7 @@ func (ds *DurableStore) DestroyObjective(id protocols.ObjectiveId) error {
 }
 
 func (ds *DurableStore) GetPendingSwapByChannelId(id types.Destination) (*channel.Swap, error) {
-	var pendingSwap *channel.Swap
+	var pendingSwapId types.Destination
 	err := ds.objectives.View(func(tx *buntdb.Tx) error {
 		err := tx.Ascend("", func(key, objJSON string) bool {
 			objId := protocols.ObjectiveId(key)
@@ -872,7 +862,7 @@ func (ds *DurableStore) GetPendingSwapByChannelId(id types.Destination) (*channe
 			}
 
 			if obj.C.Id == id && obj.Status == protocols.Approved {
-				pendingSwap = &obj.Swap
+				pendingSwapId = obj.Swap.Id
 				return false // objective found, stop iteration
 			}
 
@@ -884,5 +874,10 @@ func (ds *DurableStore) GetPendingSwapByChannelId(id types.Destination) (*channe
 		return nil, err
 	}
 
-	return pendingSwap, nil
+	swap, err := ds.GetSwapById(pendingSwapId)
+	if err == nil {
+		return &swap, nil
+	}
+
+	return nil, nil
 }

@@ -9,7 +9,6 @@ import (
 	"github.com/statechannels/go-nitro/channel"
 	"github.com/statechannels/go-nitro/channel/consensus_channel"
 	"github.com/statechannels/go-nitro/crypto"
-	"github.com/statechannels/go-nitro/internal/queue"
 	"github.com/statechannels/go-nitro/internal/safesync"
 	"github.com/statechannels/go-nitro/payments"
 	"github.com/statechannels/go-nitro/protocols"
@@ -143,14 +142,11 @@ func (ms *MemStore) SetObjective(obj protocols.Objective) error {
 			if err != nil {
 				return fmt.Errorf("error setting virtual channel %s from objective %s: %w", ch.Id, obj.Id(), err)
 			}
-			// TODO: Remove old swaps from store
-			// Get swap by channel id and filter and add the latest swap
-			swaps := ch.Swaps.Values()
-			for _, swap := range swaps {
-				err := ms.SetSwap(swap)
-				if err != nil {
-					return fmt.Errorf("error storing swap: %w", err)
-				}
+
+		case *channel.Swap:
+			err := ms.SetSwap(*ch)
+			if err != nil {
+				return fmt.Errorf("error setting swap %s from objective %s: %w", ch.Id, obj.Id(), err)
 			}
 
 		case *channel.Channel:
@@ -323,7 +319,7 @@ func (ms *MemStore) GetChannelsByAppDefinition(appDef types.Address) ([]*channel
 }
 
 func (ms *MemStore) GetPendingSwapByChannelId(id types.Destination) (*channel.Swap, error) {
-	var pendingSwap *channel.Swap
+	var pendingSwapId types.Destination
 	ms.objectives.Range(func(key string, objJSON []byte) bool {
 		objId := protocols.ObjectiveId(key)
 
@@ -338,14 +334,19 @@ func (ms *MemStore) GetPendingSwapByChannelId(id types.Destination) (*channel.Sw
 		}
 
 		if obj.C.Id == id && obj.Status == protocols.Approved {
-			pendingSwap = &obj.Swap
+			pendingSwapId = obj.Swap.Id
 			return false // objective found, stop iteration
 		}
 
 		return true // objective not found: continue looking
 	})
 
-	return pendingSwap, nil
+	swap, _ := ms.GetSwapById(pendingSwapId)
+	if !swap.Id.IsZero() {
+		return &swap, nil
+	}
+
+	return nil, nil
 }
 
 // GetChannelsByParticipant returns any channels that include the given participant
@@ -563,19 +564,14 @@ func (ms *MemStore) populateChannelData(obj protocols.Objective) error {
 		if err != nil {
 			return fmt.Errorf("error retrieving channel data for objective %s: %w", id, err)
 		}
-		processedSwaps := o.C.Swaps.Values()
-		swaps := queue.NewFixedQueue[channel.Swap](channel.MAX_SWAP_STORAGE_LIMIT)
 
-		for _, swap := range processedSwaps {
-			swap, err := ms.GetSwapById(swap.Id)
-			if err != nil {
-				return fmt.Errorf("error getting swap by id: %w", err)
-			}
-
-			swaps.Enqueue(swap)
+		swap, err := ms.GetSwapById(o.Swap.Id)
+		if err != nil {
+			return fmt.Errorf("error getting swap by id: %w", err)
 		}
 
-		o.C = &channel.SwapChannel{Channel: ch, Swaps: *swaps}
+		o.Swap = swap
+		o.C = &channel.SwapChannel{Channel: ch}
 		return nil
 
 	case *swapfund.Objective:
