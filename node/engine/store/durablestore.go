@@ -972,10 +972,13 @@ func (ds *DurableStore) SetChannelToSwaps(swap channel.Swap) error {
 		return fmt.Errorf("error marshalling swap queue %w", err)
 	}
 
-	ds.channelToSwaps.Update(func(tx *buntdb.Tx) error {
+	err = ds.channelToSwaps.Update(func(tx *buntdb.Tx) error {
 		_, _, err = tx.Set(swap.ChannelId.String(), string(swapsJson), nil)
 		return err
 	})
+	if err != nil {
+		return err
+	}
 
 	return nil
 }
