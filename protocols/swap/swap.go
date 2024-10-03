@@ -146,6 +146,7 @@ func (o *Objective) Approve() protocols.Objective {
 func (o *Objective) Reject() (protocols.Objective, protocols.SideEffects) {
 	updated := o.clone()
 	updated.Status = protocols.Rejected
+	updated.SwapStatus = types.Rejected
 
 	peer := o.C.Participants[1-o.C.MyIndex]
 	messages := protocols.CreateRejectionNoticeMessage(o.Id(), peer)

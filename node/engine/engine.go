@@ -330,7 +330,7 @@ func (e *Engine) handleMessage(message protocols.Message) (EngineEvent, error) {
 			return EngineEvent{}, err
 		}
 
-		// Handle swap confirmation (accept / reject) on swapper node
+		// Handle swap confirmation (accept) on swapper node
 		if payload.Type == swap.SwapPayloadType {
 			var unmarshalledpayload swap.SwapPayload
 			err := json.Unmarshal(payload.PayloadData, &unmarshalledpayload)
