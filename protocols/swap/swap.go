@@ -32,8 +32,9 @@ const ObjectivePrefix = "Swap-"
 var ErrInvalidSwap error = errors.New("invalid swap")
 
 type SwapPayload struct {
-	Swap      channel.Swap
-	StateSigs map[uint]state.Signature
+	Swap       channel.Swap
+	StateSigs  map[uint]state.Signature
+	SwapStatus types.SwapStatus
 }
 
 // Objective is a cache of data computed by reading from the store. It stores (potentially) infinite data.
@@ -262,8 +263,9 @@ func (o *Objective) Crank(secretKey *[]byte) (protocols.Objective, protocols.Sid
 		messages, err := protocols.CreateObjectivePayloadMessage(
 			updated.Id(),
 			SwapPayload{
-				Swap:      updated.Swap,
-				StateSigs: updated.StateSigs,
+				Swap:       updated.Swap,
+				StateSigs:  updated.StateSigs,
+				SwapStatus: updated.SwapStatus,
 			},
 			SwapPayloadType,
 			o.C.Participants[1-o.C.MyIndex],

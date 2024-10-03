@@ -219,7 +219,7 @@ func (ds *DurableStore) SetObjective(obj protocols.Objective) error {
 		case *channel.SwapChannel:
 			err := ds.SetChannel(&ch.Channel)
 			if err != nil {
-				return fmt.Errorf("error setting virtual channel %s from objective %s: %w", ch.Id, obj.Id(), err)
+				return fmt.Errorf("error setting swap channel %s from objective %s: %w", ch.Id, obj.Id(), err)
 			}
 
 		case *channel.Swap:
@@ -861,7 +861,7 @@ func (ds *DurableStore) GetPendingSwapByChannelId(id types.Destination) (*channe
 				return true // objective not found, continue looking
 			}
 
-			if obj.C.Id == id && obj.Status == protocols.Approved {
+			if obj.C.Id == id && obj.SwapStatus == types.PendingConfirmation {
 				pendingSwapId = obj.Swap.Id
 				return false // objective found, stop iteration
 			}

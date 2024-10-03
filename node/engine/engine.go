@@ -330,6 +330,22 @@ func (e *Engine) handleMessage(message protocols.Message) (EngineEvent, error) {
 			return EngineEvent{}, err
 		}
 
+		// Handle swap confirmation (accept / reject) on swapper node
+		if payload.Type == swap.SwapPayloadType {
+			var unmarshalledpayload swap.SwapPayload
+			err := json.Unmarshal(payload.PayloadData, &unmarshalledpayload)
+			if err != nil {
+				return EngineEvent{}, err
+			}
+
+			swapObjective, ok := objective.(*swap.Objective)
+
+			if ok {
+				swapObjective.SwapStatus = unmarshalledpayload.SwapStatus
+				objective = swapObjective
+			}
+		}
+
 		if objective.GetStatus() == protocols.Unapproved {
 			e.logger.Info("Policymaker for objective", "policy-maker", e.policymaker, logging.WithObjectiveIdAttribute(objective.Id()))
 			if e.policymaker.ShouldApprove(objective) {
