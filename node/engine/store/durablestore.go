@@ -242,10 +242,37 @@ func (ds *DurableStore) SetObjective(obj protocols.Objective) error {
 			}
 
 			so, isSwapObj := obj.(*swap.Objective)
-			if isSwapObj && so.GetStatus() == protocols.Completed && so.SwapStatus == types.Accepted {
-				err := ds.SetChannelToSwaps(*ch)
-				if err != nil {
-					return fmt.Errorf("error setting channel to swaps %s from objective %s: %w", ch.Id, obj.Id(), err)
+			if isSwapObj {
+				if so.GetStatus() == protocols.Completed && so.SwapStatus == types.Accepted {
+					// Add swap to channelToSwaps map if successful
+					swaps, err := ds.GetSwapsByChannelId(ch.ChannelId)
+					if err != nil {
+						return fmt.Errorf("error in getting swap by Id: %w", err)
+					}
+
+					// Remove old swap
+					if len(swaps) >= channel.MAX_SWAP_STORAGE_LIMIT {
+						removeSwap := swaps[0]
+
+						err = ds.DestroySwapById(removeSwap.Id)
+						if err != nil {
+							return fmt.Errorf("error in destroying old swap %s: %w", removeSwap.Id, err)
+						}
+					}
+
+					// Add new swap
+					err = ds.SetChannelToSwaps(*ch)
+					if err != nil {
+						return fmt.Errorf("error setting channel to swaps %s from objective %s: %w", ch.Id, obj.Id(), err)
+					}
+				}
+
+				if so.GetStatus() == protocols.Rejected {
+					// Delete the rejected swap
+					err = ds.DestroySwapById(so.Swap.Id)
+					if err != nil {
+						return fmt.Errorf("error in destroying old swap %s: %w", so.Swap.Id, err)
+					}
 				}
 			}
 
@@ -958,20 +985,16 @@ func (ds *DurableStore) SetChannelToSwaps(swap channel.Swap) error {
 		return err
 	}
 
-	removeSwap, ok := swapQueue.PeekFirst()
-	if ok {
-		err := ds.DestroySwapById(removeSwap.Id)
-		if err != nil {
-			return fmt.Errorf("error in destroying old swap %s", removeSwap.Id)
-		}
-	}
-
 	swapQueue.Enqueue(swap)
+
+	// fmt.Println("SWAP QUEUE AFTER", swapQueue.Values())
+
 	swapsJson, err := swapQueue.MarshalJSON()
 	if err != nil {
 		return fmt.Errorf("error marshalling swap queue %w", err)
 	}
 
+	fmt.Println("SWAP QUEUE WHILE SAVING", string(swapsJson))
 	err = ds.channelToSwaps.Update(func(tx *buntdb.Tx) error {
 		_, _, err = tx.Set(swap.ChannelId.String(), string(swapsJson), nil)
 		return err

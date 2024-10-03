@@ -141,14 +141,6 @@ func (ms *MemStore) SetChannelToSwaps(swap channel.Swap) error {
 		}
 	}
 
-	removeSwap, ok := swapQueue.PeekFirst()
-	if ok {
-		err := ms.DestroySwapById(removeSwap.Id)
-		if err != nil {
-			return fmt.Errorf("error in destroying old swap %s", removeSwap.Id)
-		}
-	}
-
 	swapQueue.Enqueue(swap)
 	swapsJson, err := swapQueue.MarshalJSON()
 	if err != nil {
@@ -211,11 +203,36 @@ func (ms *MemStore) SetObjective(obj protocols.Objective) error {
 			}
 
 			so, isSwapObj := obj.(*swap.Objective)
-			if isSwapObj && so.GetStatus() == protocols.Completed && so.SwapStatus == types.Accepted {
+			if isSwapObj {
+				if so.GetStatus() == protocols.Completed && so.SwapStatus == types.Accepted {
+					// Add swap to channelToSwaps map if successful
+					swaps, err := ms.GetSwapsByChannelId(ch.ChannelId)
+					if err != nil {
+						return fmt.Errorf("error in getting swap by Id: %w", err)
+					}
 
-				err := ms.SetChannelToSwaps(*ch)
-				if err != nil {
-					return fmt.Errorf("error setting channel to swaps %s from objective %s: %w", ch.Id, obj.Id(), err)
+					// Remove old swap
+					if len(swaps) >= channel.MAX_SWAP_STORAGE_LIMIT {
+						removeSwap := swaps[0]
+						err = ms.DestroySwapById(removeSwap.Id)
+						if err != nil {
+							return fmt.Errorf("error in destroying old swap %s: %w", removeSwap.Id, err)
+						}
+					}
+
+					// Add new swap
+					err = ms.SetChannelToSwaps(*ch)
+					if err != nil {
+						return fmt.Errorf("error setting channel to swaps %s from objective %s: %w", ch.Id, obj.Id(), err)
+					}
+				}
+
+				if so.GetStatus() == protocols.Rejected {
+					// Delete the rejected swap
+					err = ms.DestroySwapById(so.Swap.Id)
+					if err != nil {
+						return fmt.Errorf("error in destroying old swap %s: %w", so.Swap.Id, err)
+					}
 				}
 			}
 
