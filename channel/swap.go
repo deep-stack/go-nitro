@@ -20,8 +20,6 @@ const MAX_SWAP_STORAGE_LIMIT = 5
 
 type SwapChannel struct {
 	Channel
-
-	Swaps queue.FixedQueue[Swap]
 }
 
 func NewSwapChannel(s state.State, myIndex uint) (*SwapChannel, error) {
@@ -37,7 +35,7 @@ func NewSwapChannel(s state.State, myIndex uint) (*SwapChannel, error) {
 
 	c, err := New(s, myIndex, types.Swap)
 
-	return &SwapChannel{*c, *queue.NewFixedQueue[Swap](MAX_SWAP_STORAGE_LIMIT)}, err
+	return &SwapChannel{*c}, err
 }
 
 // Clone returns a pointer to a new, deep copy of the receiver, or a nil pointer if the receiver is nil.
@@ -46,8 +44,7 @@ func (v *SwapChannel) Clone() *SwapChannel {
 		return nil
 	}
 
-	// TODO: Add clone to swap queue
-	w := SwapChannel{*v.Channel.Clone(), v.Swaps}
+	w := SwapChannel{*v.Channel.Clone()}
 	return &w
 }
 
@@ -205,6 +202,7 @@ func (ex Exchange) Equal(target Exchange) bool {
 	return ex.TokenIn == target.TokenIn && ex.TokenOut == target.TokenOut && ex.AmountIn.Cmp(target.AmountIn) == 0 && ex.AmountOut.Cmp(target.AmountOut) == 0
 }
 
+// TODO: Store swap Id in fixed queue instead of swap
 type SwapsQueue struct {
 	queue.FixedQueue[Swap]
 }

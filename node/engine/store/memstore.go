@@ -101,6 +101,11 @@ func (ms *MemStore) SetSwap(swap channel.Swap) error {
 	return nil
 }
 
+func (ms *MemStore) DestroySwapById(id types.Destination) error {
+	ms.swaps.Delete(id.String())
+	return nil
+}
+
 func (ms *MemStore) GetSwapsByChannelId(id types.Destination) ([]channel.Swap, error) {
 	swapQueue := channel.NewSwapsQueue()
 
@@ -133,6 +138,14 @@ func (ms *MemStore) SetChannelToSwaps(swap channel.Swap) error {
 		err := swapQueue.UnmarshalJSON(chJson)
 		if err != nil {
 			return fmt.Errorf("error unmarshalling swap queue %w", err)
+		}
+	}
+
+	removeSwap, ok := swapQueue.PeekFirst()
+	if ok {
+		err := ms.DestroySwapById(removeSwap.Id)
+		if err != nil {
+			return fmt.Errorf("error in destroying old swap %s", removeSwap.Id)
 		}
 	}
 
@@ -195,6 +208,15 @@ func (ms *MemStore) SetObjective(obj protocols.Objective) error {
 			err := ms.SetSwap(*ch)
 			if err != nil {
 				return fmt.Errorf("error setting swap %s from objective %s: %w", ch.Id, obj.Id(), err)
+			}
+
+			so, isSwapObj := obj.(*swap.Objective)
+			if isSwapObj && so.GetStatus() == protocols.Completed && so.SwapStatus == types.Accepted {
+
+				err := ms.SetChannelToSwaps(*ch)
+				if err != nil {
+					return fmt.Errorf("error setting channel to swaps %s from objective %s: %w", ch.Id, obj.Id(), err)
+				}
 			}
 
 		case *channel.Channel:

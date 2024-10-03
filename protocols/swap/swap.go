@@ -10,7 +10,6 @@ import (
 	"github.com/ethereum/go-ethereum/common"
 	"github.com/statechannels/go-nitro/channel"
 	"github.com/statechannels/go-nitro/channel/state"
-	"github.com/statechannels/go-nitro/internal/queue"
 	"github.com/statechannels/go-nitro/protocols"
 	"github.com/statechannels/go-nitro/types"
 )
@@ -59,7 +58,6 @@ func NewObjective(request ObjectiveRequest, preApprove bool, isSwapper bool, get
 
 	obj.C = &channel.SwapChannel{
 		Channel: *swapChannel,
-		Swaps:   *queue.NewFixedQueue[channel.Swap](channel.MAX_SWAP_STORAGE_LIMIT),
 	}
 
 	if preApprove {

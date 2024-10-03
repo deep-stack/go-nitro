@@ -27,3 +27,12 @@ func (q *FixedQueue[T]) Enqueue(val T) {
 func (q *FixedQueue[T]) Values() []T {
 	return q.data
 }
+
+// PeekFirst returns the oldest element in the queue without removing it.
+func (q *FixedQueue[T]) PeekFirst() (T, bool) {
+	if len(q.data) == 0 {
+		var zero T
+		return zero, false // Return zero value and false if the queue is empty
+	}
+	return q.data[0], true // Return the first element and true
+}
