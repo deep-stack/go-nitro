@@ -337,7 +337,7 @@ func (ms *MemStore) GetPendingSwapByChannelId(id types.Destination) (*channel.Sw
 			return true // objective not found, continue looking
 		}
 
-		if obj.C.Id == id && obj.SwapStatus == types.PendingConfirmation {
+		if obj.C.Id == id && obj.Status == protocols.Approved {
 			pendingSwap = &obj.Swap
 			return false // objective found, stop iteration
 		}

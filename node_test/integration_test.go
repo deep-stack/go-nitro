@@ -106,7 +106,7 @@ func TestSwapFund(t *testing.T) {
 	// Create ledger channel
 	ledgerResponse, err := nodeA.CreateLedgerChannel(*nodeB.Address, uint32(testCase.ChallengeDuration), multiAssetOutcome)
 	if err != nil {
-		t.Error("error creating ledger channel", err)
+		t.Fatal("error creating ledger channel", err)
 	}
 
 	t.Log("Waiting for direct-fund objective to complete...")
@@ -176,11 +176,125 @@ func TestSwapFund(t *testing.T) {
 
 	checkSwapChannel(t, swapChannelresponse.ChannelId, multiassetSwapChannelOutcome, query.Open, nodeA, nodeB)
 
+	// Initiate swap from Bob
+	response1, err := nodeB.SwapAssets(swapChannelresponse.ChannelId, common.Address{}, infra.anvilChain.ContractAddresses.TokenAddresses[0], big.NewInt(100), big.NewInt(200))
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	// Wait for objective to wait for confirmation
+	time.Sleep(3 * time.Second)
+
+	pendingSwap1, err := nodeB.GetPendingSwapByChannelId(response1.ChannelId)
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	// Accept the swap
+	err = nodeA.ConfirmSwap(pendingSwap1.SwapId(), types.Accepted)
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	<-nodeB.ObjectiveCompleteChan(response1.Id)
+
+	// Check swap channel after accepting swap
+	modifiedOutcome1, err := modifyOutcomeWithSwap(multiassetSwapChannelOutcome, pendingSwap1, 1)
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	checkSwapChannel(t, swapChannelresponse.ChannelId, modifiedOutcome1, query.Open, nodeA, nodeB)
+
+	// Initiate swap from Alice
+	response2, err := nodeA.SwapAssets(swapChannelresponse.ChannelId, common.Address{}, infra.anvilChain.ContractAddresses.TokenAddresses[0], big.NewInt(100), big.NewInt(200))
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	// Wait for objective to wait for confirmation
+	time.Sleep(3 * time.Second)
+
+	pendingSwap2, err := nodeB.GetPendingSwapByChannelId(response2.ChannelId)
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	// Accept the swap
+	err = nodeB.ConfirmSwap(pendingSwap2.SwapId(), types.Accepted)
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	<-nodeA.ObjectiveCompleteChan(response2.Id)
+
+	// Check swap channel after accepting swap
+	modifiedOutcome2, err := modifyOutcomeWithSwap(modifiedOutcome1, pendingSwap2, 0)
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	checkSwapChannel(t, swapChannelresponse.ChannelId, modifiedOutcome2, query.Open, nodeA, nodeB)
+
+	// Initiate another from Alice
+	response3, err := nodeA.SwapAssets(swapChannelresponse.ChannelId, common.Address{}, infra.anvilChain.ContractAddresses.TokenAddresses[0], big.NewInt(100), big.NewInt(200))
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	// Wait for objective to wait for confirmation
+	time.Sleep(3 * time.Second)
+
+	pendingSwap3, err := nodeB.GetPendingSwapByChannelId(response3.ChannelId)
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	// Accept the swap
+	err = nodeB.ConfirmSwap(pendingSwap3.SwapId(), types.Accepted)
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	<-nodeA.ObjectiveCompleteChan(response3.Id)
+
+	// Check swap channel after accepting swap
+	modifiedOutcome3, err := modifyOutcomeWithSwap(modifiedOutcome2, pendingSwap3, 0)
+	if err != nil {
+		t.Fatal(err.Error())
+	}
+	checkSwapChannel(t, swapChannelresponse.ChannelId, modifiedOutcome3, query.Open, nodeA, nodeB)
+
+	// Initiate swap from Alice
+	response4, err := nodeA.SwapAssets(swapChannelresponse.ChannelId, common.Address{}, infra.anvilChain.ContractAddresses.TokenAddresses[0], big.NewInt(100), big.NewInt(200))
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	// Wait for objective to wait for confirmation
+	time.Sleep(3 * time.Second)
+
+	pendingSwap4, err := nodeB.GetPendingSwapByChannelId(response4.ChannelId)
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	// Bob Rejects the swap
+	err = nodeB.ConfirmSwap(pendingSwap4.SwapId(), types.Rejected)
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	<-nodeA.ObjectiveCompleteChan(response4.Id)
+
+	checkSwapChannel(t, swapChannelresponse.ChannelId, modifiedOutcome3, query.Open, nodeA, nodeB)
+
 	// Close crated swap channel
 	res, err := nodeA.CloseSwapChannel(swapChannelresponse.ChannelId)
 	if err != nil {
-		t.Error(err.Error())
+		t.Fatal(err)
 	}
+
 	t.Log("Started swap-defund objective", "objectiveId", res)
 
 	// Wait for swap-defund objectives to complete
@@ -193,7 +307,7 @@ func TestSwapFund(t *testing.T) {
 
 	currentLedgerState, err := nodeA.GetSignedState(ledgerResponse.ChannelId)
 	if err != nil {
-		t.Error(err.Error())
+		t.Fatal(err)
 	}
 
 	fmt.Printf("New state %+v", currentLedgerState.State())

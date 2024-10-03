@@ -12,6 +12,7 @@ import (
 	"github.com/ethereum/go-ethereum/common"
 	"github.com/ethereum/go-ethereum/common/hexutil"
 	"github.com/google/go-cmp/cmp"
+	"github.com/statechannels/go-nitro/channel"
 	"github.com/statechannels/go-nitro/channel/state/outcome"
 	"github.com/statechannels/go-nitro/crypto"
 	"github.com/statechannels/go-nitro/internal/logging"
@@ -462,15 +463,15 @@ func createSwapChInfo(id types.Destination, outcome outcome.Exit, status query.C
 	}
 }
 
-func checkSwapChannel(t *testing.T, swapId types.Destination, o outcome.Exit, status query.ChannelStatus, clients ...node.Node) {
+func checkSwapChannel(t *testing.T, swapChannelId types.Destination, o outcome.Exit, status query.ChannelStatus, clients ...node.Node) {
 	for _, c := range clients {
-		expected := createSwapChInfo(swapId, o, status, *c.Address)
+		expected := createSwapChInfo(swapChannelId, o, status, *c.Address)
 		marshalledExpected, err := json.Marshal(expected)
 		if err != nil {
 			t.Fatal(err)
 		}
 
-		swap, err := c.GetSwapChannel(swapId)
+		swap, err := c.GetSwapChannel(swapChannelId)
 		if err != nil {
 			t.Fatal(err)
 		}
@@ -516,4 +517,23 @@ func waitForEvent(t *testing.T, eventChannel <-chan chainservice.Event, eventTyp
 		}
 	}
 	return nil
+}
+
+func modifyOutcomeWithSwap(initialOutcome outcome.Exit, acceptedSwap *channel.Swap, swapperIndex int) (outcome.Exit, error) {
+	modifiedOutcome := initialOutcome.Clone()
+	for _, assetOutcome := range modifiedOutcome {
+		swapperAllocation := assetOutcome.Allocations[swapperIndex]
+		swappeeAllocation := assetOutcome.Allocations[1-swapperIndex]
+
+		if assetOutcome.Asset == acceptedSwap.Exchange.TokenIn {
+			swapperAllocation.Amount.Sub(swapperAllocation.Amount, acceptedSwap.Exchange.AmountIn)
+			swappeeAllocation.Amount.Add(swappeeAllocation.Amount, acceptedSwap.Exchange.AmountIn)
+		}
+		if assetOutcome.Asset == acceptedSwap.Exchange.TokenOut {
+			swapperAllocation.Amount.Add(swapperAllocation.Amount, acceptedSwap.Exchange.AmountOut)
+			swappeeAllocation.Amount.Sub(swappeeAllocation.Amount, acceptedSwap.Exchange.AmountOut)
+		}
+	}
+
+	return modifiedOutcome, nil
 }
