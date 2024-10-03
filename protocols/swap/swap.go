@@ -196,6 +196,10 @@ func (o *Objective) Update(raw protocols.ObjectivePayload) (protocols.Objective,
 	// Ensure the incoming state sig is valid
 	counterPartyStateSig := swapPayload.StateSigs[1-updated.C.MyIndex]
 	state, err := updated.GetUpdatedSwapState()
+	if err != nil {
+		return &updated, err
+	}
+
 	counterPartyAddressFromStateSig, err := state.RecoverSigner(counterPartyStateSig)
 	if err != nil {
 		return &updated, err

@@ -12,6 +12,7 @@ import (
 	"github.com/statechannels/go-nitro/channel"
 	"github.com/statechannels/go-nitro/channel/consensus_channel"
 	"github.com/statechannels/go-nitro/crypto"
+	"github.com/statechannels/go-nitro/internal/queue"
 	"github.com/statechannels/go-nitro/payments"
 	"github.com/statechannels/go-nitro/protocols"
 	"github.com/statechannels/go-nitro/protocols/bridgeddefund"
@@ -880,4 +881,14 @@ func (ds *DurableStore) GetPendingSwapByChannelId(id types.Destination) (*channe
 	}
 
 	return nil, nil
+}
+
+func (ds *DurableStore) GetSwapsByChannelId(id types.Destination) ([]channel.Swap, error) {
+	swapQueue := queue.NewFixedQueue[channel.Swap](channel.MAX_SWAP_STORAGE_LIMIT)
+
+	return swapQueue.Values(), nil
+}
+
+func (ds *DurableStore) SetChannelToSwaps(swap channel.Swap) error {
+	return nil
 }

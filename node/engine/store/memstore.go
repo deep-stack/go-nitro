@@ -37,7 +37,9 @@ type MemStore struct {
 	channelToObjective safesync.Map[protocols.ObjectiveId]
 	vouchers           safesync.Map[[]byte]
 	swaps              safesync.Map[[]byte]
-	lastBlockSeen      blockData
+	channelToSwaps     safesync.Map[[]byte]
+
+	lastBlockSeen blockData
 
 	key     string // the signing key of the store's engine
 	address string // the (Ethereum) address associated to the signing key
@@ -55,6 +57,7 @@ func NewMemStore(key []byte) Store {
 	ms.vouchers = safesync.Map[[]byte]{}
 	ms.lastBlockSeen = blockData{}
 	ms.swaps = safesync.Map[[]byte]{}
+	ms.channelToSwaps = safesync.Map[[]byte]{}
 	return &ms
 }
 
@@ -95,6 +98,51 @@ func (ms *MemStore) SetSwap(swap channel.Swap) error {
 	}
 
 	ms.swaps.Store(swap.Id.String(), sJSON)
+	return nil
+}
+
+func (ms *MemStore) GetSwapsByChannelId(id types.Destination) ([]channel.Swap, error) {
+	swapQueue := channel.NewSwapsQueue()
+
+	chJson, ok := ms.channelToSwaps.Load(id.String())
+	if ok {
+		err := swapQueue.UnmarshalJSON(chJson)
+		if err != nil {
+			return nil, fmt.Errorf("error unmarshalling swap queue %w", err)
+		}
+	}
+
+	var swapsToReturn []channel.Swap
+	swaps := swapQueue.Values()
+	for _, swap := range swaps {
+		s, err := ms.GetSwapById(swap.Id)
+		if err != nil {
+			return nil, err
+		}
+		swapsToReturn = append(swapsToReturn, s)
+	}
+
+	return swapsToReturn, nil
+}
+
+func (ms *MemStore) SetChannelToSwaps(swap channel.Swap) error {
+	swapQueue := channel.NewSwapsQueue()
+
+	chJson, ok := ms.channelToSwaps.Load(swap.ChannelId.String())
+	if ok {
+		err := swapQueue.UnmarshalJSON(chJson)
+		if err != nil {
+			return fmt.Errorf("error unmarshalling swap queue %w", err)
+		}
+	}
+
+	swapQueue.Enqueue(swap)
+	swapsJson, err := swapQueue.MarshalJSON()
+	if err != nil {
+		return fmt.Errorf("error marshalling swap queue %w", err)
+	}
+
+	ms.channelToSwaps.Store(swap.ChannelId.String(), swapsJson)
 	return nil
 }
 

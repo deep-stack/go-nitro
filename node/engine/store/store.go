@@ -43,7 +43,8 @@ type Store interface {
 	SetLastBlockNumSeen(uint64) error
 	GetPendingSwapByChannelId(id types.Destination) (*channel.Swap, error)
 	GetSwapById(id types.Destination) (channel.Swap, error)
-
+	GetSwapsByChannelId(id types.Destination) ([]channel.Swap, error)
+	SetChannelToSwaps(swap channel.Swap) error
 	ConsensusChannelStore
 	payments.VoucherStore
 	io.Closer

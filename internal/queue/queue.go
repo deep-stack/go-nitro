@@ -27,5 +27,3 @@ func (q *FixedQueue[T]) Enqueue(val T) {
 func (q *FixedQueue[T]) Values() []T {
 	return q.data
 }
-
-// TODO: Add clone method

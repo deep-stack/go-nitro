@@ -204,3 +204,38 @@ type Exchange struct {
 func (ex Exchange) Equal(target Exchange) bool {
 	return ex.TokenIn == target.TokenIn && ex.TokenOut == target.TokenOut && ex.AmountIn.Cmp(target.AmountIn) == 0 && ex.AmountOut.Cmp(target.AmountOut) == 0
 }
+
+type SwapsQueue struct {
+	queue.FixedQueue[Swap]
+}
+
+func NewSwapsQueue() *SwapsQueue {
+	fixedQueue := queue.NewFixedQueue[Swap](MAX_SWAP_STORAGE_LIMIT)
+	return &SwapsQueue{
+		*fixedQueue,
+	}
+}
+
+func (q *SwapsQueue) MarshalJSON() ([]byte, error) {
+	var swapsIds []types.Destination
+	swaps := q.Values()
+	for _, swap := range swaps {
+		swapsIds = append(swapsIds, swap.Id)
+	}
+	return json.Marshal(swapsIds)
+}
+
+func (q *SwapsQueue) UnmarshalJSON(data []byte) error {
+	var swapsIds []types.Destination
+	err := json.Unmarshal(data, &swapsIds)
+	if err != nil {
+		return err
+	}
+
+	for _, sId := range swapsIds {
+		swap := Swap{Id: sId}
+		q.Enqueue(swap)
+	}
+
+	return nil
+}
