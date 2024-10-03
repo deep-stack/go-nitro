@@ -141,7 +141,7 @@ func (ds *DurableStore) GetChannelSecretKey() *[]byte {
 	return &val
 }
 
-func (ds *DurableStore) GetSwapById(id types.Destination) (channel.Swap, error) {
+func (ds *DurableStore) GetSwapById(id types.Destination) (payments.Swap, error) {
 	var sJSON string
 	err := ds.swaps.View(func(tx *buntdb.Tx) error {
 		var err error
@@ -150,18 +150,18 @@ func (ds *DurableStore) GetSwapById(id types.Destination) (channel.Swap, error) 
 	})
 
 	if errors.Is(err, buntdb.ErrNotFound) {
-		return channel.Swap{}, ErrNoSuchSwap
+		return payments.Swap{}, ErrNoSuchSwap
 	}
-	var swap channel.Swap
+	var swap payments.Swap
 	err = json.Unmarshal([]byte(sJSON), &swap)
 	if err != nil {
-		return channel.Swap{}, fmt.Errorf("error unmarshaling swap %s", id)
+		return payments.Swap{}, fmt.Errorf("error unmarshaling swap %s", id)
 	}
 
 	return swap, nil
 }
 
-func (ds *DurableStore) SetSwap(swap channel.Swap) error {
+func (ds *DurableStore) SetSwap(swap payments.Swap) error {
 	sJSON, err := json.Marshal(swap)
 	if err != nil {
 		return err
@@ -235,7 +235,7 @@ func (ds *DurableStore) SetObjective(obj protocols.Objective) error {
 				return fmt.Errorf("error setting swap channel %s from objective %s: %w", ch.Id, obj.Id(), err)
 			}
 
-		case *channel.Swap:
+		case *payments.Swap:
 			err := ds.SetSwap(*ch)
 			if err != nil {
 				return fmt.Errorf("error setting swap %s from objective %s: %w", ch.Id, obj.Id(), err)
@@ -867,7 +867,7 @@ func (ds *DurableStore) DestroyObjective(id protocols.ObjectiveId) error {
 	})
 }
 
-func (ds *DurableStore) GetPendingSwapByChannelId(id types.Destination) (*channel.Swap, error) {
+func (ds *DurableStore) GetPendingSwapByChannelId(id types.Destination) (*payments.Swap, error) {
 	var pendingSwapId types.Destination
 	err := ds.objectives.View(func(tx *buntdb.Tx) error {
 		err := tx.Ascend("", func(key, objJSON string) bool {
@@ -903,8 +903,8 @@ func (ds *DurableStore) GetPendingSwapByChannelId(id types.Destination) (*channe
 	return nil, nil
 }
 
-func (ds *DurableStore) GetSwapsByChannelId(id types.Destination) ([]channel.Swap, error) {
-	swapQueue := channel.NewSwapsQueue()
+func (ds *DurableStore) GetSwapsByChannelId(id types.Destination) ([]payments.Swap, error) {
+	swapQueue := payments.NewSwapsQueue()
 
 	err := ds.channelToSwaps.View(func(tx *buntdb.Tx) error {
 		sJSON, err := tx.Get(id.String())
@@ -924,7 +924,7 @@ func (ds *DurableStore) GetSwapsByChannelId(id types.Destination) ([]channel.Swa
 		return nil, err
 	}
 
-	var swapsToReturn []channel.Swap
+	var swapsToReturn []payments.Swap
 	swaps := swapQueue.Values()
 	for _, swap := range swaps {
 		s, err := ds.GetSwapById(swap.Id)
@@ -937,8 +937,8 @@ func (ds *DurableStore) GetSwapsByChannelId(id types.Destination) ([]channel.Swa
 	return swapsToReturn, nil
 }
 
-func (ds *DurableStore) SetChannelToSwaps(swap channel.Swap) error {
-	swapQueue := channel.NewSwapsQueue()
+func (ds *DurableStore) SetChannelToSwaps(swap payments.Swap) error {
+	swapQueue := payments.NewSwapsQueue()
 
 	err := ds.channelToSwaps.View(func(tx *buntdb.Tx) error {
 		sJSON, err := tx.Get(swap.ChannelId.String())

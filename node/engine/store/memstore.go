@@ -76,22 +76,22 @@ func (ms *MemStore) GetChannelSecretKey() *[]byte {
 	return &val
 }
 
-func (ms *MemStore) GetSwapById(id types.Destination) (channel.Swap, error) {
+func (ms *MemStore) GetSwapById(id types.Destination) (payments.Swap, error) {
 	sJSON, ok := ms.swaps.Load(id.String())
 	if !ok {
-		return channel.Swap{}, fmt.Errorf("error loading swap")
+		return payments.Swap{}, fmt.Errorf("error loading swap")
 	}
 
-	swap := channel.Swap{}
+	swap := payments.Swap{}
 	err := json.Unmarshal(sJSON, &swap)
 	if err != nil {
-		return channel.Swap{}, fmt.Errorf("error unmarshalling swap")
+		return payments.Swap{}, fmt.Errorf("error unmarshalling swap")
 	}
 
 	return swap, nil
 }
 
-func (ms *MemStore) SetSwap(swap channel.Swap) error {
+func (ms *MemStore) SetSwap(swap payments.Swap) error {
 	sJSON, err := json.Marshal(swap)
 	if err != nil {
 		return fmt.Errorf("error marshalling swap")
@@ -106,8 +106,8 @@ func (ms *MemStore) DestroySwapById(id types.Destination) error {
 	return nil
 }
 
-func (ms *MemStore) GetSwapsByChannelId(id types.Destination) ([]channel.Swap, error) {
-	swapQueue := channel.NewSwapsQueue()
+func (ms *MemStore) GetSwapsByChannelId(id types.Destination) ([]payments.Swap, error) {
+	swapQueue := payments.NewSwapsQueue()
 
 	chJson, ok := ms.channelToSwaps.Load(id.String())
 	if ok {
@@ -117,7 +117,7 @@ func (ms *MemStore) GetSwapsByChannelId(id types.Destination) ([]channel.Swap, e
 		}
 	}
 
-	var swapsToReturn []channel.Swap
+	var swapsToReturn []payments.Swap
 	swaps := swapQueue.Values()
 	for _, swap := range swaps {
 		s, err := ms.GetSwapById(swap.Id)
@@ -130,8 +130,8 @@ func (ms *MemStore) GetSwapsByChannelId(id types.Destination) ([]channel.Swap, e
 	return swapsToReturn, nil
 }
 
-func (ms *MemStore) SetChannelToSwaps(swap channel.Swap) error {
-	swapQueue := channel.NewSwapsQueue()
+func (ms *MemStore) SetChannelToSwaps(swap payments.Swap) error {
+	swapQueue := payments.NewSwapsQueue()
 
 	chJson, ok := ms.channelToSwaps.Load(swap.ChannelId.String())
 	if ok {
@@ -204,7 +204,7 @@ func (ms *MemStore) SetObjective(obj protocols.Objective) error {
 				return fmt.Errorf("error setting virtual channel %s from objective %s: %w", ch.Id, obj.Id(), err)
 			}
 
-		case *channel.Swap:
+		case *payments.Swap:
 			err := ms.SetSwap(*ch)
 			if err != nil {
 				return fmt.Errorf("error setting swap %s from objective %s: %w", ch.Id, obj.Id(), err)
@@ -388,7 +388,7 @@ func (ms *MemStore) GetChannelsByAppDefinition(appDef types.Address) ([]*channel
 	return toReturn, nil
 }
 
-func (ms *MemStore) GetPendingSwapByChannelId(id types.Destination) (*channel.Swap, error) {
+func (ms *MemStore) GetPendingSwapByChannelId(id types.Destination) (*payments.Swap, error) {
 	var pendingSwapId types.Destination
 	ms.objectives.Range(func(key string, objJSON []byte) bool {
 		objId := protocols.ObjectiveId(key)
