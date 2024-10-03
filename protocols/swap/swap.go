@@ -2,6 +2,7 @@ package swap
 
 import (
 	"encoding/json"
+	"errors"
 	"fmt"
 	"math/big"
 	"strings"
@@ -27,6 +28,8 @@ const (
 )
 
 const ObjectivePrefix = "Swap-"
+
+var ErrInvalidSwap error = errors.New("invalid swap")
 
 type SwapPayload struct {
 	Swap      channel.Swap
@@ -77,8 +80,7 @@ func NewObjective(request ObjectiveRequest, preApprove bool, isSwapper bool, get
 
 	isValid := obj.isValidSwap(request.swap)
 	if !isValid {
-		// TODO: Change this error to non-fatal error
-		return obj, fmt.Errorf("swap objective creation failed, invalid swap")
+		return obj, fmt.Errorf("swap objective creation failed: %w", ErrInvalidSwap)
 	}
 	obj.Swap = request.swap
 	obj.StateSigs = make(map[uint]state.Signature, 2)

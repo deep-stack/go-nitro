@@ -69,6 +69,7 @@ var nonFatalErrors = []error{
 	virtualfund.ErrUpdatingLedgerFunding,
 	swapfund.ErrUpdatingLedgerFunding,
 	errEmptyDroppedEvent,
+	swap.ErrInvalidSwap,
 }
 
 // Engine is the imperative part of the core business logic of a go-nitro Node
