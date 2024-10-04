@@ -209,6 +209,7 @@ func (o *Objective) Update(raw protocols.ObjectivePayload) (protocols.Objective,
 	}
 
 	updated.StateSigs = swapPayload.StateSigs
+	updated.SwapStatus = swapPayload.SwapStatus
 
 	return &updated, nil
 }

@@ -45,6 +45,7 @@ func (v *SwapChannel) Clone() *SwapChannel {
 	}
 
 	w := SwapChannel{*v.Channel.Clone()}
+
 	return &w
 }
 
@@ -69,6 +70,7 @@ func NewSwap(channelId types.Destination, tokenIn, tokenOut common.Address, amou
 		Nonce: nonce,
 	}
 	swap.Id = swap.SwapId()
+
 	return swap
 }
 
@@ -130,6 +132,7 @@ func (sp Swap) Hash() (types.Bytes32, error) {
 	if err != nil {
 		return types.Bytes32{}, fmt.Errorf("failed to encode swap: %w", err)
 	}
+
 	return crypto.Keccak256Hash(encoded), nil
 }
 
@@ -139,11 +142,13 @@ func (s Swap) Sign(secretKey []byte) (state.Signature, error) {
 	if error != nil {
 		return state.Signature{}, error
 	}
+
 	return nc.SignEthereumMessage(hash.Bytes(), secretKey)
 }
 
 func (s Swap) AddSignature(sig state.Signature, myIndex uint) error {
 	s.Sigs[myIndex] = sig
+
 	return nil
 }
 
@@ -153,10 +158,11 @@ func (s Swap) RecoverSigner(sig state.Signature) (types.Address, error) {
 	if error != nil {
 		return types.Address{}, error
 	}
+
 	return nc.RecoverEthereumMessageSigner(hash[:], sig)
 }
 
-type JsonSwap struct {
+type jsonSwap struct {
 	Id        types.Destination
 	ChannelId types.Destination
 	Exchange  Exchange
@@ -165,18 +171,19 @@ type JsonSwap struct {
 }
 
 func (s *Swap) MarshalJSON() ([]byte, error) {
-	jsonSwap := JsonSwap{
+	jsonSwap := jsonSwap{
 		Id:        s.Id,
 		ChannelId: s.ChannelId,
 		Exchange:  s.Exchange,
 		Sigs:      s.Sigs,
 		Nonce:     s.Nonce,
 	}
+
 	return json.Marshal(jsonSwap)
 }
 
 func (s *Swap) UnmarshalJSON(data []byte) error {
-	var jsonSwap JsonSwap
+	var jsonSwap jsonSwap
 	err := json.Unmarshal(data, &jsonSwap)
 	if err != nil {
 		return fmt.Errorf("error unmarshaling swap: %w", err)
@@ -220,6 +227,7 @@ func (q *SwapsQueue) MarshalJSON() ([]byte, error) {
 	for _, swap := range swaps {
 		swapsIds = append(swapsIds, swap.Id)
 	}
+
 	return json.Marshal(swapsIds)
 }
 

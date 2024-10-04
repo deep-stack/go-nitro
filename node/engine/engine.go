@@ -249,15 +249,19 @@ func (e *Engine) run(ctx context.Context) {
 			var block *ethTypes.Block
 
 			block, err = e.chain.GetBlockByNumber(big.NewInt(int64(blockNum)))
-			e.checkError(err)
-
-			chainServiceBlock := chainservice.Block{
-				BlockNum:  block.NumberU64(),
-				Timestamp: block.Time(),
+			if err != nil {
+				e.logger.Error(err.Error())
+				err = nil
 			}
 
-			err = e.processStoreChannels(chainServiceBlock)
+			if block != nil {
+				chainServiceBlock := chainservice.Block{
+					BlockNum:  block.NumberU64(),
+					Timestamp: block.Time(),
+				}
 
+				err = e.processStoreChannels(chainServiceBlock)
+			}
 		case <-ctx.Done():
 			e.wg.Done()
 			return
@@ -328,22 +332,6 @@ func (e *Engine) handleMessage(message protocols.Message) (EngineEvent, error) {
 		objective, err := e.getOrCreateObjective(payload)
 		if err != nil {
 			return EngineEvent{}, err
-		}
-
-		// Handle swap confirmation (accept) on swapper node
-		if payload.Type == swap.SwapPayloadType {
-			var unmarshalledpayload swap.SwapPayload
-			err := json.Unmarshal(payload.PayloadData, &unmarshalledpayload)
-			if err != nil {
-				return EngineEvent{}, err
-			}
-
-			swapObjective, ok := objective.(*swap.Objective)
-
-			if ok {
-				swapObjective.SwapStatus = unmarshalledpayload.SwapStatus
-				objective = swapObjective
-			}
 		}
 
 		if objective.GetStatus() == protocols.Unapproved {
