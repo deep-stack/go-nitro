@@ -394,7 +394,16 @@ func (o *Objective) ledgerProposal(ledger *consensus_channel.ConsensusChannel) [
 	var proposals []consensus_channel.Proposal
 
 	for _, ledgerOut := range ledger.ConsensusVars().Outcome {
-		if len(ledgerOut.AsOutcome()[0].Allocations) != 3 {
+		isGuaranteePresent := false
+
+		for _, a := range ledgerOut.AsOutcome()[0].Allocations {
+			if a.AllocationType == outcome.GuaranteeAllocationType {
+				isGuaranteePresent = true
+				break
+			}
+		}
+
+		if !isGuaranteePresent {
 			continue
 		}
 
