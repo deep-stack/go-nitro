@@ -79,7 +79,7 @@ func (ms *MemStore) GetChannelSecretKey() *[]byte {
 func (ms *MemStore) GetSwapById(id types.Destination) (channel.Swap, error) {
 	sJSON, ok := ms.swaps.Load(id.String())
 	if !ok {
-		return channel.Swap{}, fmt.Errorf("error loading swap")
+		return channel.Swap{}, ErrNoSuchSwap
 	}
 
 	swap := channel.Swap{}
