@@ -28,7 +28,10 @@ const (
 
 const ObjectivePrefix = "Swap-"
 
-var ErrInvalidSwap error = errors.New("invalid swap")
+var (
+	ErrInvalidSwap error = errors.New("invalid swap")
+	ErrSwapExists  error = errors.New("swap already exists")
+)
 
 type SwapPayload struct {
 	Swap       channel.Swap
