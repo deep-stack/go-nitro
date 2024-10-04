@@ -312,42 +312,49 @@ func checkPaymentChannel(t *testing.T, id types.Destination, o outcome.Exit, sta
 
 // createLedgerInfo constructs a LedgerChannelInfo so we can easily compare it to the result of GetLedgerChannel
 func createLedgerInfo(id types.Destination, outcome outcome.Exit, status query.ChannelStatus, user types.Address) query.LedgerChannelInfo {
-	firstParticipant, err := outcome[0].Allocations[0].Destination.ToAddress()
-	if err != nil {
-		panic(err)
-	}
-	secondParticipant, err := outcome[0].Allocations[1].Destination.ToAddress()
-	if err != nil {
-		panic(err)
-	}
+	var balances []query.LedgerChannelBalance
 
-	var me, them types.Address
-	var myBalance, theirBalance *big.Int
+	for _, o := range outcome {
+		var me, them types.Address
+		var myBalance, theirBalance *big.Int
 
-	if user == firstParticipant {
-		me = firstParticipant
-		myBalance = outcome[0].Allocations[0].Amount
-		them = secondParticipant
-		theirBalance = outcome[0].Allocations[1].Amount
-	} else if user == secondParticipant {
-		me = secondParticipant
-		myBalance = outcome[0].Allocations[1].Amount
-		them = firstParticipant
-		theirBalance = outcome[0].Allocations[0].Amount
-	} else {
-		panic("User not in channel") // test helper - panic OK
-	}
+		firstParticipant, err := o.Allocations[0].Destination.ToAddress()
+		if err != nil {
+			panic(err)
+		}
 
-	return query.LedgerChannelInfo{
-		ID:     id,
-		Status: status,
-		Balances: []query.LedgerChannelBalance{{
-			AssetAddress: outcome[0].Asset,
+		secondParticipant, err := o.Allocations[1].Destination.ToAddress()
+		if err != nil {
+			panic(err)
+		}
+
+		if user == firstParticipant {
+			me = firstParticipant
+			myBalance = o.Allocations[0].Amount
+			them = secondParticipant
+			theirBalance = o.Allocations[1].Amount
+		} else if user == secondParticipant {
+			me = secondParticipant
+			myBalance = o.Allocations[1].Amount
+			them = firstParticipant
+			theirBalance = o.Allocations[0].Amount
+		} else {
+			panic("User not in channel") // test helper - panic OK
+		}
+
+		balances = append(balances, query.LedgerChannelBalance{
+			AssetAddress: o.Asset,
 			Me:           me,
 			Them:         them,
 			MyBalance:    (*hexutil.Big)(myBalance),
 			TheirBalance: (*hexutil.Big)(theirBalance),
-		}},
+		})
+	}
+
+	return query.LedgerChannelInfo{
+		ID:       id,
+		Status:   status,
+		Balances: balances,
 	}
 }
 
@@ -519,7 +526,7 @@ func waitForEvent(t *testing.T, eventChannel <-chan chainservice.Event, eventTyp
 	return nil
 }
 
-func modifyOutcomeWithSwap(initialOutcome outcome.Exit, acceptedSwap *channel.Swap, swapperIndex int) (outcome.Exit, error) {
+func modifyOutcomeWithSwap(initialOutcome outcome.Exit, acceptedSwap *channel.Swap, swapperIndex int) outcome.Exit {
 	modifiedOutcome := initialOutcome.Clone()
 	for _, assetOutcome := range modifiedOutcome {
 		swapperAllocation := assetOutcome.Allocations[swapperIndex]
@@ -535,5 +542,24 @@ func modifyOutcomeWithSwap(initialOutcome outcome.Exit, acceptedSwap *channel.Sw
 		}
 	}
 
-	return modifiedOutcome, nil
+	return modifiedOutcome
+}
+
+func createExpectedLedgerOutcome(initialLedgerOutcome outcome.Exit, swapChannelOutcome outcome.Exit) outcome.Exit {
+	finalOutcome := initialLedgerOutcome.Clone()
+	for i, o := range initialLedgerOutcome {
+		if len(o.Allocations) != 3 {
+			continue
+		}
+
+		for _, so := range swapChannelOutcome {
+			if o.Asset == so.Asset {
+				finalOutcome[i].Allocations[0].Amount.Add(finalOutcome[i].Allocations[0].Amount, so.Allocations[0].Amount)
+				finalOutcome[i].Allocations[1].Amount.Add(finalOutcome[i].Allocations[1].Amount, so.Allocations[1].Amount)
+				finalOutcome[i].Allocations = finalOutcome[i].Allocations[:2]
+			}
+		}
+	}
+
+	return finalOutcome
 }
