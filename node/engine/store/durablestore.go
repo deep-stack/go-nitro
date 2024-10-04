@@ -223,68 +223,62 @@ func (ds *DurableStore) SetObjective(obj protocols.Objective) error {
 		return err
 	}
 	for _, rel := range obj.Related() {
-		switch ch := rel.(type) {
+		switch related := rel.(type) {
 		case *channel.VirtualChannel:
-			err := ds.SetChannel(&ch.Channel)
+			err := ds.SetChannel(&related.Channel)
 			if err != nil {
-				return fmt.Errorf("error setting virtual channel %s from objective %s: %w", ch.Id, obj.Id(), err)
+				return fmt.Errorf("error setting virtual channel %s from objective %s: %w", related.Id, obj.Id(), err)
 			}
 		case *channel.SwapChannel:
-			err := ds.SetChannel(&ch.Channel)
+			err := ds.SetChannel(&related.Channel)
 			if err != nil {
-				return fmt.Errorf("error setting swap channel %s from objective %s: %w", ch.Id, obj.Id(), err)
+				return fmt.Errorf("error setting swap channel %s from objective %s: %w", related.Id, obj.Id(), err)
 			}
 
 		case *channel.Swap:
-			err := ds.SetSwap(*ch)
+			err := ds.SetSwap(*related)
 			if err != nil {
-				return fmt.Errorf("error setting swap %s from objective %s: %w", ch.Id, obj.Id(), err)
+				return fmt.Errorf("error setting swap %s from objective %s: %w", related.Id, obj.Id(), err)
 			}
 
 			so, isSwapObj := obj.(*swap.Objective)
-			if isSwapObj {
-				if so.GetStatus() == protocols.Completed && so.SwapStatus == types.Accepted {
-					// Add swap to channelToSwaps map if successful
-					swaps, err := ds.GetSwapsByChannelId(ch.ChannelId)
-					if err != nil {
-						return fmt.Errorf("error in getting swap by Id: %w", err)
-					}
+			if !isSwapObj {
+				return fmt.Errorf("expected swap objective")
+			}
 
-					// Remove old swap
-					if len(swaps) >= channel.MAX_SWAP_STORAGE_LIMIT {
-						removeSwap := swaps[0]
-
-						err = ds.DestroySwapById(removeSwap.Id)
-						if err != nil {
-							return fmt.Errorf("error in destroying old swap %s: %w", removeSwap.Id, err)
-						}
-					}
-
-					// Add new swap
-					err = ds.SetChannelToSwaps(*ch)
-					if err != nil {
-						return fmt.Errorf("error setting channel to swaps %s from objective %s: %w", ch.Id, obj.Id(), err)
-					}
+			if so.GetStatus() == protocols.Completed && so.SwapStatus == types.Accepted {
+				// Add swap to channelToSwaps map if successful
+				removedSwap, err := ds.SetChannelToSwaps(*related)
+				if err != nil {
+					return fmt.Errorf("error setting channel to swaps %s from objective %s: %w", related.Id, obj.Id(), err)
 				}
 
-				if so.GetStatus() == protocols.Rejected {
-					// Delete the rejected swap
-					err = ds.DestroySwapById(so.Swap.Id)
+				// Remove old swap if exist
+				if !removedSwap.Id.IsZero() {
+					err = ds.DestroySwapById(removedSwap.Id)
 					if err != nil {
-						return fmt.Errorf("error in destroying old swap %s: %w", so.Swap.Id, err)
+						return fmt.Errorf("error in destroying old swap %s: %w", removedSwap.Id, err)
 					}
+				}
+			}
+
+			if so.GetStatus() == protocols.Rejected {
+				// Delete the rejected swap
+				err = ds.DestroySwapById(so.Swap.Id)
+				if err != nil {
+					return fmt.Errorf("error in destroying old swap %s: %w", so.Swap.Id, err)
 				}
 			}
 
 		case *channel.Channel:
-			err := ds.SetChannel(ch)
+			err := ds.SetChannel(related)
 			if err != nil {
-				return fmt.Errorf("error setting channel %s from objective %s: %w", ch.Id, obj.Id(), err)
+				return fmt.Errorf("error setting channel %s from objective %s: %w", related.Id, obj.Id(), err)
 			}
 		case *consensus_channel.ConsensusChannel:
-			err := ds.SetConsensusChannel(ch)
+			err := ds.SetConsensusChannel(related)
 			if err != nil {
-				return fmt.Errorf("error setting consensus channel %s from objective %s: %w", ch.Id, obj.Id(), err)
+				return fmt.Errorf("error setting consensus channel %s from objective %s: %w", related.Id, obj.Id(), err)
 			}
 		default:
 			return fmt.Errorf("unexpected type: %T", rel)
@@ -964,7 +958,7 @@ func (ds *DurableStore) GetSwapsByChannelId(id types.Destination) ([]channel.Swa
 	return swapsToReturn, nil
 }
 
-func (ds *DurableStore) SetChannelToSwaps(swap channel.Swap) error {
+func (ds *DurableStore) SetChannelToSwaps(swap channel.Swap) (channel.Swap, error) {
 	swapQueue := channel.NewSwapsQueue()
 
 	err := ds.channelToSwaps.View(func(tx *buntdb.Tx) error {
@@ -982,26 +976,23 @@ func (ds *DurableStore) SetChannelToSwaps(swap channel.Swap) error {
 		return err
 	})
 	if err != nil {
-		return err
+		return channel.Swap{}, err
 	}
 
-	swapQueue.Enqueue(swap)
-
-	// fmt.Println("SWAP QUEUE AFTER", swapQueue.Values())
+	removedSwap := swapQueue.Enqueue(swap)
 
 	swapsJson, err := swapQueue.MarshalJSON()
 	if err != nil {
-		return fmt.Errorf("error marshalling swap queue %w", err)
+		return channel.Swap{}, fmt.Errorf("error marshalling swap queue %w", err)
 	}
 
-	fmt.Println("SWAP QUEUE WHILE SAVING", string(swapsJson))
 	err = ds.channelToSwaps.Update(func(tx *buntdb.Tx) error {
 		_, _, err = tx.Set(swap.ChannelId.String(), string(swapsJson), nil)
 		return err
 	})
 	if err != nil {
-		return err
+		return channel.Swap{}, err
 	}
 
-	return nil
+	return removedSwap, nil
 }

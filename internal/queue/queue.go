@@ -16,11 +16,15 @@ func NewFixedQueue[T any](limit int) *FixedQueue[T] {
 
 // Enqueue adds a new element to the queue.
 // If the queue exceeds the limit, it removes the oldest element.
-func (q *FixedQueue[T]) Enqueue(val T) {
+func (q *FixedQueue[T]) Enqueue(val T) T {
+	var removedElement T
 	if len(q.data) >= q.limit {
+		removedElement = q.data[0]
 		q.data = q.data[1:] // Remove the oldest element (first one)
 	}
+
 	q.data = append(q.data, val) // Add the new element
+	return removedElement
 }
 
 // Values returns the current values in the queue.

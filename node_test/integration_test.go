@@ -184,7 +184,7 @@ func TestSwapFund(t *testing.T) {
 	// Wait for objective to wait for confirmation
 	time.Sleep(3 * time.Second)
 
-	pendingSwap1, err := nodeB.GetPendingSwapByChannelId(response1.ChannelId)
+	pendingSwap1, err := nodeA.GetPendingSwapByChannelId(response1.ChannelId)
 	if err != nil {
 		t.Fatal(err)
 	}

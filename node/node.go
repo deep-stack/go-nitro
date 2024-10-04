@@ -493,8 +493,8 @@ func (n *Node) ConfirmSwap(swapId types.Destination, action types.SwapStatus) er
 		return fmt.Errorf("swap with ID %s is not approved", swapId.String())
 	}
 
-	if o.C.MyIndex == o.SwapperIndex {
-		return fmt.Errorf("swap cannot be confirmed by swapper")
+	if o.C.MyIndex == o.SwapSenderIndex {
+		return fmt.Errorf("swap cannot be confirmed by swap sender")
 	}
 
 	n.engine.ConfirmSwapRequestFromAPI <- types.ConfirmSwapRequest{SwapId: swapId, Action: action}

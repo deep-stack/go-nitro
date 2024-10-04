@@ -44,11 +44,11 @@ type Objective struct {
 	StateSigs  map[uint]state.Signature
 	SwapStatus types.SwapStatus
 	// Index of participant who initiated the swap in participants array
-	SwapperIndex uint
+	SwapSenderIndex uint
 }
 
 // NewObjective creates a new swap objective from a given request.
-func NewObjective(request ObjectiveRequest, preApprove bool, isSwapper bool, getChannelFunc GetChannelByIdFunction, address common.Address) (Objective, error) {
+func NewObjective(request ObjectiveRequest, preApprove bool, isSwapSender bool, getChannelFunc GetChannelByIdFunction, address common.Address) (Objective, error) {
 	obj := Objective{}
 
 	swapChannel, ok := getChannelFunc(request.swap.ChannelId)
@@ -71,10 +71,10 @@ func NewObjective(request ObjectiveRequest, preApprove bool, isSwapper bool, get
 		return obj, err
 	}
 
-	if isSwapper {
-		obj.SwapperIndex = uint(myIndex)
+	if isSwapSender {
+		obj.SwapSenderIndex = uint(myIndex)
 	} else {
-		obj.SwapperIndex = 1 - uint(myIndex)
+		obj.SwapSenderIndex = 1 - uint(myIndex)
 	}
 
 	isValid := obj.isValidSwap(request.swap)
@@ -107,18 +107,18 @@ func (o *Objective) isValidSwap(swap channel.Swap) bool {
 	updateOutcome := updateSupportedState.Outcome.Clone()
 
 	for _, assetOutcome := range updateOutcome {
-		swapperAllocation := assetOutcome.Allocations[o.SwapperIndex]
-		swappeAllocation := assetOutcome.Allocations[1-o.SwapperIndex]
+		swapSenderAllocation := assetOutcome.Allocations[o.SwapSenderIndex]
+		swapReceiverAllocation := assetOutcome.Allocations[1-o.SwapSenderIndex]
 
 		if assetOutcome.Asset == tokenIn {
-			res := swapperAllocation.Amount.Sub(swapperAllocation.Amount, swap.Exchange.AmountIn)
+			res := swapSenderAllocation.Amount.Sub(swapSenderAllocation.Amount, swap.Exchange.AmountIn)
 			if res.Cmp(big.NewInt(0)) < 0 {
 				return false
 			}
 		}
 
 		if assetOutcome.Asset == tokenOut {
-			res := swappeAllocation.Amount.Sub(swappeAllocation.Amount, swap.Exchange.AmountOut)
+			res := swapReceiverAllocation.Amount.Sub(swapReceiverAllocation.Amount, swap.Exchange.AmountOut)
 			if res.Cmp(big.NewInt(0)) < 0 {
 				return false
 			}
@@ -227,8 +227,8 @@ func (o *Objective) Crank(secretKey *[]byte) (protocols.Objective, protocols.Sid
 	}
 	// TODO: Both participant checks whether swap operation is valid
 
-	// TODO: Swapee check whether to accept or reject
-	if updated.SwapperIndex != o.C.MyIndex && updated.SwapStatus != types.Accepted {
+	// TODO: Swap receiver check whether to accept or reject
+	if updated.SwapSenderIndex != o.C.MyIndex && updated.SwapStatus != types.Accepted {
 		if updated.SwapStatus == types.PendingConfirmation {
 			return &updated, sideEffects, WaitingForConfirmation, nil
 		} else {
@@ -332,18 +332,18 @@ func (o *Objective) GetUpdatedSwapState() (state.State, error) {
 
 	for _, assetOutcome := range updateOutcome {
 
-		swapperAllocation := assetOutcome.Allocations[o.SwapperIndex]
-		swappeAllocation := assetOutcome.Allocations[1-o.SwapperIndex]
+		swapSenderAllocation := assetOutcome.Allocations[o.SwapSenderIndex]
+		swapReceiverAllocation := assetOutcome.Allocations[1-o.SwapSenderIndex]
 
 		if assetOutcome.Asset == tokenIn {
 
-			swapperAllocation.Amount.Sub(swapperAllocation.Amount, o.Swap.Exchange.AmountIn)
-			swappeAllocation.Amount.Add(swappeAllocation.Amount, o.Swap.Exchange.AmountIn)
+			swapSenderAllocation.Amount.Sub(swapSenderAllocation.Amount, o.Swap.Exchange.AmountIn)
+			swapReceiverAllocation.Amount.Add(swapReceiverAllocation.Amount, o.Swap.Exchange.AmountIn)
 		}
 
 		if assetOutcome.Asset == tokenOut {
-			swapperAllocation.Amount.Add(swapperAllocation.Amount, o.Swap.Exchange.AmountOut)
-			swappeAllocation.Amount.Sub(swappeAllocation.Amount, o.Swap.Exchange.AmountOut)
+			swapSenderAllocation.Amount.Add(swapSenderAllocation.Amount, o.Swap.Exchange.AmountOut)
+			swapReceiverAllocation.Amount.Sub(swapReceiverAllocation.Amount, o.Swap.Exchange.AmountOut)
 		}
 	}
 
@@ -362,7 +362,7 @@ func (o *Objective) Related() []protocols.Storable {
 func (o *Objective) clone() Objective {
 	clone := Objective{}
 	clone.Status = o.Status
-	clone.SwapperIndex = o.SwapperIndex
+	clone.SwapSenderIndex = o.SwapSenderIndex
 	clone.SwapStatus = o.SwapStatus
 	clone.C = o.C.Clone()
 	clone.Swap = o.Swap.Clone()
@@ -407,23 +407,23 @@ func (o *Objective) AcceptSwap() {
 }
 
 type jsonObjective struct {
-	Status       protocols.ObjectiveStatus
-	C            types.Destination
-	Swap         types.Destination
-	SwapperIndex uint
-	SwapStatus   types.SwapStatus
-	Nonce        uint64
-	StateSigs    map[uint]state.Signature
+	Status          protocols.ObjectiveStatus
+	C               types.Destination
+	Swap            types.Destination
+	SwapSenderIndex uint
+	SwapStatus      types.SwapStatus
+	Nonce           uint64
+	StateSigs       map[uint]state.Signature
 }
 
 func (o Objective) MarshalJSON() ([]byte, error) {
 	jsonSO := jsonObjective{
-		Status:       o.Status,
-		C:            o.C.Id,
-		Swap:         o.Swap.Id,
-		SwapStatus:   o.SwapStatus,
-		SwapperIndex: o.SwapperIndex,
-		StateSigs:    o.StateSigs,
+		Status:          o.Status,
+		C:               o.C.Id,
+		Swap:            o.Swap.Id,
+		SwapStatus:      o.SwapStatus,
+		SwapSenderIndex: o.SwapSenderIndex,
+		StateSigs:       o.StateSigs,
 	}
 	return json.Marshal(jsonSO)
 }
@@ -439,7 +439,7 @@ func (o *Objective) UnmarshalJSON(data []byte) error {
 	}
 
 	o.Status = jsonSo.Status
-	o.SwapperIndex = jsonSo.SwapperIndex
+	o.SwapSenderIndex = jsonSo.SwapSenderIndex
 	o.SwapStatus = jsonSo.SwapStatus
 	o.Swap = channel.Swap{}
 	o.Swap.Id = jsonSo.Swap

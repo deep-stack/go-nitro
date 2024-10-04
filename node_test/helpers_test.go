@@ -526,19 +526,19 @@ func waitForEvent(t *testing.T, eventChannel <-chan chainservice.Event, eventTyp
 	return nil
 }
 
-func modifyOutcomeWithSwap(initialOutcome outcome.Exit, acceptedSwap *channel.Swap, swapperIndex int) outcome.Exit {
+func modifyOutcomeWithSwap(initialOutcome outcome.Exit, acceptedSwap *channel.Swap, swapSenderIndex int) outcome.Exit {
 	modifiedOutcome := initialOutcome.Clone()
 	for _, assetOutcome := range modifiedOutcome {
-		swapperAllocation := assetOutcome.Allocations[swapperIndex]
-		swappeeAllocation := assetOutcome.Allocations[1-swapperIndex]
+		swapSenderAllocation := assetOutcome.Allocations[swapSenderIndex]
+		swapReceiverAllocation := assetOutcome.Allocations[1-swapSenderIndex]
 
 		if assetOutcome.Asset == acceptedSwap.Exchange.TokenIn {
-			swapperAllocation.Amount.Sub(swapperAllocation.Amount, acceptedSwap.Exchange.AmountIn)
-			swappeeAllocation.Amount.Add(swappeeAllocation.Amount, acceptedSwap.Exchange.AmountIn)
+			swapSenderAllocation.Amount.Sub(swapSenderAllocation.Amount, acceptedSwap.Exchange.AmountIn)
+			swapReceiverAllocation.Amount.Add(swapReceiverAllocation.Amount, acceptedSwap.Exchange.AmountIn)
 		}
 		if assetOutcome.Asset == acceptedSwap.Exchange.TokenOut {
-			swapperAllocation.Amount.Add(swapperAllocation.Amount, acceptedSwap.Exchange.AmountOut)
-			swappeeAllocation.Amount.Sub(swappeeAllocation.Amount, acceptedSwap.Exchange.AmountOut)
+			swapSenderAllocation.Amount.Add(swapSenderAllocation.Amount, acceptedSwap.Exchange.AmountOut)
+			swapReceiverAllocation.Amount.Sub(swapReceiverAllocation.Amount, acceptedSwap.Exchange.AmountOut)
 		}
 	}
 

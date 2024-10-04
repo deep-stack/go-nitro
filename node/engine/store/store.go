@@ -44,7 +44,7 @@ type Store interface {
 	GetPendingSwapByChannelId(id types.Destination) (*channel.Swap, error)
 	GetSwapById(id types.Destination) (channel.Swap, error)
 	GetSwapsByChannelId(id types.Destination) ([]channel.Swap, error)
-	SetChannelToSwaps(swap channel.Swap) error
+	SetChannelToSwaps(swap channel.Swap) (channel.Swap, error)
 	ConsensusChannelStore
 	payments.VoucherStore
 	io.Closer
