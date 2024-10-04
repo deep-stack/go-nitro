@@ -105,8 +105,12 @@ func (t *serverHttpTransport) RegisterRequestHandler(apiVersion string, handler 
 }
 
 func (t *serverHttpTransport) Notify(data []byte) error {
+	slog.Debug("DEBUG: In http server Notify method")
 	t.notificationListeners.Range(func(key string, value chan []byte) bool {
 		value <- data
+
+		slog.Debug("DEBUG: Sent data to notification listeners", "key", key, "data", string(data))
+
 		return true
 	})
 	return nil

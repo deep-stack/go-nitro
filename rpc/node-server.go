@@ -352,6 +352,8 @@ func (rs *NodeRpcServer) sendNotifications(ctx context.Context,
 				rs.logger.Warn("PaymentUpdates channel closed, exiting sendNotifications")
 				return
 			}
+
+			slog.Debug("DEBUG: Sending payment_channel_updated notification")
 			err := sendNotification(rs.BaseRpcServer, serde.PaymentChannelUpdated, paymentInfo)
 			if err != nil {
 				panic(err)
