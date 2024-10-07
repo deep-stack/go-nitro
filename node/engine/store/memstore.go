@@ -9,7 +9,6 @@ import (
 	"github.com/statechannels/go-nitro/channel"
 	"github.com/statechannels/go-nitro/channel/consensus_channel"
 	"github.com/statechannels/go-nitro/crypto"
-	"github.com/statechannels/go-nitro/internal/queue"
 	"github.com/statechannels/go-nitro/internal/safesync"
 	"github.com/statechannels/go-nitro/payments"
 	"github.com/statechannels/go-nitro/protocols"
@@ -38,7 +37,9 @@ type MemStore struct {
 	channelToObjective safesync.Map[protocols.ObjectiveId]
 	vouchers           safesync.Map[[]byte]
 	swaps              safesync.Map[[]byte]
-	lastBlockSeen      blockData
+	channelToSwaps     safesync.Map[[]byte]
+
+	lastBlockSeen blockData
 
 	key     string // the signing key of the store's engine
 	address string // the (Ethereum) address associated to the signing key
@@ -56,6 +57,7 @@ func NewMemStore(key []byte) Store {
 	ms.vouchers = safesync.Map[[]byte]{}
 	ms.lastBlockSeen = blockData{}
 	ms.swaps = safesync.Map[[]byte]{}
+	ms.channelToSwaps = safesync.Map[[]byte]{}
 	return &ms
 }
 
@@ -99,6 +101,56 @@ func (ms *MemStore) SetSwap(swap channel.Swap) error {
 	return nil
 }
 
+func (ms *MemStore) DestroySwapById(id types.Destination) error {
+	ms.swaps.Delete(id.String())
+	return nil
+}
+
+func (ms *MemStore) GetSwapsByChannelId(id types.Destination) ([]channel.Swap, error) {
+	swapQueue := channel.NewSwapsQueue()
+
+	chJson, ok := ms.channelToSwaps.Load(id.String())
+	if ok {
+		err := swapQueue.UnmarshalJSON(chJson)
+		if err != nil {
+			return nil, fmt.Errorf("error unmarshalling swap queue %w", err)
+		}
+	}
+
+	var swapsToReturn []channel.Swap
+	swaps := swapQueue.Values()
+	for _, swap := range swaps {
+		s, err := ms.GetSwapById(swap.Id)
+		if err != nil {
+			return nil, err
+		}
+		swapsToReturn = append(swapsToReturn, s)
+	}
+
+	return swapsToReturn, nil
+}
+
+func (ms *MemStore) SetChannelToSwaps(swap channel.Swap) (channel.Swap, error) {
+	swapQueue := channel.NewSwapsQueue()
+
+	chJson, ok := ms.channelToSwaps.Load(swap.ChannelId.String())
+	if ok {
+		err := swapQueue.UnmarshalJSON(chJson)
+		if err != nil {
+			return channel.Swap{}, fmt.Errorf("error unmarshalling swap queue %w", err)
+		}
+	}
+
+	removedSwap := swapQueue.Enqueue(swap)
+	swapsJson, err := swapQueue.MarshalJSON()
+	if err != nil {
+		return channel.Swap{}, fmt.Errorf("error marshalling swap queue %w", err)
+	}
+
+	ms.channelToSwaps.Store(swap.ChannelId.String(), swapsJson)
+	return removedSwap, nil
+}
+
 func (ms *MemStore) GetObjectiveById(id protocols.ObjectiveId) (protocols.Objective, error) {
 	// todo: locking
 	objJSON, ok := ms.objectives.Load(string(id))
@@ -132,36 +184,62 @@ func (ms *MemStore) SetObjective(obj protocols.Objective) error {
 	ms.objectives.Store(string(obj.Id()), objJSON)
 
 	for _, rel := range obj.Related() {
-		switch ch := rel.(type) {
+		switch related := rel.(type) {
 		case *channel.VirtualChannel:
-			err := ms.SetChannel(&ch.Channel)
+			err := ms.SetChannel(&related.Channel)
 			if err != nil {
-				return fmt.Errorf("error setting virtual channel %s from objective %s: %w", ch.Id, obj.Id(), err)
+				return fmt.Errorf("error setting virtual channel %s from objective %s: %w", related.Id, obj.Id(), err)
 			}
 		case *channel.SwapChannel:
-			err := ms.SetChannel(&ch.Channel)
+			err := ms.SetChannel(&related.Channel)
 			if err != nil {
-				return fmt.Errorf("error setting virtual channel %s from objective %s: %w", ch.Id, obj.Id(), err)
+				return fmt.Errorf("error setting virtual channel %s from objective %s: %w", related.Id, obj.Id(), err)
 			}
-			// TODO: Remove old swaps from store
-			// Get swap by channel id and filter and add the latest swap
-			swaps := ch.Swaps.Values()
-			for _, swap := range swaps {
-				err := ms.SetSwap(swap)
+
+		case *channel.Swap:
+			err := ms.SetSwap(*related)
+			if err != nil {
+				return fmt.Errorf("error setting swap %s from objective %s: %w", related.Id, obj.Id(), err)
+			}
+
+			so, isSwapObj := obj.(*swap.Objective)
+			if !isSwapObj {
+				return fmt.Errorf("expected swap objective")
+			}
+
+			if so.GetStatus() == protocols.Completed && so.SwapStatus == types.Accepted {
+				// Add swap to channelToSwaps map if successful
+				removedSwap, err := ms.SetChannelToSwaps(*related)
 				if err != nil {
-					return fmt.Errorf("error storing swap: %w", err)
+					return fmt.Errorf("error setting channel to swaps %s from objective %s: %w", related.Id, obj.Id(), err)
+				}
+
+				// Remove old swap if exists
+				if !removedSwap.Id.IsZero() {
+					err = ms.DestroySwapById(removedSwap.Id)
+					if err != nil {
+						return fmt.Errorf("error in destroying old swap %s: %w", removedSwap.Id, err)
+					}
+				}
+			}
+
+			if so.GetStatus() == protocols.Rejected {
+				// Delete the rejected swap
+				err = ms.DestroySwapById(so.Swap.Id)
+				if err != nil {
+					return fmt.Errorf("error in destroying old swap %s: %w", so.Swap.Id, err)
 				}
 			}
 
 		case *channel.Channel:
-			err := ms.SetChannel(ch)
+			err := ms.SetChannel(related)
 			if err != nil {
-				return fmt.Errorf("error setting channel %s from objective %s: %w", ch.Id, obj.Id(), err)
+				return fmt.Errorf("error setting channel %s from objective %s: %w", related.Id, obj.Id(), err)
 			}
 		case *consensus_channel.ConsensusChannel:
-			err := ms.SetConsensusChannel(ch)
+			err := ms.SetConsensusChannel(related)
 			if err != nil {
-				return fmt.Errorf("error setting consensus channel %s from objective %s: %w", ch.Id, obj.Id(), err)
+				return fmt.Errorf("error setting consensus channel %s from objective %s: %w", related.Id, obj.Id(), err)
 			}
 		default:
 			return fmt.Errorf("unexpected type: %T", rel)
@@ -322,8 +400,8 @@ func (ms *MemStore) GetChannelsByAppDefinition(appDef types.Address) ([]*channel
 	return toReturn, nil
 }
 
-func (ms *MemStore) GetPendingSwapByChannelId(id types.Destination) (channel.Swap, error) {
-	var pendingSwap channel.Swap
+func (ms *MemStore) GetPendingSwapByChannelId(id types.Destination) (*channel.Swap, error) {
+	var pendingSwapId types.Destination
 	ms.objectives.Range(func(key string, objJSON []byte) bool {
 		objId := protocols.ObjectiveId(key)
 
@@ -338,14 +416,19 @@ func (ms *MemStore) GetPendingSwapByChannelId(id types.Destination) (channel.Swa
 		}
 
 		if obj.C.Id == id && obj.SwapStatus == types.PendingConfirmation {
-			pendingSwap = obj.Swap
+			pendingSwapId = obj.Swap.Id
 			return false // objective found, stop iteration
 		}
 
 		return true // objective not found: continue looking
 	})
 
-	return pendingSwap, nil
+	swap, _ := ms.GetSwapById(pendingSwapId)
+	if !swap.Id.IsZero() {
+		return &swap, nil
+	}
+
+	return nil, nil
 }
 
 // GetChannelsByParticipant returns any channels that include the given participant
@@ -563,19 +646,14 @@ func (ms *MemStore) populateChannelData(obj protocols.Objective) error {
 		if err != nil {
 			return fmt.Errorf("error retrieving channel data for objective %s: %w", id, err)
 		}
-		processedSwaps := o.C.Swaps.Values()
-		swaps := queue.NewFixedQueue[channel.Swap](channel.MAX_SWAP_STORAGE_LIMIT)
 
-		for _, swap := range processedSwaps {
-			swap, err := ms.GetSwapById(swap.Id)
-			if err != nil {
-				return fmt.Errorf("error getting swap by id: %w", err)
-			}
-
-			swaps.Enqueue(swap)
+		swap, err := ms.GetSwapById(o.Swap.Id)
+		if err != nil {
+			return fmt.Errorf("error getting swap by id: %w", err)
 		}
 
-		o.C = &channel.SwapChannel{Channel: ch, Swaps: *swaps}
+		o.Swap = swap
+		o.C = &channel.SwapChannel{Channel: ch}
 		return nil
 
 	case *swapfund.Objective:

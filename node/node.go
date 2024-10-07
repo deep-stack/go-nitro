@@ -247,7 +247,7 @@ func (n *Node) SwapAssets(channelId types.Destination, tokenIn common.Address, t
 		return swap.ObjectiveResponse{}, err
 	}
 
-	if !s.Id.IsZero() {
+	if s != nil && !s.Id.IsZero() {
 		return swap.ObjectiveResponse{}, fmt.Errorf("swap objective exists for the given channel %+v", channelId)
 	}
 
@@ -398,7 +398,7 @@ func (n *Node) GetPaymentChannelsByLedger(ledgerId types.Destination) ([]query.P
 	return query.GetPaymentChannelsByLedger(ledgerId, n.store, n.vm)
 }
 
-func (n *Node) GetPendingSwapByChannelId(swapChannelId types.Destination) (channel.Swap, error) {
+func (n *Node) GetPendingSwapByChannelId(swapChannelId types.Destination) (*channel.Swap, error) {
 	return n.store.GetPendingSwapByChannelId(swapChannelId)
 }
 
@@ -493,8 +493,8 @@ func (n *Node) ConfirmSwap(swapId types.Destination, action types.SwapStatus) er
 		return fmt.Errorf("swap with ID %s is not approved", swapId.String())
 	}
 
-	if o.C.MyIndex == o.SwapperIndex {
-		return fmt.Errorf("swap cannot be confirmed by swapper")
+	if o.C.MyIndex == o.SwapSenderIndex {
+		return fmt.Errorf("swap cannot be confirmed by swap sender")
 	}
 
 	n.engine.ConfirmSwapRequestFromAPI <- types.ConfirmSwapRequest{SwapId: swapId, Action: action}

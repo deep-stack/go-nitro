@@ -11,6 +11,7 @@ import 'hardhat-deploy';
 import 'hardhat-watcher';
 
 import './tasks/transfer';
+import './tasks/check-balance';
 
 dotenv.config();
 

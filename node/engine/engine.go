@@ -69,6 +69,7 @@ var nonFatalErrors = []error{
 	virtualfund.ErrUpdatingLedgerFunding,
 	swapfund.ErrUpdatingLedgerFunding,
 	errEmptyDroppedEvent,
+	swap.ErrInvalidSwap,
 }
 
 // Engine is the imperative part of the core business logic of a go-nitro Node
@@ -248,15 +249,19 @@ func (e *Engine) run(ctx context.Context) {
 			var block *ethTypes.Block
 
 			block, err = e.chain.GetBlockByNumber(big.NewInt(int64(blockNum)))
-			e.checkError(err)
-
-			chainServiceBlock := chainservice.Block{
-				BlockNum:  block.NumberU64(),
-				Timestamp: block.Time(),
+			if err != nil {
+				e.logger.Error(err.Error())
+				err = nil
 			}
 
-			err = e.processStoreChannels(chainServiceBlock)
+			if block != nil {
+				chainServiceBlock := chainservice.Block{
+					BlockNum:  block.NumberU64(),
+					Timestamp: block.Time(),
+				}
 
+				err = e.processStoreChannels(chainServiceBlock)
+			}
 		case <-ctx.Done():
 			e.wg.Done()
 			return
@@ -1039,6 +1044,8 @@ func (e *Engine) generateNotifications(o protocols.Objective) (EngineEvent, erro
 			if err != nil {
 				return outgoing, err
 			}
+
+			slog.Debug("DEBUG: Generating notification for payment_channel_updated")
 			outgoing.PaymentChannelUpdates = append(outgoing.PaymentChannelUpdates, info)
 		case *channel.Channel:
 			l, err := query.ConstructLedgerInfoFromChannel(c, *e.store.GetAddress())
@@ -1054,6 +1061,8 @@ func (e *Engine) generateNotifications(o protocols.Objective) (EngineEvent, erro
 			outgoing.LedgerChannelUpdates = append(outgoing.LedgerChannelUpdates, l)
 		case *channel.SwapChannel:
 			// TODO: Add notification for swap channel
+		case *channel.Swap:
+			// Do nothing
 		default:
 			return outgoing, fmt.Errorf("handleNotifications: Unknown related type %T", c)
 		}

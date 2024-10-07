@@ -103,7 +103,6 @@ func getLatestSupportedOrPreFund(ledgerChannel *channel.Channel) (state.State, e
 
 // getLedgerBalanceFromState returns the balance of the ledger channel from the given state
 func getLedgerBalanceFromState(latest state.State, myAddress types.Address) ([]LedgerChannelBalance, error) {
-	// TODO: We assume single asset outcomes
 	var balances []LedgerChannelBalance
 
 	for _, outcome := range latest.Outcome {

@@ -1,6 +1,7 @@
 package channel
 
 import (
+	"encoding/json"
 	"errors"
 	"fmt"
 	"math/big"
@@ -19,8 +20,6 @@ const MAX_SWAP_STORAGE_LIMIT = 5
 
 type SwapChannel struct {
 	Channel
-
-	Swaps queue.FixedQueue[Swap]
 }
 
 func NewSwapChannel(s state.State, myIndex uint) (*SwapChannel, error) {
@@ -36,7 +35,7 @@ func NewSwapChannel(s state.State, myIndex uint) (*SwapChannel, error) {
 
 	c, err := New(s, myIndex, types.Swap)
 
-	return &SwapChannel{*c, *queue.NewFixedQueue[Swap](MAX_SWAP_STORAGE_LIMIT)}, err
+	return &SwapChannel{*c}, err
 }
 
 // Clone returns a pointer to a new, deep copy of the receiver, or a nil pointer if the receiver is nil.
@@ -45,8 +44,8 @@ func (v *SwapChannel) Clone() *SwapChannel {
 		return nil
 	}
 
-	// TODO: Add clone to swap queue
-	w := SwapChannel{*v.Channel.Clone(), v.Swaps}
+	w := SwapChannel{*v.Channel.Clone()}
+
 	return &w
 }
 
@@ -71,6 +70,7 @@ func NewSwap(channelId types.Destination, tokenIn, tokenOut common.Address, amou
 		Nonce: nonce,
 	}
 	swap.Id = swap.SwapId()
+
 	return swap
 }
 
@@ -132,6 +132,7 @@ func (sp Swap) Hash() (types.Bytes32, error) {
 	if err != nil {
 		return types.Bytes32{}, fmt.Errorf("failed to encode swap: %w", err)
 	}
+
 	return crypto.Keccak256Hash(encoded), nil
 }
 
@@ -141,11 +142,13 @@ func (s Swap) Sign(secretKey []byte) (state.Signature, error) {
 	if error != nil {
 		return state.Signature{}, error
 	}
+
 	return nc.SignEthereumMessage(hash.Bytes(), secretKey)
 }
 
 func (s Swap) AddSignature(sig state.Signature, myIndex uint) error {
 	s.Sigs[myIndex] = sig
+
 	return nil
 }
 
@@ -155,7 +158,44 @@ func (s Swap) RecoverSigner(sig state.Signature) (types.Address, error) {
 	if error != nil {
 		return types.Address{}, error
 	}
+
 	return nc.RecoverEthereumMessageSigner(hash[:], sig)
+}
+
+type jsonSwap struct {
+	Id        types.Destination
+	ChannelId types.Destination
+	Exchange  Exchange
+	Sigs      map[uint]state.Signature // keyed by participant index in swap channel
+	Nonce     uint64
+}
+
+func (s *Swap) MarshalJSON() ([]byte, error) {
+	jsonSwap := jsonSwap{
+		Id:        s.Id,
+		ChannelId: s.ChannelId,
+		Exchange:  s.Exchange,
+		Sigs:      s.Sigs,
+		Nonce:     s.Nonce,
+	}
+
+	return json.Marshal(jsonSwap)
+}
+
+func (s *Swap) UnmarshalJSON(data []byte) error {
+	var jsonSwap jsonSwap
+	err := json.Unmarshal(data, &jsonSwap)
+	if err != nil {
+		return fmt.Errorf("error unmarshaling swap: %w", err)
+	}
+
+	s.Id = jsonSwap.Id
+	s.ChannelId = jsonSwap.ChannelId
+	s.Exchange = jsonSwap.Exchange
+	s.Sigs = jsonSwap.Sigs
+	s.Nonce = jsonSwap.Nonce
+
+	return nil
 }
 
 type Exchange struct {
@@ -167,4 +207,41 @@ type Exchange struct {
 
 func (ex Exchange) Equal(target Exchange) bool {
 	return ex.TokenIn == target.TokenIn && ex.TokenOut == target.TokenOut && ex.AmountIn.Cmp(target.AmountIn) == 0 && ex.AmountOut.Cmp(target.AmountOut) == 0
+}
+
+// TODO: Store swap Id in fixed queue instead of swap
+type SwapsQueue struct {
+	queue.FixedQueue[Swap]
+}
+
+func NewSwapsQueue() *SwapsQueue {
+	fixedQueue := queue.NewFixedQueue[Swap](MAX_SWAP_STORAGE_LIMIT)
+	return &SwapsQueue{
+		*fixedQueue,
+	}
+}
+
+func (q *SwapsQueue) MarshalJSON() ([]byte, error) {
+	var swapsIds []types.Destination
+	swaps := q.Values()
+	for _, swap := range swaps {
+		swapsIds = append(swapsIds, swap.Id)
+	}
+
+	return json.Marshal(swapsIds)
+}
+
+func (q *SwapsQueue) UnmarshalJSON(data []byte) error {
+	var swapsIds []types.Destination
+	err := json.Unmarshal(data, &swapsIds)
+	if err != nil {
+		return err
+	}
+
+	for _, sId := range swapsIds {
+		swap := Swap{Id: sId}
+		q.Enqueue(swap)
+	}
+
+	return nil
 }

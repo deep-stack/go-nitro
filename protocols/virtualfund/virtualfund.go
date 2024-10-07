@@ -6,6 +6,7 @@ import (
 	"encoding/json"
 	"errors"
 	"fmt"
+	"log/slog"
 	"math/big"
 	"strings"
 
@@ -96,6 +97,13 @@ func (c *Connection) handleProposal(sp consensus_channel.SignedProposal) error {
 // IsFundingTheTarget computes whether the ledger channel on the receiver funds the guarantee expected by this connection
 func (c *Connection) IsFundingTheTarget() bool {
 	g := c.getExpectedGuarantee()
+	marshalledGuarantee, err := g.MarshalJSON()
+	if err != nil {
+		fmt.Println(err)
+	} else {
+		slog.Debug("DEBUG: Expected guarantee", "guarantee", string(marshalledGuarantee), "isIncluded", c.Channel.Includes(g), "myIndex", c.Channel.MyIndex)
+	}
+
 	return c.Channel.Includes(g)
 }
 
@@ -686,6 +694,8 @@ func (o *Objective) acceptLedgerUpdate(c Connection, sk *[]byte) (protocols.Side
 	}
 	sideEffects := protocols.SideEffects{}
 
+	slog.Debug("DEBUG: Proposal Queue length", "len", len(ledger.ProposalQueue()))
+
 	// ledger sideEffect
 	if proposals := ledger.ProposalQueue(); len(proposals) != 0 {
 		sideEffects.ProposalsToProcess = append(sideEffects.ProposalsToProcess, proposals[0].Proposal)
@@ -710,6 +720,8 @@ func (o *Objective) updateLedgerWithGuarantee(ledgerConnection Connection, sk *[
 	if err != nil {
 		return protocols.SideEffects{}, err
 	}
+
+	slog.Debug("DEBUG: Is guarantee proposed", "isProposed", proposed)
 
 	if ledger.IsLeader() { // If the user is the proposer craft a new proposal
 		if proposed {

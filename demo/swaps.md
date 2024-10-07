@@ -92,11 +92,21 @@
     source ./hardhat-deployments/geth/.contracts.env
     export ASSET_ADDRESS_1=$TestToken1
     export ASSET_ADDRESS_2=$TestToken2
+    export A_CHAIN_ADDRESS="0xf39Fd6e51aad88F6F4ce6aB8827279cffFb92266"
     export B_CHAIN_ADDRESS="0x70997970C51812dc3A010C7d01b50e0d17dc79C8"
 
     # Send tokens to Bob
     yarn hardhat transfer --contract $ASSET_ADDRESS_1 --to $B_CHAIN_ADDRESS --amount 1000 --network geth
     yarn hardhat transfer --contract $ASSET_ADDRESS_2 --to $B_CHAIN_ADDRESS --amount 1000 --network geth
+
+    # Check on chain balances for both Alice and bob
+    # Alice
+    yarn  hardhat check-token-balance --token $ASSET_ADDRESS_1 --address $A_CHAIN_ADDRESS --network geth
+    yarn  hardhat check-token-balance --token $ASSET_ADDRESS_2 --address $A_CHAIN_ADDRESS --network geth
+
+    #Bob
+    yarn  hardhat check-token-balance --token $ASSET_ADDRESS_1 --address $B_CHAIN_ADDRESS --network geth
+    yarn  hardhat check-token-balance --token $ASSET_ADDRESS_2 --address $B_CHAIN_ADDRESS --network geth
     ```
 
   - Change directory to root directory
@@ -177,7 +187,11 @@
   # Example output
   # Objective started DirectFunding-0xc7b652e6c0a5e2c1c691597397d44fc0d40a73297f9997062299b102cc8d4e96
   # Channel Open 0xc7b652e6c0a5e2c1c691597397d44fc0d40a73297f9997062299b102cc8d4e96
+  ```
 
+- Set environment variable for ledger channel
+
+  ```bash
   # Export Ledger channel ID from above output
   export LEDGER_CHANNEL_ID=<ledger-channel-id>
   ```
@@ -219,7 +233,11 @@
   # Example output
   # Objective started SwapFund-0x9e1950864b8c704411a6dd790008302c3d5a875a544235cc5f423682d012adc1
   # Channel open 0x9e1950864b8c704411a6dd790008302c3d5a875a544235cc5f423682d012adc1
+  ```
 
+- Set environment variable for swap channel Id
+
+  ```bash
   # Export swap channel ID from above output
   export SWAP_CHANNEL_ID=<swap-channel-id>
   ```
@@ -252,7 +270,7 @@
   # }
   ```
 
-- Conduct swap through swap channel
+- Initiate swap through swap channel
 
   ```bash
   nitro-rpc-client swap-initiate $SWAP_CHANNEL_ID  --AssetIn "$ASSET_ADDRESS_1:20" --AssetOut "$ASSET_ADDRESS_2:10" -p 4006
@@ -291,27 +309,31 @@
   # }
   ```
 
-  - Set environment variable for swap Id using Id field from the output above
+- Set environment variable for swap Id using Id field from the output above
 
-    ```bash
-    export SWAP_ID=<swap id>
-    ```
+  ```bash
+  export SWAP_ID=<swap id>
+  ```
 
 - Bob decides to accept / reject the incoming swap
 
-  ```bash
-  # To accept incoming swap
-  nitro-rpc-client swap-accept $SWAP_ID -p 4007
+  - To accept incoming swap
 
-  # Example output
-  # Confirming Swap with accepted
+    ```bash
+    nitro-rpc-client swap-accept $SWAP_ID -p 4007
 
-  # To reject incoming swap
-  nitro-rpc-client swap-reject $SWAP_ID -p 4007
+    # Example output
+    # Confirming Swap with accepted
+    ```
 
-  # Example output
-  # Confirming Swap with rejected
-  ```
+  - To reject incoming swap
+
+    ```bash
+    nitro-rpc-client swap-reject $SWAP_ID -p 4007
+
+    # Example output
+    # Confirming Swap with rejected
+    ```
 
 - Check swap channel info
 
@@ -388,6 +410,26 @@
   #  ],
   #  ChannelMode: 'Open'
   # }
+  ```
+
+- Check on-chain balances of Alice and Bob after closing ledger channel
+
+  ```bash
+    # Make sure you are in the root of the go-nitro repo
+    source ./packages/nitro-protocol/hardhat-deployments/geth/.contracts.env
+    export ASSET_ADDRESS_1=$TestToken1
+    export ASSET_ADDRESS_2=$TestToken2
+    export A_CHAIN_ADDRESS="0xf39Fd6e51aad88F6F4ce6aB8827279cffFb92266"
+    export B_CHAIN_ADDRESS="0x70997970C51812dc3A010C7d01b50e0d17dc79C8"
+
+    # Check on chain balances for both Alice and bob
+    # Alice
+    yarn  hardhat check-token-balance --token $ASSET_ADDRESS_1 --address $A_CHAIN_ADDRESS --network geth
+    yarn  hardhat check-token-balance --token $ASSET_ADDRESS_2 --address $A_CHAIN_ADDRESS --network geth
+
+    #Bob
+    yarn  hardhat check-token-balance --token $ASSET_ADDRESS_1 --address $B_CHAIN_ADDRESS --network geth
+    yarn  hardhat check-token-balance --token $ASSET_ADDRESS_2 --address $B_CHAIN_ADDRESS --network geth
   ```
 
 ## Clean up

@@ -2,6 +2,7 @@ package swap
 
 import (
 	"encoding/json"
+	"errors"
 	"fmt"
 	"math/big"
 	"strings"
@@ -9,7 +10,6 @@ import (
 	"github.com/ethereum/go-ethereum/common"
 	"github.com/statechannels/go-nitro/channel"
 	"github.com/statechannels/go-nitro/channel/state"
-	"github.com/statechannels/go-nitro/internal/queue"
 	"github.com/statechannels/go-nitro/protocols"
 	"github.com/statechannels/go-nitro/types"
 )
@@ -28,9 +28,12 @@ const (
 
 const ObjectivePrefix = "Swap-"
 
+var ErrInvalidSwap error = errors.New("invalid swap")
+
 type SwapPayload struct {
-	Swap      channel.Swap
-	StateSigs map[uint]state.Signature
+	Swap       channel.Swap
+	StateSigs  map[uint]state.Signature
+	SwapStatus types.SwapStatus
 }
 
 // Objective is a cache of data computed by reading from the store. It stores (potentially) infinite data.
@@ -41,11 +44,11 @@ type Objective struct {
 	StateSigs  map[uint]state.Signature
 	SwapStatus types.SwapStatus
 	// Index of participant who initiated the swap in participants array
-	SwapperIndex uint
+	SwapSenderIndex uint
 }
 
 // NewObjective creates a new swap objective from a given request.
-func NewObjective(request ObjectiveRequest, preApprove bool, isSwapper bool, getChannelFunc GetChannelByIdFunction, address common.Address) (Objective, error) {
+func NewObjective(request ObjectiveRequest, preApprove bool, isSwapSender bool, getChannelFunc GetChannelByIdFunction, address common.Address) (Objective, error) {
 	obj := Objective{}
 
 	swapChannel, ok := getChannelFunc(request.swap.ChannelId)
@@ -55,7 +58,6 @@ func NewObjective(request ObjectiveRequest, preApprove bool, isSwapper bool, get
 
 	obj.C = &channel.SwapChannel{
 		Channel: *swapChannel,
-		Swaps:   *queue.NewFixedQueue[channel.Swap](channel.MAX_SWAP_STORAGE_LIMIT),
 	}
 
 	if preApprove {
@@ -69,17 +71,61 @@ func NewObjective(request ObjectiveRequest, preApprove bool, isSwapper bool, get
 		return obj, err
 	}
 
-	obj.Swap = request.swap
-
-	if isSwapper {
-		obj.SwapperIndex = uint(myIndex)
+	if isSwapSender {
+		obj.SwapSenderIndex = uint(myIndex)
 	} else {
-		obj.SwapperIndex = 1 - uint(myIndex)
+		obj.SwapSenderIndex = 1 - uint(myIndex)
 	}
 
+	isValid := obj.isValidSwap(request.swap)
+	if !isValid {
+		return obj, fmt.Errorf("swap objective creation failed: %w", ErrInvalidSwap)
+	}
+	obj.Swap = request.swap
 	obj.StateSigs = make(map[uint]state.Signature, 2)
 
 	return obj, nil
+}
+
+func (o *Objective) isValidSwap(swap channel.Swap) bool {
+	tokenIn := swap.Exchange.TokenIn
+	tokenOut := swap.Exchange.TokenOut
+
+	if swap.Exchange.AmountIn.Cmp(big.NewInt(0)) < 0 {
+		return false
+	}
+
+	if swap.Exchange.AmountOut.Cmp(big.NewInt(0)) < 0 {
+		return false
+	}
+
+	s, err := o.C.LatestSupportedState()
+	if err != nil {
+		return false
+	}
+	updateSupportedState := s.Clone()
+	updateOutcome := updateSupportedState.Outcome.Clone()
+
+	for _, assetOutcome := range updateOutcome {
+		swapSenderAllocation := assetOutcome.Allocations[o.SwapSenderIndex]
+		swapReceiverAllocation := assetOutcome.Allocations[1-o.SwapSenderIndex]
+
+		if assetOutcome.Asset == tokenIn {
+			res := swapSenderAllocation.Amount.Sub(swapSenderAllocation.Amount, swap.Exchange.AmountIn)
+			if res.Cmp(big.NewInt(0)) < 0 {
+				return false
+			}
+		}
+
+		if assetOutcome.Asset == tokenOut {
+			res := swapReceiverAllocation.Amount.Sub(swapReceiverAllocation.Amount, swap.Exchange.AmountOut)
+			if res.Cmp(big.NewInt(0)) < 0 {
+				return false
+			}
+		}
+	}
+
+	return true
 }
 
 // Id returns the objective id.
@@ -100,6 +146,7 @@ func (o *Objective) Approve() protocols.Objective {
 func (o *Objective) Reject() (protocols.Objective, protocols.SideEffects) {
 	updated := o.clone()
 	updated.Status = protocols.Rejected
+	updated.SwapStatus = types.Rejected
 
 	peer := o.C.Participants[1-o.C.MyIndex]
 	messages := protocols.CreateRejectionNoticeMessage(o.Id(), peer)
@@ -144,8 +191,25 @@ func (o *Objective) Update(raw protocols.ObjectivePayload) (protocols.Objective,
 	}
 
 	updated.Swap = swapPayload.Swap
-	// TODO: Validation for state sigs
+
+	// Ensure the incoming state sig is valid
+	counterPartyStateSig := swapPayload.StateSigs[1-updated.C.MyIndex]
+	state, err := updated.GetUpdatedSwapState()
+	if err != nil {
+		return &updated, err
+	}
+
+	counterPartyAddressFromStateSig, err := state.RecoverSigner(counterPartyStateSig)
+	if err != nil {
+		return &updated, err
+	}
+
+	if counterPartyAddressFromStateSig != o.C.Participants[1-o.C.MyIndex] {
+		return &updated, fmt.Errorf("missing counterparty's signature in state signatures")
+	}
+
 	updated.StateSigs = swapPayload.StateSigs
+	updated.SwapStatus = swapPayload.SwapStatus
 
 	return &updated, nil
 }
@@ -163,8 +227,8 @@ func (o *Objective) Crank(secretKey *[]byte) (protocols.Objective, protocols.Sid
 	}
 	// TODO: Both participant checks whether swap operation is valid
 
-	// TODO: Swapee check whether to accept or reject
-	if updated.SwapperIndex != o.C.MyIndex && updated.SwapStatus != types.Accepted {
+	// TODO: Swap receiver check whether to accept or reject
+	if updated.SwapSenderIndex != o.C.MyIndex && updated.SwapStatus != types.Accepted {
 		if updated.SwapStatus == types.PendingConfirmation {
 			return &updated, sideEffects, WaitingForConfirmation, nil
 		} else {
@@ -203,8 +267,9 @@ func (o *Objective) Crank(secretKey *[]byte) (protocols.Objective, protocols.Sid
 		messages, err := protocols.CreateObjectivePayloadMessage(
 			updated.Id(),
 			SwapPayload{
-				Swap:      updated.Swap,
-				StateSigs: updated.StateSigs,
+				Swap:       updated.Swap,
+				StateSigs:  updated.StateSigs,
+				SwapStatus: updated.SwapStatus,
 			},
 			SwapPayloadType,
 			o.C.Participants[1-o.C.MyIndex],
@@ -226,9 +291,6 @@ func (o *Objective) Crank(secretKey *[]byte) (protocols.Objective, protocols.Sid
 	if err != nil {
 		return &updated, protocols.SideEffects{}, WaitingForConsensus, fmt.Errorf("error updating swap channel state %w", err)
 	}
-
-	// Add swap to swap channel
-	updated.C.Swaps.Enqueue(updated.Swap)
 
 	// Completion
 	updated.Status = protocols.Completed
@@ -270,18 +332,18 @@ func (o *Objective) GetUpdatedSwapState() (state.State, error) {
 
 	for _, assetOutcome := range updateOutcome {
 
-		swapperAllocation := assetOutcome.Allocations[o.SwapperIndex]
-		swappeAllocation := assetOutcome.Allocations[1-o.SwapperIndex]
+		swapSenderAllocation := assetOutcome.Allocations[o.SwapSenderIndex]
+		swapReceiverAllocation := assetOutcome.Allocations[1-o.SwapSenderIndex]
 
 		if assetOutcome.Asset == tokenIn {
 
-			swapperAllocation.Amount.Sub(swapperAllocation.Amount, o.Swap.Exchange.AmountIn)
-			swappeAllocation.Amount.Add(swappeAllocation.Amount, o.Swap.Exchange.AmountIn)
+			swapSenderAllocation.Amount.Sub(swapSenderAllocation.Amount, o.Swap.Exchange.AmountIn)
+			swapReceiverAllocation.Amount.Add(swapReceiverAllocation.Amount, o.Swap.Exchange.AmountIn)
 		}
 
 		if assetOutcome.Asset == tokenOut {
-			swapperAllocation.Amount.Add(swapperAllocation.Amount, o.Swap.Exchange.AmountOut)
-			swappeAllocation.Amount.Sub(swappeAllocation.Amount, o.Swap.Exchange.AmountOut)
+			swapSenderAllocation.Amount.Add(swapSenderAllocation.Amount, o.Swap.Exchange.AmountOut)
+			swapReceiverAllocation.Amount.Sub(swapReceiverAllocation.Amount, o.Swap.Exchange.AmountOut)
 		}
 	}
 
@@ -291,7 +353,7 @@ func (o *Objective) GetUpdatedSwapState() (state.State, error) {
 }
 
 func (o *Objective) Related() []protocols.Storable {
-	ret := []protocols.Storable{o.C}
+	ret := []protocols.Storable{o.C, &o.Swap}
 
 	return ret
 }
@@ -300,7 +362,7 @@ func (o *Objective) Related() []protocols.Storable {
 func (o *Objective) clone() Objective {
 	clone := Objective{}
 	clone.Status = o.Status
-	clone.SwapperIndex = o.SwapperIndex
+	clone.SwapSenderIndex = o.SwapSenderIndex
 	clone.SwapStatus = o.SwapStatus
 	clone.C = o.C.Clone()
 	clone.Swap = o.Swap.Clone()
@@ -345,31 +407,23 @@ func (o *Objective) AcceptSwap() {
 }
 
 type jsonObjective struct {
-	Status                      protocols.ObjectiveStatus
-	C                           types.Destination
-	Swap                        channel.Swap
-	SwapperIndex                uint
-	SwapStatus                  types.SwapStatus
-	Nonce                       uint64
-	StateSigs                   map[uint]state.Signature
-	ProcessedSwapsInSwapChannel []types.Destination
+	Status          protocols.ObjectiveStatus
+	C               types.Destination
+	Swap            types.Destination
+	SwapSenderIndex uint
+	SwapStatus      types.SwapStatus
+	Nonce           uint64
+	StateSigs       map[uint]state.Signature
 }
 
 func (o Objective) MarshalJSON() ([]byte, error) {
-	processedSwapsInSwapChannel := o.C.Swaps.Values()
-	swaps := make([]types.Destination, 0)
-	for _, s := range processedSwapsInSwapChannel {
-		swaps = append(swaps, s.Id)
-	}
-
 	jsonSO := jsonObjective{
-		Status:                      o.Status,
-		C:                           o.C.Id,
-		Swap:                        o.Swap,
-		SwapStatus:                  o.SwapStatus,
-		SwapperIndex:                o.SwapperIndex,
-		StateSigs:                   o.StateSigs,
-		ProcessedSwapsInSwapChannel: swaps,
+		Status:          o.Status,
+		C:               o.C.Id,
+		Swap:            o.Swap.Id,
+		SwapStatus:      o.SwapStatus,
+		SwapSenderIndex: o.SwapSenderIndex,
+		StateSigs:       o.StateSigs,
 	}
 	return json.Marshal(jsonSO)
 }
@@ -385,22 +439,15 @@ func (o *Objective) UnmarshalJSON(data []byte) error {
 	}
 
 	o.Status = jsonSo.Status
-	o.SwapperIndex = jsonSo.SwapperIndex
+	o.SwapSenderIndex = jsonSo.SwapSenderIndex
 	o.SwapStatus = jsonSo.SwapStatus
-	o.Swap = jsonSo.Swap
+	o.Swap = channel.Swap{}
+	o.Swap.Id = jsonSo.Swap
 	o.StateSigs = jsonSo.StateSigs
 
 	o.C = &channel.SwapChannel{}
 	o.C.Id = jsonSo.C
-	swaps := queue.NewFixedQueue[channel.Swap](channel.MAX_SWAP_STORAGE_LIMIT)
-	for _, sId := range jsonSo.ProcessedSwapsInSwapChannel {
-		swap := channel.Swap{
-			Id: sId,
-		}
 
-		swaps.Enqueue(swap)
-	}
-	o.C.Swaps = *swaps
 	return nil
 }
 

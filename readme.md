@@ -118,13 +118,24 @@ The on-chain component of Nitro (i.e. the solidity contracts) are housed in the 
 
     ```bash
     # Export variables for token addresses and Bob address
-    export ASSET_ADDRESS_1="<Custom token 1 Address>"
-    export ASSET_ADDRESS_2="<Custom token 2 Address>"
+    source ./hardhat-deployments/geth/.contracts.env
+    export ASSET_ADDRESS_1=$TestToken1
+    export ASSET_ADDRESS_2=$TestToken2
+    export A_CHAIN_ADDRESS="0xf39Fd6e51aad88F6F4ce6aB8827279cffFb92266"
     export B_CHAIN_ADDRESS="0x70997970C51812dc3A010C7d01b50e0d17dc79C8"
 
     # Send tokens to Bob
     yarn hardhat transfer --contract $ASSET_ADDRESS_1 --to $B_CHAIN_ADDRESS --amount 1000 --network geth
     yarn hardhat transfer --contract $ASSET_ADDRESS_2 --to $B_CHAIN_ADDRESS --amount 1000 --network geth
+
+    # Check on chain balances for both Alice and bob
+    # Alice
+    yarn  hardhat check-token-balance --token $ASSET_ADDRESS_1 --address $A_CHAIN_ADDRESS --network geth
+    yarn  hardhat check-token-balance --token $ASSET_ADDRESS_2 --address $A_CHAIN_ADDRESS --network geth
+
+    #Bob
+    yarn  hardhat check-token-balance --token $ASSET_ADDRESS_1 --address $B_CHAIN_ADDRESS --network geth
+    yarn  hardhat check-token-balance --token $ASSET_ADDRESS_2 --address $B_CHAIN_ADDRESS --network geth
     ```
 
   - Change directory to root directory
@@ -176,7 +187,7 @@ The on-chain component of Nitro (i.e. the solidity contracts) are housed in the 
 
   - Start node for Alice
 
-    ```
+    ```bash
     source ./packages/nitro-protocol/hardhat-deployments/geth/.contracts.env
 
     ./go-nitro -config cmd/test-configs/alice.toml -naaddress $NA_ADDRESS -vpaaddress $VPA_ADDRESS -caaddress $CA_ADDRESS
@@ -200,7 +211,7 @@ The on-chain component of Nitro (i.e. the solidity contracts) are housed in the 
 
   - Start node for Bob
 
-    ```
+    ```bash
     source ./packages/nitro-protocol/hardhat-deployments/geth/.contracts.env
 
     ./go-nitro -config cmd/test-configs/bob.toml -naaddress $NA_ADDRESS -vpaaddress $VPA_ADDRESS -caaddress $CA_ADDRESS
@@ -509,8 +520,6 @@ The on-chain component of Nitro (i.e. the solidity contracts) are housed in the 
 
   ```bash
   nitro-rpc-client direct-fund $BOB_ADDRESS --asset "$ASSET_ADDRESS_1:500,500" --asset "$ASSET_ADDRESS_2:500,500" -p 4006
-
-  export LEDGER_CHANNEL_ID=<ledger-channel-id>
   ```
 
   Example ouput
@@ -518,6 +527,12 @@ The on-chain component of Nitro (i.e. the solidity contracts) are housed in the 
   ```bash
   Objective started DirectFunding-0xc7b652e6c0a5e2c1c691597397d44fc0d40a73297f9997062299b102cc8d4e96
   Channel Open 0xc7b652e6c0a5e2c1c691597397d44fc0d40a73297f9997062299b102cc8d4e96
+  ```
+
+- Export Ledger channel ID from above output
+
+  ```bash
+  export LEDGER_CHANNEL_ID=<ledger-channel-id>
   ```
 
 - Check ledger channel info
@@ -556,8 +571,6 @@ The on-chain component of Nitro (i.e. the solidity contracts) are housed in the 
 
   ```bash
   nitro-rpc-client swap-fund $BOB_ADDRESS --asset "$ASSET_ADDRESS_1:200,200" --asset "$ASSET_ADDRESS_2:100,100" -p 4006
-
-  export SWAP_CHANNEL_ID=<swap-channel-id>
   ```
 
   Example output
@@ -565,6 +578,12 @@ The on-chain component of Nitro (i.e. the solidity contracts) are housed in the 
   ```bash
   Objective started SwapFund-0x9e1950864b8c704411a6dd790008302c3d5a875a544235cc5f423682d012adc1
   Channel open 0x9e1950864b8c704411a6dd790008302c3d5a875a544235cc5f423682d012adc1
+  ```
+
+- Export swap channel ID from above output
+
+  ```bash
+  export SWAP_CHANNEL_ID=<swap-channel-id>
   ```
 
 - Check swap channel info
@@ -752,6 +771,26 @@ The on-chain component of Nitro (i.e. the solidity contracts) are housed in the 
    ],
    ChannelMode: 'Open'
   }
+  ```
+
+- Check on-chain balances of Alice and Bob after closing ledger channel
+
+  ```bash
+    # Make sure you are in the root of the go-nitro repo
+    source ./packages/nitro-protocol/hardhat-deployments/geth/.contracts.env
+    export ASSET_ADDRESS_1=$TestToken1
+    export ASSET_ADDRESS_2=$TestToken2
+    export A_CHAIN_ADDRESS="0xf39Fd6e51aad88F6F4ce6aB8827279cffFb92266"
+    export B_CHAIN_ADDRESS="0x70997970C51812dc3A010C7d01b50e0d17dc79C8"
+
+    # Check on chain balances for both Alice and bob
+    # Alice
+    yarn  hardhat check-token-balance --token $ASSET_ADDRESS_1 --address $A_CHAIN_ADDRESS --network geth
+    yarn  hardhat check-token-balance --token $ASSET_ADDRESS_2 --address $A_CHAIN_ADDRESS --network geth
+
+    #Bob
+    yarn  hardhat check-token-balance --token $ASSET_ADDRESS_1 --address $B_CHAIN_ADDRESS --network geth
+    yarn  hardhat check-token-balance --token $ASSET_ADDRESS_2 --address $B_CHAIN_ADDRESS --network geth
   ```
 
 ## Steps to retry dropped txs
