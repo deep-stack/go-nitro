@@ -2,6 +2,7 @@ package node_test
 
 import (
 	"context"
+	"fmt"
 	"math/big"
 	"testing"
 	"time"
@@ -291,4 +292,159 @@ func waitForClientBlockNum(t *testing.T, n node.Node, targetBlockNum uint64, tim
 			time.Sleep(100 * time.Millisecond)
 		}
 	}
+}
+
+func TestSwapFundWithIntermediary(t *testing.T) {
+	testCase := TestCase{
+		Description:       "Direct defund with Challenge",
+		Chain:             AnvilChain,
+		MessageService:    P2PMessageService,
+		ChallengeDuration: 5,
+		MessageDelay:      0,
+		LogName:           "challenge_test",
+		Participants: []TestParticipant{
+			{StoreType: MemStore, Actor: testactors.Alice},
+			{StoreType: MemStore, Actor: testactors.Bob},
+			{StoreType: MemStore, Actor: testactors.Irene},
+		},
+	}
+
+	dataFolder, cleanup := testhelpers.GenerateTempStoreFolder()
+	defer cleanup()
+
+	infra := setupSharedInfra(testCase)
+	defer infra.Close(t)
+
+	// TokenBinding
+	_, err := Token.NewToken(infra.anvilChain.ContractAddresses.TokenAddresses[0], infra.anvilChain.EthClient)
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	// Create go-nitro nodes
+	nodeB, _, nodeBMulitAddress, _, _ := setupIntegrationNode(testCase, testCase.Participants[1], infra, []string{}, dataFolder)
+	defer nodeB.Close()
+	nodeA, _, _, _, _ := setupIntegrationNode(testCase, testCase.Participants[0], infra, []string{nodeBMulitAddress}, dataFolder)
+	defer nodeA.Close()
+	nodeC, _, _, _, _ := setupIntegrationNode(testCase, testCase.Participants[2], infra, []string{nodeBMulitAddress}, dataFolder)
+	defer nodeC.Close()
+
+	// create 1st ledger channel
+	outcomeEth := CreateLedgerOutcome(*nodeA.Address, *nodeB.Address, ledgerChannelDeposit, ledgerChannelDeposit, common.Address{})
+	outcomeCustomToken := CreateLedgerOutcome(*nodeA.Address, *nodeB.Address, ledgerChannelDeposit, ledgerChannelDeposit, infra.anvilChain.ContractAddresses.TokenAddresses[0])
+	outcomeCustomToken2 := CreateLedgerOutcome(*nodeA.Address, *nodeB.Address, ledgerChannelDeposit, ledgerChannelDeposit, infra.anvilChain.ContractAddresses.TokenAddresses[1])
+	multiAssetOutcome := append(outcomeEth, outcomeCustomToken...)
+	multiAssetOutcome = append(multiAssetOutcome, outcomeCustomToken2...)
+	ledgerResponse, err := nodeA.CreateLedgerChannel(*nodeB.Address, uint32(testCase.ChallengeDuration), multiAssetOutcome)
+	if err != nil {
+		t.Fatal("error creating ledger channel", err)
+	}
+	t.Log("Waiting for direct-fund 1 objective to complete...")
+	chA := nodeA.ObjectiveCompleteChan(ledgerResponse.Id)
+	chB := nodeB.ObjectiveCompleteChan(ledgerResponse.Id)
+	<-chA
+	<-chB
+
+	fmt.Println("LEDGER CHANNEL 1 created")
+	time.Sleep(3 * time.Second)
+	// create 2nd ledger channel
+	outcomeEth2 := CreateLedgerOutcome(*nodeC.Address, *nodeB.Address, ledgerChannelDeposit, ledgerChannelDeposit, common.Address{})
+	outcomeCustomToken3 := CreateLedgerOutcome(*nodeC.Address, *nodeB.Address, ledgerChannelDeposit, ledgerChannelDeposit, infra.anvilChain.ContractAddresses.TokenAddresses[0])
+	outcomeCustomToken4 := CreateLedgerOutcome(*nodeC.Address, *nodeB.Address, ledgerChannelDeposit, ledgerChannelDeposit, infra.anvilChain.ContractAddresses.TokenAddresses[1])
+	multiAssetOutcome2 := append(outcomeEth2, outcomeCustomToken3...)
+	multiAssetOutcome2 = append(multiAssetOutcome2, outcomeCustomToken4...)
+	ledgerResponse2, err := nodeC.CreateLedgerChannel(*nodeB.Address, uint32(testCase.ChallengeDuration), multiAssetOutcome2)
+	if err != nil {
+		t.Fatal("error creating ledger channel", err)
+	}
+	t.Log("Waiting for direct-fund 2 objective to complete...")
+	chA2 := nodeB.ObjectiveCompleteChan(ledgerResponse2.Id)
+	chB2 := nodeC.ObjectiveCompleteChan(ledgerResponse2.Id)
+	<-chA2
+	<-chB2
+
+	fmt.Println("LEDGER CHANNEL 2 created")
+
+	multiassetSwapChannelOutcome := outcome.Exit{
+		outcome.SingleAssetExit{
+			Asset: common.Address{},
+			Allocations: outcome.Allocations{
+				outcome.Allocation{
+					Destination: types.AddressToDestination(*nodeA.Address),
+					Amount:      big.NewInt(int64(1001)),
+				},
+				outcome.Allocation{
+					Destination: types.AddressToDestination(*nodeC.Address),
+					Amount:      big.NewInt(int64(1002)),
+				},
+			},
+		},
+		outcome.SingleAssetExit{
+			Asset: infra.anvilChain.ContractAddresses.TokenAddresses[0],
+			Allocations: outcome.Allocations{
+				outcome.Allocation{
+					Destination: types.AddressToDestination(*nodeA.Address),
+					Amount:      big.NewInt(int64(501)),
+				},
+				outcome.Allocation{
+					Destination: types.AddressToDestination(*nodeC.Address),
+					Amount:      big.NewInt(int64(502)),
+				},
+			},
+		},
+		outcome.SingleAssetExit{
+			Asset: infra.anvilChain.ContractAddresses.TokenAddresses[1],
+			Allocations: outcome.Allocations{
+				outcome.Allocation{
+					Destination: types.AddressToDestination(*nodeA.Address),
+					Amount:      big.NewInt(int64(601)),
+				},
+				outcome.Allocation{
+					Destination: types.AddressToDestination(*nodeC.Address),
+					Amount:      big.NewInt(int64(602)),
+				},
+			},
+		},
+	}
+
+	swapChannelresponse, err := nodeA.CreateSwapChannel(
+		[]common.Address{*nodeB.Address},
+		*nodeC.Address,
+		0,
+		multiassetSwapChannelOutcome,
+	)
+	if err != nil {
+		t.Fatal(err)
+	}
+	t.Log("Waiting for swap fund objective to complete")
+
+	chB = nodeC.ObjectiveCompleteChan(swapChannelresponse.Id)
+	<-nodeA.ObjectiveCompleteChan(swapChannelresponse.Id)
+	<-chB
+
+	t.Log("Completed swap-fund objective")
+
+	// // Initiate swap from Alice
+	// response1, err := nodeA.SwapAssets(swapChannelresponse.ChannelId, infra.anvilChain.ContractAddresses.TokenAddresses[0], infra.anvilChain.ContractAddresses.TokenAddresses[1], big.NewInt(100), big.NewInt(200))
+	// if err != nil {
+	// 	t.Fatal(err)
+	// }
+
+	// // Wait for objective to wait for confirmation
+	// time.Sleep(2 * time.Second)
+
+	// pendingSwap1, err := nodeC.GetPendingSwapByChannelId(swapChannelresponse.ChannelId)
+	// if err != nil {
+	// 	t.Fatal(err)
+	// }
+
+	// fmt.Println("PENDING SWAP", pendingSwap1)
+	// // Accept the swap
+	// err = nodeC.ConfirmSwap(pendingSwap1.SwapId(), types.Accepted)
+	// if err != nil {
+	// 	t.Fatal(err)
+	// }
+
+	// <-nodeA.ObjectiveCompleteChan(response1.Id)
+	// fmt.Println("CONDUCT SWAP 1")
 }
