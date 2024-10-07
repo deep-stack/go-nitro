@@ -1,6 +1,7 @@
 package node_test
 
 import (
+	"fmt"
 	"math/big"
 	"testing"
 	"time"
@@ -959,4 +960,131 @@ func createVirtualChannelAndMakePayment(t *testing.T, node node.Node, counterPar
 	// Close virtual channel
 	virtualDefundResponse, _ := node.ClosePaymentChannel(virtualResponse.ChannelId)
 	<-node.ObjectiveCompleteChan(virtualDefundResponse)
+}
+
+func TestL2Swap(t *testing.T) {
+	utils, cleanup := initializeUtilsWithBridge(t, true)
+	defer cleanup()
+
+	tcL1, _ := utils.tcL1, utils.tcL2
+	nodeA, nodeAPrime := utils.nodeA, utils.nodeAPrime
+	bridge, bridgeAddress := utils.bridge, utils.bridgeAddress
+	// storeA := utils.storeA
+	infraL1 := utils.infraL1
+
+	// var l1LedgerChannelId types.Destination
+	// var l2LedgerChannelId types.Destination
+
+	t.Run("Create ledger channel on L1 and mirror it on L2", func(t *testing.T) {
+		// Alice create ledger channel with bridge
+
+		outcomeEth := CreateLedgerOutcome(*nodeA.Address, bridgeAddress, ledgerChannelDeposit, ledgerChannelDeposit, common.Address{})
+		outcomeCustomToken := CreateLedgerOutcome(*nodeA.Address, bridgeAddress, ledgerChannelDeposit, ledgerChannelDeposit, infraL1.anvilChain.ContractAddresses.TokenAddresses[0])
+
+		outcomeCustomToken2 := CreateLedgerOutcome(*nodeA.Address, bridgeAddress, ledgerChannelDeposit, ledgerChannelDeposit, infraL1.anvilChain.ContractAddresses.TokenAddresses[1])
+
+		multiAssetOutcome := append(outcomeEth, outcomeCustomToken...)
+		multiAssetOutcome = append(multiAssetOutcome, outcomeCustomToken2...)
+
+		l1LedgerChannelResponse, err := nodeA.CreateLedgerChannel(bridgeAddress, uint32(tcL1.ChallengeDuration), multiAssetOutcome)
+		if err != nil {
+			t.Fatal(err)
+		}
+		t.Log("Waiting for direct-fund objective to complete...")
+		<-nodeA.ObjectiveCompleteChan(l1LedgerChannelResponse.Id)
+		t.Log("L1 channel created", l1LedgerChannelResponse.Id)
+
+		createdMirrorChannel := <-bridge.CreatedMirrorChannels()
+		fmt.Println("CREATED L2 LEDGER CHANNEL", createdMirrorChannel)
+
+		time.Sleep(5 * time.Second)
+		mirrorChannel, _ := utils.storeAPrime.GetConsensusChannelById(createdMirrorChannel)
+
+		ss := mirrorChannel.SupportedSignedState()
+		fmt.Printf("\n MIRROR CHANNEL SS>>>>>>>%+v", ss.State().Outcome)
+
+		multiassetSwapChannelOutcome := outcome.Exit{
+			outcome.SingleAssetExit{
+				Asset: common.Address{},
+				Allocations: outcome.Allocations{
+					outcome.Allocation{
+						Destination: types.AddressToDestination(*nodeA.Address),
+						Amount:      big.NewInt(int64(1001)),
+					},
+					outcome.Allocation{
+						Destination: types.AddressToDestination(bridgeAddress),
+						Amount:      big.NewInt(int64(1002)),
+					},
+				},
+			},
+			outcome.SingleAssetExit{
+				Asset: infraL1.anvilChain.ContractAddresses.TokenAddresses[0],
+				Allocations: outcome.Allocations{
+					outcome.Allocation{
+						Destination: types.AddressToDestination(*nodeA.Address),
+						Amount:      big.NewInt(int64(501)),
+					},
+					outcome.Allocation{
+						Destination: types.AddressToDestination(bridgeAddress),
+						Amount:      big.NewInt(int64(502)),
+					},
+				},
+			},
+			outcome.SingleAssetExit{
+				Asset: infraL1.anvilChain.ContractAddresses.TokenAddresses[1],
+				Allocations: outcome.Allocations{
+					outcome.Allocation{
+						Destination: types.AddressToDestination(*nodeA.Address),
+						Amount:      big.NewInt(int64(601)),
+					},
+					outcome.Allocation{
+						Destination: types.AddressToDestination(bridgeAddress),
+						Amount:      big.NewInt(int64(602)),
+					},
+				},
+			},
+		}
+
+		swapChannelresponse, err := nodeAPrime.CreateSwapChannel(
+			nil,
+			bridgeAddress,
+			0,
+			multiassetSwapChannelOutcome,
+		)
+		if err != nil {
+			t.Fatal(err)
+		}
+
+		// chB := nodeAPrime.ObjectiveCompleteChan(swapChannelresponse.Id)
+		<-nodeAPrime.ObjectiveCompleteChan(swapChannelresponse.Id)
+		// <-chB
+
+		t.Log("Completed swap-fund objective")
+
+		time.Sleep(5 * time.Second)
+		swapChannel, _ := utils.storeAPrime.GetChannelById(swapChannelresponse.ChannelId)
+
+		s, _ := swapChannel.LatestSupportedState()
+		o := s.Outcome
+		fmt.Printf("\n SWAP CHANNEL SS>>>>>>>%+v", o)
+
+		// // DO SWAP
+		// response1, err := nodeAPrime.SwapAssets(swapChannelresponse.ChannelId, common.Address{}, infraL1.anvilChain.ContractAddresses.TokenAddresses[0], big.NewInt(100), big.NewInt(200))
+		// if err != nil {
+		// 	t.Fatal(err)
+		// }
+
+		// time.Sleep(3 * time.Second)
+		// pendingSwap1, err := nodeA.GetPendingSwapByChannelId(response1.ChannelId)
+		// if err != nil {
+		// 	t.Fatal(err)
+		// }
+		// // does bridge supports swap or just bridge as intermediary
+		// err = bridge.ConfirmSwap(pendingSwap1.SwapId(), types.Accepted)
+		// if err != nil {
+		// 	t.Fatal(err)
+		// }
+
+		// <-nodeAPrime.ObjectiveCompleteChan(response1.Id)
+	})
 }
