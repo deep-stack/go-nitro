@@ -1068,6 +1068,9 @@ func TestL2Swap(t *testing.T) {
 		o := s.Outcome
 		fmt.Printf("\n SWAP CHANNEL SS>>>>>>>%+v", o)
 
+		mirrorChannel, _ = utils.storeAPrime.GetConsensusChannelById(createdMirrorChannel)
+		ss = mirrorChannel.SupportedSignedState()
+		fmt.Printf("\n MIRROR CHANNEL SS AFTER SWAP CHANNEL>>>>>>>%+v", ss.State().Outcome)
 		// // DO SWAP
 		// response1, err := nodeAPrime.SwapAssets(swapChannelresponse.ChannelId, common.Address{}, infraL1.anvilChain.ContractAddresses.TokenAddresses[0], big.NewInt(100), big.NewInt(200))
 		// if err != nil {
