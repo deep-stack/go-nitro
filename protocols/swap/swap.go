@@ -47,12 +47,14 @@ type Objective struct {
 	Swap       payments.Swap
 	StateSigs  map[uint]state.Signature
 	SwapStatus types.SwapStatus
-	// Index of participant who initiated the swap in participants array
+	// Index of participant who initiated the swap in allocations array
 	SwapSenderIndex uint
 }
 
 // NewObjective creates a new swap objective from a given request.
 func NewObjective(request ObjectiveRequest, preApprove bool, isSwapSender bool, getChannelFunc GetChannelByIdFunction, address common.Address) (Objective, error) {
+	// TODO: Handle objective creation for intermediary
+
 	obj := Objective{}
 
 	swapChannel, ok := getChannelFunc(request.swap.ChannelId)
@@ -70,23 +72,13 @@ func NewObjective(request ObjectiveRequest, preApprove bool, isSwapSender bool, 
 		obj.Status = protocols.Unapproved
 	}
 
-	myIndex, err := obj.FindParticipantIndex(address)
+	index, err := obj.determineSwapSenderIndex(address, isSwapSender)
 	if err != nil {
 		return obj, err
 	}
+	obj.SwapSenderIndex = index
 
-	if isSwapSender {
-		obj.SwapSenderIndex = uint(myIndex)
-	} else {
-		obj.SwapSenderIndex = 1 - uint(myIndex)
-	}
-
-	s, err := obj.C.LatestSupportedState()
-	if err != nil {
-		return Objective{}, err
-	}
-
-	isValid := IsValidSwap(s, request.swap, obj.SwapSenderIndex)
+	isValid := obj.isValidSwap(request.swap)
 	if !isValid {
 		return obj, fmt.Errorf("swap objective creation failed: %w", ErrInvalidSwap)
 	}
@@ -96,7 +88,26 @@ func NewObjective(request ObjectiveRequest, preApprove bool, isSwapSender bool, 
 	return obj, nil
 }
 
-func IsValidSwap(s state.State, swap payments.Swap, swapSenderIndex uint) bool {
+func (o *Objective) determineSwapSenderIndex(myAddress common.Address, isSwapSender bool) (uint, error) {
+	state, err := o.C.LatestSupportedState()
+	if err != nil {
+		return 0, err
+	}
+
+	var swapSenderIndex uint
+	for allocationIndex, allocation := range state.Outcome[0].Allocations {
+		if allocation.Destination == types.AddressToDestination(myAddress) {
+			if isSwapSender {
+				swapSenderIndex = uint(allocationIndex)
+			} else {
+				swapSenderIndex = uint(1 - allocationIndex)
+			}
+		}
+	}
+	return swapSenderIndex, nil
+}
+
+func (o *Objective) isValidSwap(swap payments.Swap) bool {
 	tokenIn := swap.Exchange.TokenIn
 	tokenOut := swap.Exchange.TokenOut
 
@@ -108,12 +119,16 @@ func IsValidSwap(s state.State, swap payments.Swap, swapSenderIndex uint) bool {
 		return false
 	}
 
+	s, err := o.C.LatestSupportedState()
+	if err != nil {
+		return false
+	}
 	updateSupportedState := s.Clone()
 	updateOutcome := updateSupportedState.Outcome.Clone()
 
 	for _, assetOutcome := range updateOutcome {
-		swapSenderAllocation := assetOutcome.Allocations[swapSenderIndex]
-		swapReceiverAllocation := assetOutcome.Allocations[1-swapSenderIndex]
+		swapSenderAllocation := assetOutcome.Allocations[o.SwapSenderIndex]
+		swapReceiverAllocation := assetOutcome.Allocations[1-o.SwapSenderIndex]
 
 		if assetOutcome.Asset == tokenIn {
 			res := swapSenderAllocation.Amount.Sub(swapSenderAllocation.Amount, swap.Exchange.AmountIn)
@@ -149,11 +164,13 @@ func (o *Objective) Approve() protocols.Objective {
 
 // Reject returns a rejected copy of the objective.
 func (o *Objective) Reject() (protocols.Objective, protocols.SideEffects) {
+	// TODO: Handle reject method for intermediary
+
 	updated := o.clone()
 	updated.Status = protocols.Rejected
 	updated.SwapStatus = types.Rejected
 
-	peer := o.C.Participants[1-o.C.MyIndex]
+	peer := o.counterPartyAddress()
 	messages := protocols.CreateRejectionNoticeMessage(o.Id(), peer)
 	sideEffects := protocols.SideEffects{MessagesToSend: messages}
 	return &updated, sideEffects
@@ -173,6 +190,8 @@ func (o *Objective) GetStatus() protocols.ObjectiveStatus {
 // Update receives an protocols.ObjectiveEvent, applies all applicable event data to the VirtualFundObjective,
 // and returns the updated state.
 func (o *Objective) Update(raw protocols.ObjectivePayload) (protocols.Objective, error) {
+	// TODO: Handle update method for intermediary
+
 	updated := o.clone()
 	swapPayload, err := getSwapPayload(raw.PayloadData)
 	if err != nil {
@@ -185,33 +204,37 @@ func (o *Objective) Update(raw protocols.ObjectivePayload) (protocols.Objective,
 		return &updated, fmt.Errorf("swap does not match")
 	}
 
-	counterPartySig := swapPayload.Swap.Sigs[1-updated.C.MyIndex]
+	myIndex := o.myIndexInAllocations()
+	if myIndex == -1 {
+		return &updated, fmt.Errorf("error in finding index")
+	}
+	counterPartySig := swapPayload.Swap.Sigs[uint(1-myIndex)]
 	counterPartyAddress, err := o.Swap.RecoverSigner(counterPartySig)
 	if err != nil {
 		return &updated, err
 	}
 
-	if counterPartyAddress != o.C.Participants[1-o.C.MyIndex] {
+	if counterPartyAddress != o.counterPartyAddress() {
 		return &updated, fmt.Errorf("swap lacks counterparty's signature")
 	}
 
 	updated.Swap = swapPayload.Swap
 
 	// Ensure the incoming state sig is valid
-	counterPartyStateSig := swapPayload.StateSigs[1-updated.C.MyIndex]
-	state, err := updated.GetUpdatedSwapState()
-	if err != nil {
-		return &updated, err
-	}
+	// counterPartyStateSig := swapPayload.StateSigs[1-updated.C.MyIndex]
+	// state, err := updated.GetUpdatedSwapState()
+	// if err != nil {
+	// 	return &updated, err
+	// }
 
-	counterPartyAddressFromStateSig, err := state.RecoverSigner(counterPartyStateSig)
-	if err != nil {
-		return &updated, err
-	}
+	// counterPartyAddressFromStateSig, err := state.RecoverSigner(counterPartyStateSig)
+	// if err != nil {
+	// 	return &updated, err
+	// }
 
-	if counterPartyAddressFromStateSig != o.C.Participants[1-o.C.MyIndex] {
-		return &updated, fmt.Errorf("missing counterparty's signature in state signatures")
-	}
+	// if counterPartyAddressFromStateSig != o.otherParticipant() {
+	// 	return &updated, fmt.Errorf("missing counterparty's signature in state signatures")
+	// }
 
 	updated.StateSigs = swapPayload.StateSigs
 	updated.SwapStatus = swapPayload.SwapStatus
@@ -223,6 +246,8 @@ func (o *Objective) Update(raw protocols.ObjectivePayload) (protocols.Objective,
 // It's like a state machine transition function where the finite / enumerable state is returned (computed from the extended state)
 // rather than being independent of the extended state; and where there is only one type of event ("the crank") with no data on it at all.
 func (o *Objective) Crank(secretKey *[]byte) (protocols.Objective, protocols.SideEffects, protocols.WaitingFor, error) {
+	// TODO: Handle crank method for intermediary
+
 	updated := o.clone()
 
 	sideEffects := protocols.SideEffects{}
@@ -252,7 +277,11 @@ func (o *Objective) Crank(secretKey *[]byte) (protocols.Objective, protocols.Sid
 			return &updated, sideEffects, WaitingForConsensus, err
 		}
 
-		err = updated.Swap.AddSignature(sig, updated.C.MyIndex)
+		index := o.myIndexInAllocations()
+		if index == -1 {
+			return &updated, protocols.SideEffects{}, WaitingForConsensus, fmt.Errorf("error in finding index")
+		}
+		err = updated.Swap.AddSignature(sig, uint(index))
 		if err != nil {
 			return &updated, sideEffects, WaitingForConsensus, err
 		}
@@ -277,7 +306,7 @@ func (o *Objective) Crank(secretKey *[]byte) (protocols.Objective, protocols.Sid
 				SwapStatus: updated.SwapStatus,
 			},
 			SwapPayloadType,
-			o.C.Participants[1-o.C.MyIndex],
+			o.counterPartyAddress(),
 		)
 		if err != nil {
 			return &updated, protocols.SideEffects{}, WaitingForConsensus, fmt.Errorf("could not create payload message %w", err)
@@ -307,6 +336,7 @@ func (o *Objective) UpdateSwapChannelState() error {
 	if err != nil {
 		return fmt.Errorf("error creating updated swap channel state %w", err)
 	}
+	// fmt.Println("UPDATED STATE AFTER SWAP OUTCOME", updatedState.Outcome)
 
 	updatedSignedState := state.NewSignedState(updatedState)
 	for _, sig := range o.StateSigs {
@@ -316,10 +346,13 @@ func (o *Objective) UpdateSwapChannelState() error {
 		}
 	}
 
+	fmt.Println("\nUPDATED SIGNED STATE AFTER SWAP OUTCOME", updatedSignedState.State().Outcome)
 	ok := o.C.AddSignedState(updatedSignedState)
 	if !ok {
 		return fmt.Errorf("error adding signed state to swap channel %w", err)
 	}
+	ss, _ := o.C.LatestSupportedState()
+	fmt.Println("\nLATEST STATE OUTCOME AFTER ADDING STATE TO CHANNEL", ss.Outcome)
 
 	return nil
 }
@@ -384,7 +417,7 @@ func (o *Objective) clone() Objective {
 // HasAllSignatures returns true if every participant has a valid signature.
 func (o *Objective) HasAllSignatures() bool {
 	// Since signatures are validated
-	if len(o.Swap.Sigs) == len(o.C.Participants) && len(o.StateSigs) == len(o.C.Participants) {
+	if len(o.Swap.Sigs) == 2 {
 		return true
 	} else {
 		return false
@@ -393,10 +426,15 @@ func (o *Objective) HasAllSignatures() bool {
 
 // HasSignatureForParticipant returns true if the participant (at participantIndex) has a valid signature.
 func (o *Objective) HasSignatureForParticipant() bool {
-	_, found := o.Swap.Sigs[o.C.MyIndex]
+	myIndex := o.myIndexInAllocations()
+	if myIndex == -1 {
+		return false
+	}
+	_, found := o.Swap.Sigs[uint(myIndex)]
 	return found
 }
 
+// TODO: Remove
 func (o *Objective) FindParticipantIndex(address common.Address) (int, error) {
 	for index, participantAddress := range o.C.Participants {
 		if participantAddress == address {
@@ -537,4 +575,28 @@ func (r ObjectiveRequest) Response() ObjectiveResponse {
 		Id:        protocols.ObjectiveId(ObjectivePrefix + r.swap.Id.String()),
 		ChannelId: r.swap.ChannelId,
 	}
+}
+
+func (o *Objective) counterPartyAddress() common.Address {
+	length := len(o.C.Participants)
+
+	if o.C.MyIndex == 0 {
+		return o.C.Participants[length-1]
+	} else if o.C.MyIndex == uint(length-1) {
+		return o.C.Participants[0]
+	}
+
+	return common.Address{}
+}
+
+func (o *Objective) myIndexInAllocations() int {
+	myIndex := -1
+	myAddress := o.C.Participants[o.C.MyIndex]
+	state, _ := o.C.LatestSupportedState()
+	for i, allocation := range state.Outcome[0].Allocations {
+		if allocation.Destination == types.AddressToDestination(myAddress) {
+			myIndex = i
+		}
+	}
+	return myIndex
 }
