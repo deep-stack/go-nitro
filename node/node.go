@@ -9,7 +9,6 @@ import (
 	"time"
 
 	"github.com/ethereum/go-ethereum/common"
-	"github.com/statechannels/go-nitro/channel"
 	"github.com/statechannels/go-nitro/channel/state"
 	"github.com/statechannels/go-nitro/channel/state/outcome"
 	"github.com/statechannels/go-nitro/internal/safesync"
@@ -210,6 +209,18 @@ func (n *Node) CreateSwapChannel(Intermediaries []types.Address, CounterParty ty
 		n.engine.GetConsensusAppAddress(),
 	)
 
+	isAmountNonZero := false
+	for _, o := range objectiveRequest.Outcome {
+		if o.Allocations.Total().Cmp(common.Big0) == 1 {
+			isAmountNonZero = true
+			break
+		}
+	}
+
+	if !isAmountNonZero {
+		return swapfund.ObjectiveResponse{}, swapfund.ErrZeroFunds
+	}
+
 	// Send the event to the engine
 	n.engine.ObjectiveRequestsFromAPI <- objectiveRequest
 
@@ -248,7 +259,7 @@ func (n *Node) SwapAssets(channelId types.Destination, tokenIn common.Address, t
 	}
 
 	if s != nil && !s.Id.IsZero() {
-		return swap.ObjectiveResponse{}, fmt.Errorf("swap objective exists for the given channel %+v", channelId)
+		return swap.ObjectiveResponse{}, fmt.Errorf("%w: channel Id %+v", swap.ErrSwapExists, channelId)
 	}
 
 	objectiveRequest := swap.NewObjectiveRequest(channelId, tokenIn, tokenOut, amountIn, amountOut, swapChannel.FixedPart, rand.Uint64())
@@ -292,7 +303,7 @@ func (n *Node) CreateLedgerChannel(Counterparty types.Address, ChallengeDuration
 	)
 
 	// Check store to see if there is an existing channel with this counterparty
-	channelExists, err := directfund.ChannelsExistWithCounterparty(Counterparty, n.store.GetChannelsByParticipant, n.store.GetConsensusChannel)
+	channelExists, err := directfund.OpenLedgerChannelsExistWithCounterparty(Counterparty, n.store.GetChannelsByParticipant, n.store.GetConsensusChannel)
 	if err != nil {
 		slog.Error("direct fund error", "error", err)
 		return directfund.ObjectiveResponse{}, fmt.Errorf("counterparty check failed: %w", err)
@@ -398,7 +409,7 @@ func (n *Node) GetPaymentChannelsByLedger(ledgerId types.Destination) ([]query.P
 	return query.GetPaymentChannelsByLedger(ledgerId, n.store, n.vm)
 }
 
-func (n *Node) GetPendingSwapByChannelId(swapChannelId types.Destination) (*channel.Swap, error) {
+func (n *Node) GetPendingSwapByChannelId(swapChannelId types.Destination) (*payments.Swap, error) {
 	return n.store.GetPendingSwapByChannelId(swapChannelId)
 }
 

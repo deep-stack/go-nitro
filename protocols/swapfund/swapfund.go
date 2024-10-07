@@ -28,7 +28,10 @@ const (
 	SignedStatePayload protocols.PayloadType = "SignedStatePayload"
 )
 
-var ErrUpdatingLedgerFunding = errors.New("error updating ledger funding")
+var (
+	ErrUpdatingLedgerFunding = errors.New("error updating ledger funding")
+	ErrZeroFunds             = errors.New("swap channel cannot be created without any funds")
+)
 
 const ObjectivePrefix = "SwapFund-"
 
@@ -175,6 +178,11 @@ func NewObjective(request ObjectiveRequest, preApprove bool, myAddress types.Add
 	if err != nil {
 		return Objective{}, fmt.Errorf("error creating objective: %w", err)
 	}
+
+	if !objective.a0.IsNonZero() && !objective.b0.IsNonZero() {
+		return Objective{}, ErrZeroFunds
+	}
+
 	return objective, nil
 }
 
