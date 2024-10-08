@@ -120,17 +120,17 @@ func (c *ConsensusChannel) Receive(sp SignedProposal) error {
 // IsProposed returns true if a proposal in the queue would lead to g being included in the receiver's outcome, and false otherwise.
 //
 // Specific clarification: If the current outcome already includes g, IsProposed returns false.
-func (c *ConsensusChannel) IsProposed(g Guarantee) (bool, error) {
+func (c *ConsensusChannel) IsProposed(g Guarantee, a common.Address) (bool, error) {
 	latest, err := c.latestProposedVars()
 	if err != nil {
 		return false, err
 	}
 
-	return latest.Outcome.includes(g) && !c.Includes(g), nil
+	return latest.Outcome.includes(g, a) && !c.Includes(g, a), nil
 }
 
 // IsProposedNext returns true if the next proposal in the queue would lead to g being included in the receiver's outcome, and false otherwise.
-func (c *ConsensusChannel) IsProposedNext(g Guarantee) (bool, error) {
+func (c *ConsensusChannel) IsProposedNext(g Guarantee, a common.Address) (bool, error) {
 	vars := Vars{TurnNum: c.current.TurnNum, Outcome: c.current.Outcome.clone()}
 
 	if len(c.proposalQueue) == 0 {
@@ -147,7 +147,7 @@ func (c *ConsensusChannel) IsProposedNext(g Guarantee) (bool, error) {
 		return false, err
 	}
 
-	return vars.Outcome.includes(g) && !c.Includes(g), nil
+	return vars.Outcome.includes(g, a) && !c.Includes(g, a), nil
 }
 
 // ConsensusTurnNum returns the turn number of the current consensus state.
@@ -156,8 +156,8 @@ func (c *ConsensusChannel) ConsensusTurnNum() uint64 {
 }
 
 // Includes returns whether or not the consensus state includes the given guarantee.
-func (c *ConsensusChannel) Includes(g Guarantee) bool {
-	return c.current.Outcome.includes(g)
+func (c *ConsensusChannel) Includes(g Guarantee, a common.Address) bool {
+	return c.current.Outcome.includes(g, a)
 }
 
 // IncludesTarget returns whether or not the consensus state includes a guarantee
@@ -575,17 +575,16 @@ func (lo *LedgerOutcomes) clone() LedgerOutcomes {
 	return clonedOutcomes
 }
 
-func (lo *LedgerOutcomes) includes(g Guarantee) bool {
-	isGuaranteeIncluded := false
-
+func (lo *LedgerOutcomes) includes(g Guarantee, a common.Address) bool {
 	for _, o := range *lo {
-		if o.includes(g) {
-			isGuaranteeIncluded = true
-			break
+		if o.assetAddress == a {
+			if o.includes(g) {
+				return true
+			}
 		}
 	}
 
-	return isGuaranteeIncluded
+	return false
 }
 
 func (lo *LedgerOutcomes) includesTarget(target types.Destination) bool {

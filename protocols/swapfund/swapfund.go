@@ -99,8 +99,8 @@ func (c *Connection) handleProposal(sp consensus_channel.SignedProposal) error {
 func (c *Connection) IsFundingTheTarget() bool {
 	includedGuarantees := 0
 	g := c.getExpectedGuarantee()
-	for _, guarantee := range g {
-		if c.Channel.Includes(guarantee) {
+	for a, guarantee := range g {
+		if c.Channel.Includes(guarantee, a) {
 			includedGuarantees++
 		}
 	}
@@ -223,7 +223,7 @@ func constructFromState(
 
 	init.S = s
 
-	init.n = uint(len(initialStateOfV.Participants)) - 2 // NewSingleHopSwapChannel will error unless there are at least 3 participants
+	init.n = uint(len(initialStateOfV.Participants)) - 2
 
 	init.a0 = make(map[types.Address]*big.Int)
 	init.b0 = make(map[types.Address]*big.Int)
@@ -657,7 +657,7 @@ func (c *Connection) expectedProposal() map[common.Address]consensus_channel.Pro
 
 	for asset, amount := range c.GuaranteeInfo.LeftAmount {
 		guarantee := g[asset]
-		if c.Channel.Includes(guarantee) {
+		if c.Channel.Includes(guarantee, asset) {
 			continue
 		}
 		proposal := consensus_channel.NewAddProposal(c.Channel.Id, guarantee, amount, asset)
@@ -732,12 +732,8 @@ func (o *Objective) updateLedgerWithGuarantee(ledgerConnection Connection, sk *[
 	// TODO: Fix error, changed method to send guarantee map
 	guarantee := ledgerConnection.getExpectedGuarantee()
 	proposed := false
-	for _, g := range guarantee {
-		if ledgerConnection.Channel.Includes(g) {
-			continue
-		}
-
-		p, err := ledger.IsProposed(g)
+	for a, g := range guarantee {
+		p, err := ledger.IsProposed(g, a)
 		if err != nil {
 			return protocols.SideEffects{}, err
 		}
@@ -760,7 +756,7 @@ func (o *Objective) updateLedgerWithGuarantee(ledgerConnection Connection, sk *[
 	} else {
 		// If the proposal is next in the queue we accept it
 		for a, g := range guarantee {
-			proposedNext, err := ledger.IsProposedNext(g)
+			proposedNext, err := ledger.IsProposedNext(g, a)
 			if err != nil {
 				return protocols.SideEffects{}, err
 			}
