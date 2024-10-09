@@ -3,7 +3,9 @@ package consensus_channel
 
 import (
 	"bytes"
+	"encoding/json"
 	"fmt"
+	"log/slog"
 	"math/big"
 	"sort"
 
@@ -133,6 +135,13 @@ func (c *ConsensusChannel) IsProposed(g Guarantee, a common.Address) (bool, erro
 func (c *ConsensusChannel) IsProposedNext(g Guarantee, a common.Address) (bool, error) {
 	vars := Vars{TurnNum: c.current.TurnNum, Outcome: c.current.Outcome.clone()}
 
+	marshalledProposalQueue, er := json.Marshal(c.proposalQueue)
+	if er != nil {
+		slog.Debug("DEBUG: consensus_channel.go-IsProposedNext error marshalling proposal queue", "error", er)
+	} else {
+		slog.Debug("DEBUG: consensus_channel.go-IsProposedNext", "proposalQueue", string(marshalledProposalQueue))
+	}
+
 	if len(c.proposalQueue) == 0 {
 		return false, nil
 	}
@@ -146,6 +155,9 @@ func (c *ConsensusChannel) IsProposedNext(g Guarantee, a common.Address) (bool, 
 	if err != nil {
 		return false, err
 	}
+
+	slog.Debug("DEBUG: consensus_channel.go-IsProposedNext is guarantee going to be included", "isGuranteeIncluded", vars.Outcome.includes(g, a))
+	slog.Debug("DEBUG: consensus_channel.go-IsProposedNext is guarantee already included", "isGuranteeIncluded", c.Includes(g, a))
 
 	return vars.Outcome.includes(g, a) && !c.Includes(g, a), nil
 }
@@ -167,11 +179,11 @@ func (c *ConsensusChannel) IncludesTarget(target types.Destination) bool {
 }
 
 // HasRemovalBeenProposed returns whether or not a proposal exists to remove the guarantee for the target.
-func (c *ConsensusChannel) HasRemovalBeenProposed(target types.Destination) bool {
+func (c *ConsensusChannel) HasRemovalBeenProposed(target types.Destination, assetAddress common.Address) bool {
 	for _, p := range c.proposalQueue {
 		if p.Proposal.Type() == RemoveProposal {
 			remove := p.Proposal.ToRemove
-			if remove.Target == target {
+			if remove.Target == target && remove.AssetAddress == assetAddress {
 				return true
 			}
 		}
@@ -180,13 +192,13 @@ func (c *ConsensusChannel) HasRemovalBeenProposed(target types.Destination) bool
 }
 
 // HasRemovalBeenProposedNext returns whether or not the next proposal in the queue is a remove proposal for the given target
-func (c *ConsensusChannel) HasRemovalBeenProposedNext(target types.Destination) bool {
+func (c *ConsensusChannel) HasRemovalBeenProposedNext(target types.Destination, assetAddress common.Address) bool {
 	if len(c.proposalQueue) == 0 {
 		return false
 	}
 
 	p := c.proposalQueue[0]
-	return p.Proposal.Type() == RemoveProposal && p.Proposal.ToRemove.Target == target
+	return p.Proposal.Type() == RemoveProposal && p.Proposal.ToRemove.Target == target && p.Proposal.ToRemove.AssetAddress == assetAddress
 }
 
 // IsLeader returns true if the calling client is the leader of the channel,
