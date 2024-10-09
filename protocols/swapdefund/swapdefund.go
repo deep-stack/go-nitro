@@ -86,7 +86,7 @@ func NewObjective(request ObjectiveRequest,
 	bob := S.Participants[len(S.Participants)-1]
 
 	// Determine final turnNum
-	finalTurnNum := channel.MaxTurnNum
+	finalTurnNum := channel.PostFundTurnNum
 	if myAddress == alice || myAddress == bob {
 		latestSupportedSwapChannelState := S.LatestSupportedSwapChannelState()
 		finalTurnNum = latestSupportedSwapChannelState.TurnNum + 1
@@ -293,7 +293,7 @@ func (o *Objective) otherParticipants() []types.Address {
 }
 
 func (o *Objective) hasFinalStateFromAlice() bool {
-	if o.FinalTurnNum == channel.MaxTurnNum {
+	if o.FinalTurnNum == channel.PostFundTurnNum {
 		return false
 	}
 
@@ -534,6 +534,44 @@ func getRequestFinalStatePayload(b []byte) (types.Destination, error) {
 	return cId, nil
 }
 
+func (o *Objective) isSignedStateValidForIntermediary(ss state.SignedState) (bool, error) {
+	existingSwapChannelSignedState, err := o.S.LatestSupportedSignedState()
+	if err != nil {
+		return false, err
+	}
+
+	if ss.ChannelId() != existingSwapChannelSignedState.ChannelId() {
+		return false, fmt.Errorf("channel ID mismatch: expected %s, got %s", existingSwapChannelSignedState.ChannelId(), ss.ChannelId())
+	}
+
+	incomingOutcomes := ss.State().Outcome
+	for i, exisingOutcome := range existingSwapChannelSignedState.State().Outcome {
+		incomingOutcome := incomingOutcomes[i]
+		if !isAssetOutcomeValidForIntermediary(exisingOutcome, incomingOutcome) {
+			return false, fmt.Errorf("invalid outcome in incoming signed state")
+		}
+	}
+
+	return true, nil
+}
+
+func isAssetOutcomeValidForIntermediary(existingOutcome, incomingOutcome outcome.SingleAssetExit) bool {
+	if existingOutcome.Asset != incomingOutcome.Asset && existingOutcome.AssetMetadata.AssetType != incomingOutcome.AssetMetadata.AssetType {
+		return false
+	}
+
+	existingAllocationAmountTotal := common.Big0
+	incomingAllocationAmountTotal := common.Big0
+
+	for i, existingAllocation := range existingOutcome.Allocations {
+		incomingAllocation := incomingOutcome.Allocations[i]
+		existingAllocationAmountTotal = existingAllocationAmountTotal.Add(existingAllocationAmountTotal, existingAllocation.Amount)
+		incomingAllocationAmountTotal = incomingAllocationAmountTotal.Add(incomingAllocationAmountTotal, incomingAllocation.Amount)
+	}
+
+	return existingAllocationAmountTotal == incomingAllocationAmountTotal
+}
+
 // Update receives an protocols.ObjectiveEvent, applies all applicable event data to the SwapDefundObjective,
 // and returns the updated state.
 func (o *Objective) Update(op protocols.ObjectivePayload) (protocols.Objective, error) {
@@ -549,8 +587,16 @@ func (o *Objective) Update(op protocols.ObjectivePayload) (protocols.Objective, 
 		}
 		updated := o.clone()
 
-		// TODO: Intermediary do validation before adding final state
-		if updated.FinalTurnNum == channel.MaxTurnNum {
+		if updated.FinalTurnNum == channel.PostFundTurnNum {
+			ok, err := o.isSignedStateValidForIntermediary(ss)
+			if err != nil {
+				return &Objective{}, fmt.Errorf("failed to validate signed state for intermediary participant: %w", err)
+			}
+
+			if !ok {
+				return &Objective{}, fmt.Errorf("invalid signed state for intermediary participant")
+			}
+
 			updated.FinalTurnNum = ss.State().TurnNum
 		}
 
