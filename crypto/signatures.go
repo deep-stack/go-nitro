@@ -140,3 +140,13 @@ func allZero(s []byte) bool {
 	}
 	return true
 }
+
+func (s Signature) IsEmpty() bool {
+	joined := joinSignature(s)
+
+	if allZero(joined) {
+		return true
+	}
+
+	return false
+}

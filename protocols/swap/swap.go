@@ -89,6 +89,8 @@ func NewObjective(request ObjectiveRequest, preApprove bool, isSwapSender bool, 
 }
 
 func (o *Objective) determineSwapSenderIndex(myAddress common.Address, isSwapSender bool) (uint, error) {
+	// state := o.C.LatestSupportedSwapChannelState()
+
 	state, err := o.C.LatestSupportedState()
 	if err != nil {
 		return 0, err
@@ -118,6 +120,8 @@ func (o *Objective) isValidSwap(swap payments.Swap) bool {
 	if swap.Exchange.AmountOut.Cmp(big.NewInt(0)) < 0 {
 		return false
 	}
+
+	// s := o.C.LatestSupportedSwapChannelState()
 
 	s, err := o.C.LatestSupportedState()
 	if err != nil {
@@ -347,12 +351,12 @@ func (o *Objective) UpdateSwapChannelState() error {
 	}
 
 	fmt.Println("\nUPDATED SIGNED STATE AFTER SWAP OUTCOME", updatedSignedState.State().Outcome)
-	ok := o.C.AddSignedState(updatedSignedState)
+	ok := o.C.AddSignedSwapChannelState(updatedSignedState)
 	if !ok {
 		return fmt.Errorf("error adding signed state to swap channel %w", err)
 	}
-	ss, _ := o.C.LatestSupportedState()
-	fmt.Println("\nLATEST STATE OUTCOME AFTER ADDING STATE TO CHANNEL", ss.Outcome)
+	state := o.C.LatestSupportedSwapChannelState()
+	fmt.Println("\nLATEST STATE OUTCOME AFTER ADDING STATE TO CHANNEL", state.Outcome)
 
 	return nil
 }
@@ -361,6 +365,7 @@ func (o *Objective) GetUpdatedSwapState() (state.State, error) {
 	tokenIn := o.Swap.Exchange.TokenIn
 	tokenOut := o.Swap.Exchange.TokenOut
 
+	// s := o.C.LatestSupportedSwapChannelState()
 	s, err := o.C.LatestSupportedState()
 	if err != nil {
 		return state.State{}, fmt.Errorf("latest supported state not found: %w", err)
@@ -592,6 +597,7 @@ func (o *Objective) counterPartyAddress() common.Address {
 func (o *Objective) myIndexInAllocations() int {
 	myIndex := -1
 	myAddress := o.C.Participants[o.C.MyIndex]
+	// state := o.C.LatestSupportedSwapChannelState()
 	state, _ := o.C.LatestSupportedState()
 	for i, allocation := range state.Outcome[0].Allocations {
 		if allocation.Destination == types.AddressToDestination(myAddress) {
