@@ -510,7 +510,7 @@ func TestSwapFund(t *testing.T) {
 		t.Fatal(err)
 	}
 
-	// Close crated swap channel
+	// Close created swap channel
 	res, err := nodeA.CloseSwapChannel(swapChannelresponse.ChannelId)
 	if err != nil {
 		t.Fatal(err)

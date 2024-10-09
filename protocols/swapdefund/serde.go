@@ -16,9 +16,10 @@ type jsonObjective struct {
 	Status protocols.ObjectiveStatus
 	S      types.Destination
 
-	ToMyLeft  types.Destination
-	ToMyRight types.Destination
-	MyRole    uint
+	ToMyLeft     types.Destination
+	ToMyRight    types.Destination
+	MyRole       uint
+	FinalTurnNum uint64
 }
 
 // MarshalJSON returns a JSON representation of the SwapDefundObjective
@@ -38,11 +39,12 @@ func (o Objective) MarshalJSON() ([]byte, error) {
 	}
 
 	jsonVFO := jsonObjective{
-		Status:    o.Status,
-		S:         o.VId(),
-		ToMyLeft:  left,
-		ToMyRight: right,
-		MyRole:    o.MyRole,
+		Status:       o.Status,
+		S:            o.VId(),
+		ToMyLeft:     left,
+		ToMyRight:    right,
+		MyRole:       o.MyRole,
+		FinalTurnNum: o.FinalTurnNum,
 	}
 	return json.Marshal(jsonVFO)
 }
@@ -75,6 +77,7 @@ func (o *Objective) UnmarshalJSON(data []byte) error {
 	o.Status = jsonVFO.Status
 
 	o.MyRole = jsonVFO.MyRole
+	o.FinalTurnNum = jsonVFO.FinalTurnNum
 
 	o.S = &channel.SwapChannel{}
 	o.S.Id = jsonVFO.S
