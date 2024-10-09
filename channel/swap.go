@@ -8,8 +8,6 @@ import (
 	"github.com/statechannels/go-nitro/types"
 )
 
-const PARTICIPANT_NODES_COUNT = 2
-
 type SwapChannel struct {
 	Channel
 }
@@ -51,7 +49,7 @@ func (v *SwapChannel) HasParticipantSignatures(ss state.SignedState) bool {
 		}
 	}
 
-	if count == PARTICIPANT_NODES_COUNT {
+	if count == 2 {
 		return true
 	}
 
@@ -72,9 +70,16 @@ func (v *SwapChannel) AddSignedSwapChannelState(ss state.SignedState) bool {
 }
 
 func (v *SwapChannel) LatestSupportedSwapChannelState() state.State {
-	supportedStateTurnNum := v.Channel.OffChain.LatestSupportedStateTurnNum
-	supportedSwapChannelStateTurnNum := v.Channel.OffChain.LatestSupportedSwapChannelStateTurnNum
-	maxTurnNum := math.Max(float64(supportedStateTurnNum), float64(supportedSwapChannelStateTurnNum))
+	if v.Channel.OffChain.LatestSupportedStateTurnNum == MaxTurnNum {
+		return state.State{}
+	}
+
+	if v.Channel.OffChain.LatestSupportedSwapChannelStateTurnNum == MaxTurnNum {
+		return v.Channel.OffChain.SignedStateForTurnNum[v.Channel.OffChain.LatestSupportedStateTurnNum].State()
+	}
+
+	maxTurnNum := math.Max(float64(v.Channel.OffChain.LatestSupportedStateTurnNum), float64(v.Channel.OffChain.LatestSupportedSwapChannelStateTurnNum))
+
 	ss := v.Channel.OffChain.SignedStateForTurnNum[uint64(maxTurnNum)]
 	return ss.State()
 }
