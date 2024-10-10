@@ -134,7 +134,7 @@ func closeMultiAssetLedgerChannel(t *testing.T, utils TestUtils, ledgerChannelId
 	t.Log("Completed direct-defund objective")
 }
 
-func createSwapChannel(t *testing.T, utils TestUtils) swapfund.ObjectiveResponse {
+func createSwapChannel(t *testing.T, utils TestUtils) (swapfund.ObjectiveResponse, outcome.Exit) {
 	// TODO: Refactor create swap channel outcome method
 	multiassetSwapChannelOutcome := outcome.Exit{
 		outcome.SingleAssetExit{
@@ -193,201 +193,7 @@ func createSwapChannel(t *testing.T, utils TestUtils) swapfund.ObjectiveResponse
 	<-chB
 
 	t.Log("Completed swap-fund objective")
-	return swapChannelresponse
-}
-
-func TestStorageOfLastNSwap(t *testing.T) {
-	utils, cleanup := initializeNodesAndInfra(t)
-	defer cleanup()
-
-	ledgerChannelResponse := createMultiAssetLedgerChannel(t, utils)
-	defer closeMultiAssetLedgerChannel(t, utils, ledgerChannelResponse.ChannelId)
-
-	swapChannelResponse := createSwapChannel(t, utils)
-	defer closeSwapChannel(t, utils, swapChannelResponse.ChannelId)
-
-	t.Run("Ensure that only the most recent n swaps are being stored ", func(t *testing.T) {
-		swapIterations := 7
-
-		var swapsIds []types.Destination
-		for i := 1; i <= swapIterations; i++ {
-
-			// Initiate swap from Bob
-			swapAssetResponse, err := utils.nodeB.SwapAssets(swapChannelResponse.ChannelId, common.Address{}, utils.infra.anvilChain.ContractAddresses.TokenAddresses[0], big.NewInt(10), big.NewInt(20))
-			if err != nil {
-				t.Fatal(err)
-			}
-
-			// Wait for objective to wait for confirmation
-			time.Sleep(3 * time.Second)
-
-			pendingSwap, err := utils.nodeA.GetPendingSwapByChannelId(swapAssetResponse.ChannelId)
-			if err != nil {
-				t.Fatal(err)
-			}
-
-			// Accept the swap
-			err = utils.nodeA.ConfirmSwap(pendingSwap.Id, types.Accepted)
-			if err != nil {
-				t.Fatal(err)
-			}
-
-			<-utils.nodeB.ObjectiveCompleteChan(swapAssetResponse.Id)
-			swapsIds = append(swapsIds, pendingSwap.Id)
-		}
-
-		storesToTest := []store.Store{utils.storeA, utils.storeB}
-		for _, nodeStore := range storesToTest {
-			lastNSwaps, err := nodeStore.GetSwapsByChannelId(swapChannelResponse.ChannelId)
-			if err != nil {
-				t.Fatal(err)
-			}
-
-			testhelpers.Assert(t, len(lastNSwaps) == payments.MAX_SWAP_STORAGE_LIMIT, "error in storing last n swap: mismatch in length of channel to swaps map")
-
-			firstSwapIndex := swapIterations - payments.MAX_SWAP_STORAGE_LIMIT
-			expectedRemovedSwaps := swapsIds[:firstSwapIndex]
-			for _, swap := range lastNSwaps {
-				for _, expectedRemovedSwapId := range expectedRemovedSwaps {
-					testhelpers.Assert(t, swap.Id != expectedRemovedSwapId, "error in storing last n swap")
-				}
-			}
-
-			for _, expectedRemovedSwapId := range expectedRemovedSwaps {
-				_, err := nodeStore.GetSwapById(expectedRemovedSwapId)
-				testhelpers.Assert(t, err == store.ErrNoSuchSwap, "expected swap to be removed from store")
-			}
-		}
-	})
-}
-
-func TestParallelSwapCreation(t *testing.T) {
-	// Currently parallel swap creations are allowed
-	t.Skip()
-	utils, cleanup := initializeNodesAndInfra(t)
-	defer cleanup()
-
-	ledgerChannelResponse := createMultiAssetLedgerChannel(t, utils)
-	defer closeMultiAssetLedgerChannel(t, utils, ledgerChannelResponse.ChannelId)
-
-	swapChannelResponse := createSwapChannel(t, utils)
-	defer closeSwapChannel(t, utils, swapChannelResponse.ChannelId)
-
-	t.Run("Ensure parallel swaps are not allowed ", func(t *testing.T) {
-		nodes := []node.Node{utils.nodeA, utils.nodeB}
-
-		for i, node := range nodes {
-			_, err := node.SwapAssets(swapChannelResponse.ChannelId, common.Address{}, utils.infra.anvilChain.ContractAddresses.TokenAddresses[0], big.NewInt(10), big.NewInt(20))
-			if i == 0 {
-				continue
-			}
-			testhelpers.Assert(t, errors.Is(err, swap.ErrSwapExists), "expected error: %v", swap.ErrSwapExists)
-		}
-	})
-}
-
-func TestSwapFund(t *testing.T) {
-	utils, cleanup := initializeNodesAndInfra(t)
-	defer cleanup()
-
-	nodeA, nodeB := utils.nodeA, utils.nodeB
-	infra := utils.infra
-
-	multiassetSwapChannelOutcome := outcome.Exit{
-		outcome.SingleAssetExit{
-			Asset: common.Address{},
-			Allocations: outcome.Allocations{
-				outcome.Allocation{
-					Destination: types.AddressToDestination(*nodeA.Address),
-					Amount:      big.NewInt(int64(1001)),
-				},
-				outcome.Allocation{
-					Destination: types.AddressToDestination(*nodeB.Address),
-					Amount:      big.NewInt(int64(1002)),
-				},
-			},
-		},
-		outcome.SingleAssetExit{
-			Asset: infra.anvilChain.ContractAddresses.TokenAddresses[0],
-			Allocations: outcome.Allocations{
-				outcome.Allocation{
-					Destination: types.AddressToDestination(*nodeA.Address),
-					Amount:      big.NewInt(int64(501)),
-				},
-				outcome.Allocation{
-					Destination: types.AddressToDestination(*nodeB.Address),
-					Amount:      big.NewInt(int64(502)),
-				},
-			},
-		},
-		outcome.SingleAssetExit{
-			Asset: infra.anvilChain.ContractAddresses.TokenAddresses[1],
-			Allocations: outcome.Allocations{
-				outcome.Allocation{
-					Destination: types.AddressToDestination(*nodeA.Address),
-					Amount:      big.NewInt(int64(601)),
-				},
-				outcome.Allocation{
-					Destination: types.AddressToDestination(*nodeB.Address),
-					Amount:      big.NewInt(int64(602)),
-				},
-			},
-		},
-	}
-
-	RunSwapTestCase(multiassetSwapChannelOutcome, utils, t)
-}
-
-func TestSwapFundWithEqualAmounts(t *testing.T) {
-	utils, cleanup := initializeNodesAndInfra(t)
-	defer cleanup()
-
-	nodeA, nodeB := utils.nodeA, utils.nodeB
-	infra := utils.infra
-
-	multiassetSwapChannelOutcome := outcome.Exit{
-		outcome.SingleAssetExit{
-			Asset: common.Address{},
-			Allocations: outcome.Allocations{
-				outcome.Allocation{
-					Destination: types.AddressToDestination(*nodeA.Address),
-					Amount:      big.NewInt(int64(500)),
-				},
-				outcome.Allocation{
-					Destination: types.AddressToDestination(*nodeB.Address),
-					Amount:      big.NewInt(int64(500)),
-				},
-			},
-		},
-		outcome.SingleAssetExit{
-			Asset: infra.anvilChain.ContractAddresses.TokenAddresses[0],
-			Allocations: outcome.Allocations{
-				outcome.Allocation{
-					Destination: types.AddressToDestination(*nodeA.Address),
-					Amount:      big.NewInt(int64(510)),
-				},
-				outcome.Allocation{
-					Destination: types.AddressToDestination(*nodeB.Address),
-					Amount:      big.NewInt(int64(520)),
-				},
-			},
-		},
-		outcome.SingleAssetExit{
-			Asset: infra.anvilChain.ContractAddresses.TokenAddresses[1],
-			Allocations: outcome.Allocations{
-				outcome.Allocation{
-					Destination: types.AddressToDestination(*nodeA.Address),
-					Amount:      big.NewInt(int64(500)),
-				},
-				outcome.Allocation{
-					Destination: types.AddressToDestination(*nodeB.Address),
-					Amount:      big.NewInt(int64(500)),
-				},
-			},
-		},
-	}
-
-	RunSwapTestCase(multiassetSwapChannelOutcome, utils, t)
+	return swapChannelresponse, multiassetSwapChannelOutcome
 }
 
 func RunSwapTestCase(multiassetSwapChannelOutcome outcome.Exit, utils TestUtils, t *testing.T) {
@@ -543,4 +349,264 @@ func RunSwapTestCase(multiassetSwapChannelOutcome outcome.Exit, utils TestUtils,
 
 	expectedLedgerOutcome := createExpectedLedgerOutcome(ledgerStateBeforeSdf.State().Outcome, modifiedOutcome4)
 	checkLedgerChannel(t, ledgerResponse.ChannelId, expectedLedgerOutcome, query.Open, channel.Open, nodeA, nodeB)
+}
+
+func TestStorageOfLastNSwap(t *testing.T) {
+	utils, cleanup := initializeNodesAndInfra(t)
+	defer cleanup()
+
+	ledgerChannelResponse := createMultiAssetLedgerChannel(t, utils)
+	defer closeMultiAssetLedgerChannel(t, utils, ledgerChannelResponse.ChannelId)
+
+	swapChannelResponse, _ := createSwapChannel(t, utils)
+	defer closeSwapChannel(t, utils, swapChannelResponse.ChannelId)
+
+	t.Run("Ensure that only the most recent n swaps are being stored ", func(t *testing.T) {
+		swapIterations := 7
+
+		var swapsIds []types.Destination
+		for i := 1; i <= swapIterations; i++ {
+
+			// Initiate swap from Bob
+			swapAssetResponse, err := utils.nodeB.SwapAssets(swapChannelResponse.ChannelId, common.Address{}, utils.infra.anvilChain.ContractAddresses.TokenAddresses[0], big.NewInt(10), big.NewInt(20))
+			if err != nil {
+				t.Fatal(err)
+			}
+
+			// Wait for objective to wait for confirmation
+			time.Sleep(3 * time.Second)
+
+			pendingSwap, err := utils.nodeA.GetPendingSwapByChannelId(swapAssetResponse.ChannelId)
+			if err != nil {
+				t.Fatal(err)
+			}
+
+			// Accept the swap
+			err = utils.nodeA.ConfirmSwap(pendingSwap.Id, types.Accepted)
+			if err != nil {
+				t.Fatal(err)
+			}
+
+			<-utils.nodeB.ObjectiveCompleteChan(swapAssetResponse.Id)
+			swapsIds = append(swapsIds, pendingSwap.Id)
+		}
+
+		storesToTest := []store.Store{utils.storeA, utils.storeB}
+		for _, nodeStore := range storesToTest {
+			lastNSwaps, err := nodeStore.GetSwapsByChannelId(swapChannelResponse.ChannelId)
+			if err != nil {
+				t.Fatal(err)
+			}
+
+			testhelpers.Assert(t, len(lastNSwaps) == payments.MAX_SWAP_STORAGE_LIMIT, "error in storing last n swap: mismatch in length of channel to swaps map")
+
+			firstSwapIndex := swapIterations - payments.MAX_SWAP_STORAGE_LIMIT
+			expectedRemovedSwaps := swapsIds[:firstSwapIndex]
+			for _, swap := range lastNSwaps {
+				for _, expectedRemovedSwapId := range expectedRemovedSwaps {
+					testhelpers.Assert(t, swap.Id != expectedRemovedSwapId, "error in storing last n swap")
+				}
+			}
+
+			for _, expectedRemovedSwapId := range expectedRemovedSwaps {
+				_, err := nodeStore.GetSwapById(expectedRemovedSwapId)
+				testhelpers.Assert(t, err == store.ErrNoSuchSwap, "expected swap to be removed from store")
+			}
+		}
+	})
+}
+
+func TestParallelSwapCreation(t *testing.T) {
+	// Currently parallel swap creations are allowed
+	t.Skip()
+	utils, cleanup := initializeNodesAndInfra(t)
+	defer cleanup()
+
+	ledgerChannelResponse := createMultiAssetLedgerChannel(t, utils)
+	defer closeMultiAssetLedgerChannel(t, utils, ledgerChannelResponse.ChannelId)
+
+	swapChannelResponse, _ := createSwapChannel(t, utils)
+	defer closeSwapChannel(t, utils, swapChannelResponse.ChannelId)
+
+	t.Run("Ensure parallel swaps are not allowed ", func(t *testing.T) {
+		nodes := []node.Node{utils.nodeA, utils.nodeB}
+
+		for i, node := range nodes {
+			_, err := node.SwapAssets(swapChannelResponse.ChannelId, common.Address{}, utils.infra.anvilChain.ContractAddresses.TokenAddresses[0], big.NewInt(10), big.NewInt(20))
+			if i == 0 {
+				continue
+			}
+			testhelpers.Assert(t, errors.Is(err, swap.ErrSwapExists), "expected error: %v", swap.ErrSwapExists)
+		}
+	})
+}
+
+func TestSwapFund(t *testing.T) {
+	utils, cleanup := initializeNodesAndInfra(t)
+	defer cleanup()
+
+	nodeA, nodeB := utils.nodeA, utils.nodeB
+	infra := utils.infra
+
+	multiassetSwapChannelOutcome := outcome.Exit{
+		outcome.SingleAssetExit{
+			Asset: common.Address{},
+			Allocations: outcome.Allocations{
+				outcome.Allocation{
+					Destination: types.AddressToDestination(*nodeA.Address),
+					Amount:      big.NewInt(int64(1001)),
+				},
+				outcome.Allocation{
+					Destination: types.AddressToDestination(*nodeB.Address),
+					Amount:      big.NewInt(int64(1002)),
+				},
+			},
+		},
+		outcome.SingleAssetExit{
+			Asset: infra.anvilChain.ContractAddresses.TokenAddresses[0],
+			Allocations: outcome.Allocations{
+				outcome.Allocation{
+					Destination: types.AddressToDestination(*nodeA.Address),
+					Amount:      big.NewInt(int64(501)),
+				},
+				outcome.Allocation{
+					Destination: types.AddressToDestination(*nodeB.Address),
+					Amount:      big.NewInt(int64(502)),
+				},
+			},
+		},
+		outcome.SingleAssetExit{
+			Asset: infra.anvilChain.ContractAddresses.TokenAddresses[1],
+			Allocations: outcome.Allocations{
+				outcome.Allocation{
+					Destination: types.AddressToDestination(*nodeA.Address),
+					Amount:      big.NewInt(int64(601)),
+				},
+				outcome.Allocation{
+					Destination: types.AddressToDestination(*nodeB.Address),
+					Amount:      big.NewInt(int64(602)),
+				},
+			},
+		},
+	}
+
+	RunSwapTestCase(multiassetSwapChannelOutcome, utils, t)
+}
+
+func TestSwapFundWithEqualAmounts(t *testing.T) {
+	utils, cleanup := initializeNodesAndInfra(t)
+	defer cleanup()
+
+	nodeA, nodeB := utils.nodeA, utils.nodeB
+	infra := utils.infra
+
+	multiassetSwapChannelOutcome := outcome.Exit{
+		outcome.SingleAssetExit{
+			Asset: common.Address{},
+			Allocations: outcome.Allocations{
+				outcome.Allocation{
+					Destination: types.AddressToDestination(*nodeA.Address),
+					Amount:      big.NewInt(int64(500)),
+				},
+				outcome.Allocation{
+					Destination: types.AddressToDestination(*nodeB.Address),
+					Amount:      big.NewInt(int64(500)),
+				},
+			},
+		},
+		outcome.SingleAssetExit{
+			Asset: infra.anvilChain.ContractAddresses.TokenAddresses[0],
+			Allocations: outcome.Allocations{
+				outcome.Allocation{
+					Destination: types.AddressToDestination(*nodeA.Address),
+					Amount:      big.NewInt(int64(510)),
+				},
+				outcome.Allocation{
+					Destination: types.AddressToDestination(*nodeB.Address),
+					Amount:      big.NewInt(int64(520)),
+				},
+			},
+		},
+		outcome.SingleAssetExit{
+			Asset: infra.anvilChain.ContractAddresses.TokenAddresses[1],
+			Allocations: outcome.Allocations{
+				outcome.Allocation{
+					Destination: types.AddressToDestination(*nodeA.Address),
+					Amount:      big.NewInt(int64(500)),
+				},
+				outcome.Allocation{
+					Destination: types.AddressToDestination(*nodeB.Address),
+					Amount:      big.NewInt(int64(500)),
+				},
+			},
+		},
+	}
+
+	RunSwapTestCase(multiassetSwapChannelOutcome, utils, t)
+}
+
+func TestSwapTillEmptyBalance(t *testing.T) {
+	utils, cleanup := initializeNodesAndInfra(t)
+	defer cleanup()
+
+	ledgerChannelResponse := createMultiAssetLedgerChannel(t, utils)
+	defer closeMultiAssetLedgerChannel(t, utils, ledgerChannelResponse.ChannelId)
+
+	swapChannelResponse, initialOutcome := createSwapChannel(t, utils)
+	defer closeSwapChannel(t, utils, swapChannelResponse.ChannelId)
+
+	for i := 0; i < 3; i++ {
+		// Initiate swap from Bob
+		swapAssetResponse, err := utils.nodeB.SwapAssets(swapChannelResponse.ChannelId, common.Address{}, utils.infra.anvilChain.ContractAddresses.TokenAddresses[0], big.NewInt(100), big.NewInt(200))
+		if err != nil {
+			t.Fatal(err)
+		}
+
+		// Wait for objective to wait for confirmation
+		time.Sleep(3 * time.Second)
+
+		pendingSwap, err := utils.nodeA.GetPendingSwapByChannelId(swapAssetResponse.ChannelId)
+		if err != nil {
+			t.Fatal(err)
+		}
+
+		if pendingSwap != nil {
+			// Accept the swap
+			err = utils.nodeA.ConfirmSwap(pendingSwap.Id, types.Accepted)
+			if err != nil {
+				t.Fatal(err)
+			}
+			<-utils.nodeB.ObjectiveCompleteChan(swapAssetResponse.Id)
+			initialOutcome = modifyOutcomeWithSwap(initialOutcome, pendingSwap, 1)
+		}
+		checkSwapChannel(t, swapChannelResponse.ChannelId, initialOutcome, query.Open, utils.nodeA, utils.nodeB)
+	}
+
+	for i := 0; i < 3; i++ {
+		// Initiate swap from Bob
+		swapAssetResponse, err := utils.nodeA.SwapAssets(swapChannelResponse.ChannelId, common.Address{}, utils.infra.anvilChain.ContractAddresses.TokenAddresses[0], big.NewInt(100), big.NewInt(200))
+		if err != nil {
+			t.Fatal(err)
+		}
+
+		// Wait for objective to wait for confirmation
+		time.Sleep(3 * time.Second)
+
+		pendingSwap, err := utils.nodeB.GetPendingSwapByChannelId(swapAssetResponse.ChannelId)
+		if err != nil {
+			t.Fatal(err)
+		}
+
+		if pendingSwap != nil {
+			// Accept the swap
+			err = utils.nodeB.ConfirmSwap(pendingSwap.Id, types.Accepted)
+			if err != nil {
+				t.Fatal(err)
+			}
+
+			<-utils.nodeA.ObjectiveCompleteChan(swapAssetResponse.Id)
+			initialOutcome = modifyOutcomeWithSwap(initialOutcome, pendingSwap, 0)
+		}
+		checkSwapChannel(t, swapChannelResponse.ChannelId, initialOutcome, query.Open, utils.nodeA, utils.nodeB)
+	}
 }
