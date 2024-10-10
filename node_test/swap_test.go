@@ -14,6 +14,8 @@ import (
 	"github.com/statechannels/go-nitro/node"
 	"github.com/statechannels/go-nitro/node/engine/chainservice"
 	Token "github.com/statechannels/go-nitro/node/engine/chainservice/erc20"
+	"github.com/statechannels/go-nitro/node/engine/messageservice"
+	p2pms "github.com/statechannels/go-nitro/node/engine/messageservice/p2p-message-service"
 	"github.com/statechannels/go-nitro/node/engine/store"
 	"github.com/statechannels/go-nitro/node/query"
 	"github.com/statechannels/go-nitro/payments"
@@ -27,11 +29,11 @@ type TestUtils struct {
 	tc                           TestCase
 	nodeA, nodeB, nodeC          node.Node
 	chainServiceA, chainServiceB chainservice.ChainService
-	storeA, storeB               store.Store
+	storeA, storeB, storeC       store.Store
 	infra                        sharedTestInfrastructure
 }
 
-func initializeNodesAndInfra(t *testing.T, isIntermediaryPresent bool) (TestUtils, func()) {
+func initializeNodesAndInfra(t *testing.T) (TestUtils, func()) {
 	testCase := TestCase{
 		Description:       "Swap test",
 		Chain:             AnvilChain,
@@ -51,12 +53,24 @@ func initializeNodesAndInfra(t *testing.T, isIntermediaryPresent bool) (TestUtil
 	infra := setupSharedInfra(testCase)
 
 	// Create go-nitro nodes
-	nodeA, _, nodeAMulitAddress, storeA, chainServiceA := setupIntegrationNode(testCase, testCase.Participants[0], infra, []string{}, dataFolder)
-	nodeB, _, _, storeB, chainServiceB := setupIntegrationNode(testCase, testCase.Participants[1], infra, []string{nodeAMulitAddress}, dataFolder)
+	msgServices := make([]messageservice.MessageService, 0)
 
-	var nodeC node.Node
-	if isIntermediaryPresent {
-		nodeC, _, _, _, _ = setupIntegrationNode(testCase, testCase.Participants[2], infra, []string{nodeAMulitAddress}, dataFolder)
+	nodeA, msgA, nodeAMulitAddress, storeA, chainServiceA := setupIntegrationNode(testCase, testCase.Participants[0], infra, []string{}, dataFolder)
+	msgServices = append(msgServices, msgA)
+	nodeB, msgB, _, storeB, chainServiceB := setupIntegrationNode(testCase, testCase.Participants[1], infra, []string{nodeAMulitAddress}, dataFolder)
+	msgServices = append(msgServices, msgB)
+	nodeC, msgC, _, storeC, _ := setupIntegrationNode(testCase, testCase.Participants[2], infra, []string{nodeAMulitAddress}, dataFolder)
+	msgServices = append(msgServices, msgC)
+
+	if testCase.MessageService != TestMessageService {
+		p2pServices := make([]*p2pms.P2PMessageService, len(testCase.Participants))
+		for i, msgService := range msgServices {
+			p2pServices[i] = msgService.(*p2pms.P2PMessageService)
+		}
+
+		t.Log("Waiting for peer info exchange...")
+		waitForPeerInfoExchange(p2pServices...)
+		t.Log("Peer info exchange complete")
 	}
 
 	utils := TestUtils{
@@ -68,17 +82,14 @@ func initializeNodesAndInfra(t *testing.T, isIntermediaryPresent bool) (TestUtil
 		chainServiceB: chainServiceB,
 		storeA:        storeA,
 		storeB:        storeB,
+		storeC:        storeC,
 		infra:         infra,
 	}
 
 	cleanup := func() {
 		nodeA.Close()
 		nodeB.Close()
-
-		if isIntermediaryPresent {
-			nodeC.Close()
-		}
-
+		nodeC.Close()
 		removeTempFolder()
 		infra.Close(t)
 	}
@@ -143,18 +154,18 @@ func closeMultiAssetLedgerChannel(t *testing.T, nodeA, nodeB node.Node, ledgerCh
 	t.Log("Completed direct-defund objective")
 }
 
-func createSwapChannel(t *testing.T, utils TestUtils) swapfund.ObjectiveResponse {
+func createSwapChannel(t *testing.T, nodeA, nodeB node.Node, utils TestUtils) swapfund.ObjectiveResponse {
 	// TODO: Refactor create swap channel outcome method
 	multiassetSwapChannelOutcome := outcome.Exit{
 		outcome.SingleAssetExit{
 			Asset: common.Address{},
 			Allocations: outcome.Allocations{
 				outcome.Allocation{
-					Destination: types.AddressToDestination(*utils.nodeA.Address),
+					Destination: types.AddressToDestination(*nodeA.Address),
 					Amount:      big.NewInt(int64(1001)),
 				},
 				outcome.Allocation{
-					Destination: types.AddressToDestination(*utils.nodeB.Address),
+					Destination: types.AddressToDestination(*nodeB.Address),
 					Amount:      big.NewInt(int64(1002)),
 				},
 			},
@@ -163,11 +174,11 @@ func createSwapChannel(t *testing.T, utils TestUtils) swapfund.ObjectiveResponse
 			Asset: utils.infra.anvilChain.ContractAddresses.TokenAddresses[0],
 			Allocations: outcome.Allocations{
 				outcome.Allocation{
-					Destination: types.AddressToDestination(*utils.nodeA.Address),
+					Destination: types.AddressToDestination(*nodeA.Address),
 					Amount:      big.NewInt(int64(501)),
 				},
 				outcome.Allocation{
-					Destination: types.AddressToDestination(*utils.nodeB.Address),
+					Destination: types.AddressToDestination(*nodeB.Address),
 					Amount:      big.NewInt(int64(502)),
 				},
 			},
@@ -176,20 +187,20 @@ func createSwapChannel(t *testing.T, utils TestUtils) swapfund.ObjectiveResponse
 			Asset: utils.infra.anvilChain.ContractAddresses.TokenAddresses[1],
 			Allocations: outcome.Allocations{
 				outcome.Allocation{
-					Destination: types.AddressToDestination(*utils.nodeA.Address),
+					Destination: types.AddressToDestination(*nodeA.Address),
 					Amount:      big.NewInt(int64(601)),
 				},
 				outcome.Allocation{
-					Destination: types.AddressToDestination(*utils.nodeB.Address),
+					Destination: types.AddressToDestination(*nodeB.Address),
 					Amount:      big.NewInt(int64(602)),
 				},
 			},
 		},
 	}
 
-	swapChannelresponse, err := utils.nodeA.CreateSwapChannel(
+	swapChannelresponse, err := nodeA.CreateSwapChannel(
 		nil,
-		*utils.nodeB.Address,
+		*nodeB.Address,
 		0,
 		multiassetSwapChannelOutcome,
 	)
@@ -197,8 +208,8 @@ func createSwapChannel(t *testing.T, utils TestUtils) swapfund.ObjectiveResponse
 		t.Fatal(err)
 	}
 
-	chB := utils.nodeB.ObjectiveCompleteChan(swapChannelresponse.Id)
-	<-utils.nodeA.ObjectiveCompleteChan(swapChannelresponse.Id)
+	chB := nodeB.ObjectiveCompleteChan(swapChannelresponse.Id)
+	<-nodeA.ObjectiveCompleteChan(swapChannelresponse.Id)
 	<-chB
 
 	t.Log("Completed swap-fund objective")
@@ -206,16 +217,16 @@ func createSwapChannel(t *testing.T, utils TestUtils) swapfund.ObjectiveResponse
 }
 
 func TestStorageOfLastNSwap(t *testing.T) {
-	utils, cleanup := initializeNodesAndInfra(t, false)
+	utils, cleanup := initializeNodesAndInfra(t)
 	defer cleanup()
 
-	ledgerChannelResponse, _ := createMultiAssetLedgerChannel(t, utils.nodeA, utils.nodeB, []common.Address{
+	ledgerChannelResponse, _ := createMultiAssetLedgerChannel(t, utils.nodeB, utils.nodeC, []common.Address{
 		{}, utils.infra.anvilChain.ContractAddresses.TokenAddresses[0], utils.infra.anvilChain.ContractAddresses.TokenAddresses[1],
 	}, 0)
-	defer closeMultiAssetLedgerChannel(t, utils.nodeA, utils.nodeB, ledgerChannelResponse.ChannelId)
+	defer closeMultiAssetLedgerChannel(t, utils.nodeB, utils.nodeC, ledgerChannelResponse.ChannelId)
 
-	swapChannelResponse := createSwapChannel(t, utils)
-	defer closeSwapChannel(t, utils.nodeA, utils.nodeB, swapChannelResponse.ChannelId)
+	swapChannelResponse := createSwapChannel(t, utils.nodeB, utils.nodeC, utils)
+	defer closeSwapChannel(t, utils.nodeB, utils.nodeC, swapChannelResponse.ChannelId)
 
 	t.Run("Ensure that only the most recent n swaps are being stored ", func(t *testing.T) {
 		swapIterations := 7
@@ -232,13 +243,13 @@ func TestStorageOfLastNSwap(t *testing.T) {
 			// Wait for objective to wait for confirmation
 			time.Sleep(3 * time.Second)
 
-			pendingSwap, err := utils.nodeA.GetPendingSwapByChannelId(swapAssetResponse.ChannelId)
+			pendingSwap, err := utils.nodeC.GetPendingSwapByChannelId(swapAssetResponse.ChannelId)
 			if err != nil {
 				t.Fatal(err)
 			}
 
 			// Accept the swap
-			err = utils.nodeA.ConfirmSwap(pendingSwap.Id, types.Accepted)
+			err = utils.nodeC.ConfirmSwap(pendingSwap.Id, types.Accepted)
 			if err != nil {
 				t.Fatal(err)
 			}
@@ -247,7 +258,7 @@ func TestStorageOfLastNSwap(t *testing.T) {
 			swapsIds = append(swapsIds, pendingSwap.Id)
 		}
 
-		storesToTest := []store.Store{utils.storeA, utils.storeB}
+		storesToTest := []store.Store{utils.storeB, utils.storeC}
 		for _, nodeStore := range storesToTest {
 			lastNSwaps, err := nodeStore.GetSwapsByChannelId(swapChannelResponse.ChannelId)
 			if err != nil {
@@ -275,7 +286,7 @@ func TestStorageOfLastNSwap(t *testing.T) {
 func TestParallelSwapCreation(t *testing.T) {
 	// Currently parallel swap creations are allowed
 	t.Skip()
-	utils, cleanup := initializeNodesAndInfra(t, false)
+	utils, cleanup := initializeNodesAndInfra(t)
 	defer cleanup()
 
 	ledgerChannelResponse, _ := createMultiAssetLedgerChannel(t, utils.nodeA, utils.nodeB, []common.Address{
@@ -283,7 +294,7 @@ func TestParallelSwapCreation(t *testing.T) {
 	}, 0)
 	defer closeMultiAssetLedgerChannel(t, utils.nodeA, utils.nodeB, ledgerChannelResponse.ChannelId)
 
-	swapChannelResponse := createSwapChannel(t, utils)
+	swapChannelResponse := createSwapChannel(t, utils.nodeA, utils.nodeB, utils)
 	defer closeSwapChannel(t, utils.nodeA, utils.nodeB, swapChannelResponse.ChannelId)
 
 	t.Run("Ensure parallel swaps are not allowed ", func(t *testing.T) {
@@ -543,7 +554,7 @@ func TestSwapFund(t *testing.T) {
 }
 
 func TestSwapFundWithIntermediary(t *testing.T) {
-	utils, cleanup := initializeNodesAndInfra(t, true)
+	utils, cleanup := initializeNodesAndInfra(t)
 	defer cleanup()
 
 	ledgerChannel1Response, initialLedger1Outcome := createMultiAssetLedgerChannel(t, utils.nodeB, utils.nodeA, []common.Address{

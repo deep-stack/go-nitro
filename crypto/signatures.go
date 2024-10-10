@@ -144,10 +144,5 @@ func allZero(s []byte) bool {
 // IsEmpty checks if the signature is empty by joining its parts and verifying if all elements are zero.
 func (s Signature) IsEmpty() bool {
 	joined := joinSignature(s)
-
-	if allZero(joined) {
-		return true
-	}
-
-	return false
+	return allZero(joined)
 }
