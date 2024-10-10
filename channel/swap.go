@@ -49,11 +49,7 @@ func (v *SwapChannel) HasParticipantSignatures(ss state.SignedState) bool {
 		}
 	}
 
-	if count == 2 {
-		return true
-	}
-
-	return false
+	return count == 2
 }
 
 // AddSignedSwapChannelState adds a signed swap channel state to the channel if all major participants of swap channel have signed it
