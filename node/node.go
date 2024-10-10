@@ -2,6 +2,7 @@
 package node // import "github.com/statechannels/go-nitro/node"
 
 import (
+	"encoding/json"
 	"fmt"
 	"log/slog"
 	"math/big"
@@ -100,6 +101,12 @@ func (n *Node) handleEngineEvent(update engine.EngineEvent) {
 		n.handleError(err)
 	}
 	for _, updated := range update.PaymentChannelUpdates {
+		marshalledInfo, er := json.Marshal(updated)
+		if er != nil {
+			slog.Debug("DEBUG node.go-handleEngineEvent error marshalling paymentChannelInfo", "error", er)
+		} else {
+			slog.Debug("DEBUG node.go-handleEngineEvent", "paymentChannelInfo", string(marshalledInfo))
+		}
 
 		err := n.channelNotifier.NotifyPaymentUpdated(updated)
 		n.handleError(err)
@@ -262,7 +269,20 @@ func (n *Node) SwapAssets(channelId types.Destination, tokenIn common.Address, t
 		return swap.ObjectiveResponse{}, fmt.Errorf("%w: channel Id %+v", swap.ErrSwapExists, channelId)
 	}
 
-	objectiveRequest := swap.NewObjectiveRequest(channelId, tokenIn, tokenOut, amountIn, amountOut, swapChannel.FixedPart, rand.Uint64())
+	swapState, err := swapChannel.LatestSupportedState()
+	if err != nil {
+		return swap.ObjectiveResponse{}, err
+	}
+
+	nonce := rand.Uint64()
+	newSwap := payments.NewSwap(channelId, tokenIn, tokenOut, amountIn, amountOut, nonce)
+
+	isSwapValid := swap.IsValidSwap(swapState, newSwap, swapChannel.MyIndex)
+	if !isSwapValid {
+		return swap.ObjectiveResponse{}, swap.ErrInvalidSwap
+	}
+
+	objectiveRequest := swap.NewObjectiveRequest(channelId, tokenIn, tokenOut, amountIn, amountOut, swapChannel.FixedPart, nonce)
 
 	// Send the event to the engine
 	n.engine.ObjectiveRequestsFromAPI <- objectiveRequest
