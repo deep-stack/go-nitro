@@ -22,7 +22,7 @@ type Swap struct {
 	Id        types.Destination
 	ChannelId types.Destination
 	Exchange  Exchange
-	Sigs      map[uint]state.Signature // keyed by participant index in swap channel
+	Sigs      map[uint]state.Signature // Mapped by participant index in the swap channel's allocations array
 	Nonce     uint64
 }
 
