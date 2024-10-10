@@ -17,10 +17,10 @@ jobs:
         run: yarn && yarn build
       - name: Configure git.vdb.to npm registry
         run: |
-          npm config set registry https://git.vdb.to/api/packages/cerc-io/npm/
+          npm config set registry https://git.vdb.to/api/packages/adwait/npm/
       - name: Authenticate to git.vdb.to registry
         run: |
-          npm config set -- '//git.vdb.to/api/packages/cerc-io/npm/:_authToken' "${{ secrets.GITEA_PUBLISH_TOKEN }}"
+          npm config set -- '//git.vdb.to/api/packages/adwait/npm/:_authToken' "${{ secrets.GITEA_TOKEN }}"
       - name: Publish nitro-protocol package
         run: |
           cd ./packages/nitro-protocol
