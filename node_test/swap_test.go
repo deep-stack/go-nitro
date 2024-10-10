@@ -32,7 +32,7 @@ type TestUtils struct {
 	infra                        sharedTestInfrastructure
 }
 
-func initializeNodesAndInfra(t *testing.T, initializeIntermediary bool) (TestUtils, func()) {
+func initializeNodesAndInfra(t *testing.T, isIntermediaryPresent bool) (TestUtils, func()) {
 	testCase := TestCase{
 		Description:       "Swap test",
 		Chain:             AnvilChain,
@@ -56,7 +56,7 @@ func initializeNodesAndInfra(t *testing.T, initializeIntermediary bool) (TestUti
 	nodeB, _, _, storeB, chainServiceB := setupIntegrationNode(testCase, testCase.Participants[1], infra, []string{nodeAMulitAddress}, dataFolder)
 
 	var nodeC node.Node
-	if initializeIntermediary {
+	if isIntermediaryPresent {
 		nodeC, _, _, _, _ = setupIntegrationNode(testCase, testCase.Participants[2], infra, []string{nodeAMulitAddress}, dataFolder)
 	}
 
@@ -76,7 +76,7 @@ func initializeNodesAndInfra(t *testing.T, initializeIntermediary bool) (TestUti
 		nodeA.Close()
 		nodeB.Close()
 
-		if initializeIntermediary {
+		if isIntermediaryPresent {
 			nodeC.Close()
 		}
 

@@ -483,8 +483,3 @@ func (b *Bridge) GetNodeInfo() types.NodeInfo {
 	// State channel address and message service peer ID for both the L1 and L2 nodes are same because the same private key is being used for both nodes
 	return b.nodeL1.GetNodeInfo()
 }
-
-// TODO: Remove
-func (b *Bridge) ConfirmSwap(swapId types.Destination, action types.SwapStatus) error {
-	return b.nodeL2.ConfirmSwap(swapId, action)
-}

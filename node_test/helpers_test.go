@@ -580,9 +580,9 @@ func createFinalLedgerOutcome(initialLedgerOutcome outcome.Exit, initialSwapChan
 
 	for _, netAssetOutcome := range netSwapChannelOutcome {
 		for _, netAllocation := range netAssetOutcome.Allocations {
-			isAdded := findAndAddOutcome(initialLedgerOutcome, netAssetOutcome.Asset, netAllocation.Destination, netAllocation.Amount)
+			isAdded := findAndAddAllocation(initialLedgerOutcome, netAssetOutcome.Asset, netAllocation.Destination, netAllocation.Amount)
 			if !isAdded && !intermediaryAddress.IsZero() {
-				findAndAddOutcome(initialLedgerOutcome, netAssetOutcome.Asset, intermediaryAddress, netAllocation.Amount)
+				findAndAddAllocation(initialLedgerOutcome, netAssetOutcome.Asset, intermediaryAddress, netAllocation.Amount)
 			}
 		}
 	}
@@ -590,7 +590,7 @@ func createFinalLedgerOutcome(initialLedgerOutcome outcome.Exit, initialSwapChan
 	return initialLedgerOutcome
 }
 
-func findAndAddOutcome(ledgerOutcome outcome.Exit, targetAssetAddress common.Address, targetDestination types.Destination, netAmount *big.Int) bool {
+func findAndAddAllocation(ledgerOutcome outcome.Exit, targetAssetAddress common.Address, targetDestination types.Destination, netAmount *big.Int) bool {
 	for _, outcome := range ledgerOutcome {
 		if outcome.Asset == targetAssetAddress {
 			for _, allocation := range outcome.Allocations {

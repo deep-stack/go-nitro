@@ -39,11 +39,11 @@ func (v *SwapChannel) Clone() *SwapChannel {
 	return &w
 }
 
+// HasParticipantSignatures checks whether all major participants of the swap channel have signed the state
 func (v *SwapChannel) HasParticipantSignatures(ss state.SignedState) bool {
 	sigs := ss.Signatures()
 	count := 0
 	for _, sig := range sigs {
-		// Count valid sigs
 		if !sig.IsEmpty() {
 			count++
 		}
@@ -56,6 +56,7 @@ func (v *SwapChannel) HasParticipantSignatures(ss state.SignedState) bool {
 	return false
 }
 
+// AddSignedSwapChannelState adds a signed swap channel state to the channel if all major participants of swap channel have signed it
 func (v *SwapChannel) AddSignedSwapChannelState(ss state.SignedState) bool {
 	if !v.HasParticipantSignatures(ss) {
 		return false
@@ -69,6 +70,7 @@ func (v *SwapChannel) AddSignedSwapChannelState(ss state.SignedState) bool {
 	return true
 }
 
+// LatestSupportedSwapChannelState fetches the lalest supported swap channel state
 func (v *SwapChannel) LatestSupportedSwapChannelState() state.State {
 	if v.Channel.OffChain.LatestSupportedStateTurnNum == MaxTurnNum {
 		return state.State{}
