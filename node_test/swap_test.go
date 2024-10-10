@@ -87,7 +87,7 @@ func initializeNodesAndInfra(t *testing.T, initializeIntermediary bool) (TestUti
 	return utils, cleanup
 }
 
-func createMultiAssetLedgerChannel(t *testing.T, nodeA, nodeB node.Node, assetAddresses []common.Address, challengeDuration uint32) directfund.ObjectiveResponse {
+func createMultiAssetLedgerChannel(t *testing.T, nodeA, nodeB node.Node, assetAddresses []common.Address, challengeDuration uint32) (directfund.ObjectiveResponse, outcome.Exit) {
 	var multiAssetOutcome outcome.Exit
 	for _, assetAddress := range assetAddresses {
 		assetOutcome := CreateLedgerOutcome(*nodeA.Address, *nodeB.Address, ledgerChannelDeposit, ledgerChannelDeposit, assetAddress)
@@ -107,7 +107,7 @@ func createMultiAssetLedgerChannel(t *testing.T, nodeA, nodeB node.Node, assetAd
 	<-chA
 	<-chB
 	t.Logf("Ledger channel %v created", ledgerResponse.ChannelId)
-	return ledgerResponse
+	return ledgerResponse, multiAssetOutcome
 }
 
 func closeSwapChannel(t *testing.T, nodeA, nodeB node.Node, swapChannelId types.Destination) {
@@ -241,7 +241,7 @@ func TestStorageOfLastNSwap(t *testing.T) {
 	utils, cleanup := initializeNodesAndInfra(t, false)
 	defer cleanup()
 
-	ledgerChannelResponse := createMultiAssetLedgerChannel(t, utils.nodeA, utils.nodeB, []common.Address{
+	ledgerChannelResponse, _ := createMultiAssetLedgerChannel(t, utils.nodeA, utils.nodeB, []common.Address{
 		{}, utils.infra.anvilChain.ContractAddresses.TokenAddresses[0], utils.infra.anvilChain.ContractAddresses.TokenAddresses[1],
 	}, 0)
 	defer closeMultiAssetLedgerChannel(t, utils.nodeA, utils.nodeB, ledgerChannelResponse.ChannelId)
@@ -314,7 +314,7 @@ func TestParallelSwapCreation(t *testing.T) {
 	utils, cleanup := initializeNodesAndInfra(t, false)
 	defer cleanup()
 
-	ledgerChannelResponse := createMultiAssetLedgerChannel(t, utils.nodeA, utils.nodeB, []common.Address{
+	ledgerChannelResponse, _ := createMultiAssetLedgerChannel(t, utils.nodeA, utils.nodeB, []common.Address{
 		{}, utils.infra.anvilChain.ContractAddresses.TokenAddresses[0], utils.infra.anvilChain.ContractAddresses.TokenAddresses[1],
 	}, 0)
 	defer closeMultiAssetLedgerChannel(t, utils.nodeA, utils.nodeB, ledgerChannelResponse.ChannelId)
@@ -508,17 +508,15 @@ func TestSwapFundWithIntermediary(t *testing.T) {
 	utils, cleanup := initializeNodesAndInfra(t, true)
 	defer cleanup()
 
-	ledgerChannel1Response := createMultiAssetLedgerChannel(t, utils.nodeB, utils.nodeA, []common.Address{
+	ledgerChannel1Response, initialLedger1Outcome := createMultiAssetLedgerChannel(t, utils.nodeB, utils.nodeA, []common.Address{
 		{}, utils.infra.anvilChain.ContractAddresses.TokenAddresses[0], utils.infra.anvilChain.ContractAddresses.TokenAddresses[1],
 	}, 0)
-	defer closeMultiAssetLedgerChannel(t, utils.nodeB, utils.nodeA, ledgerChannel1Response.ChannelId)
 
-	ledgerChannel2Response := createMultiAssetLedgerChannel(t, utils.nodeC, utils.nodeA, []common.Address{
+	ledgerChannel2Response, initialLedger2Outcome := createMultiAssetLedgerChannel(t, utils.nodeC, utils.nodeA, []common.Address{
 		{}, utils.infra.anvilChain.ContractAddresses.TokenAddresses[0], utils.infra.anvilChain.ContractAddresses.TokenAddresses[1],
 	}, 0)
-	defer closeMultiAssetLedgerChannel(t, utils.nodeC, utils.nodeA, ledgerChannel2Response.ChannelId)
 
-	multiassetSwapChannelOutcome := outcome.Exit{
+	initialSwapChannelOutcome := outcome.Exit{
 		outcome.SingleAssetExit{
 			Asset: common.Address{},
 			Allocations: outcome.Allocations{
@@ -564,7 +562,7 @@ func TestSwapFundWithIntermediary(t *testing.T) {
 		[]common.Address{*utils.nodeA.Address},
 		*utils.nodeC.Address,
 		0,
-		multiassetSwapChannelOutcome,
+		initialSwapChannelOutcome,
 	)
 	if err != nil {
 		t.Fatal(err)
@@ -576,12 +574,11 @@ func TestSwapFundWithIntermediary(t *testing.T) {
 	<-chB
 	<-chC
 	t.Log("Completed swap-fund objective")
-	defer closeSwapChannel(t, utils.nodeB, utils.nodeC, swapChannelResponse.ChannelId)
 
-	checkSwapChannel(t, swapChannelResponse.ChannelId, multiassetSwapChannelOutcome, query.Open, utils.nodeB, utils.nodeC)
+	checkSwapChannel(t, swapChannelResponse.ChannelId, initialSwapChannelOutcome, query.Open, utils.nodeB, utils.nodeC)
 
 	swapIterations := 2
-	modifiedOutcomeAfterSwap := multiassetSwapChannelOutcome
+	modifiedOutcomeAfterSwap := initialSwapChannelOutcome
 	for i := 1; i <= swapIterations; i++ {
 
 		// Initiate swap from Bob
@@ -608,4 +605,14 @@ func TestSwapFundWithIntermediary(t *testing.T) {
 		modifiedOutcomeAfterSwap = modifyOutcomeWithSwap(modifiedOutcomeAfterSwap, pendingSwap, 0)
 		checkSwapChannel(t, swapChannelResponse.ChannelId, modifiedOutcomeAfterSwap, query.Open, utils.nodeB, utils.nodeC)
 	}
+
+	closeSwapChannel(t, utils.nodeB, utils.nodeC, swapChannelResponse.ChannelId)
+	closeMultiAssetLedgerChannel(t, utils.nodeB, utils.nodeA, ledgerChannel1Response.ChannelId)
+	closeMultiAssetLedgerChannel(t, utils.nodeC, utils.nodeA, ledgerChannel2Response.ChannelId)
+
+	finalLedgerChannel1Outcome := createFinalLedgerOutcome(initialLedger1Outcome, initialSwapChannelOutcome, modifiedOutcomeAfterSwap, *utils.nodeA.Address)
+	checkLedgerChannel(t, ledgerChannel1Response.ChannelId, finalLedgerChannel1Outcome, query.Complete, channel.Finalized, utils.nodeA, utils.nodeB)
+
+	finalLedgerChannel2Outcome := createFinalLedgerOutcome(initialLedger2Outcome, initialSwapChannelOutcome, modifiedOutcomeAfterSwap, *utils.nodeA.Address)
+	checkLedgerChannel(t, ledgerChannel2Response.ChannelId, finalLedgerChannel2Outcome, query.Complete, channel.Finalized, utils.nodeA, utils.nodeC)
 }
