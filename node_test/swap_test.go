@@ -26,17 +26,17 @@ import (
 
 type TestUtils struct {
 	tc                           TestCase
-	nodeA, nodeB                 node.Node
+	nodeA, nodeB, nodeC          node.Node
 	chainServiceA, chainServiceB chainservice.ChainService
 	storeA, storeB               store.Store
 	infra                        sharedTestInfrastructure
 }
 
-func initializeNodesAndInfra(t *testing.T) (TestUtils, func()) {
+func initializeNodesAndInfra(t *testing.T, initializeIntermediary bool) (TestUtils, func()) {
 	testCase := TestCase{
 		Description:       "Swap test",
 		Chain:             AnvilChain,
-		MessageService:    TestMessageService,
+		MessageService:    P2PMessageService,
 		ChallengeDuration: 0,
 		MessageDelay:      0,
 		LogName:           "Swap_test",
@@ -52,8 +52,13 @@ func initializeNodesAndInfra(t *testing.T) (TestUtils, func()) {
 	infra := setupSharedInfra(testCase)
 
 	// Create go-nitro nodes
-	nodeA, _, _, storeA, chainServiceA := setupIntegrationNode(testCase, testCase.Participants[0], infra, []string{}, dataFolder)
-	nodeB, _, _, storeB, chainServiceB := setupIntegrationNode(testCase, testCase.Participants[1], infra, []string{}, dataFolder)
+	nodeA, _, nodeAMulitAddress, storeA, chainServiceA := setupIntegrationNode(testCase, testCase.Participants[0], infra, []string{}, dataFolder)
+	nodeB, _, _, storeB, chainServiceB := setupIntegrationNode(testCase, testCase.Participants[1], infra, []string{nodeAMulitAddress}, dataFolder)
+
+	var nodeC node.Node
+	if initializeIntermediary {
+		nodeC, _, _, _, _ = setupIntegrationNode(testCase, testCase.Participants[2], infra, []string{nodeAMulitAddress}, dataFolder)
+	}
 
 	utils := TestUtils{
 		tc:            testCase,
@@ -69,6 +74,11 @@ func initializeNodesAndInfra(t *testing.T) (TestUtils, func()) {
 	cleanup := func() {
 		nodeA.Close()
 		nodeB.Close()
+
+		if initializeIntermediary {
+			nodeC.Close()
+		}
+
 		removeTempFolder()
 		infra.Close(t)
 	}
@@ -76,34 +86,31 @@ func initializeNodesAndInfra(t *testing.T) (TestUtils, func()) {
 	return utils, cleanup
 }
 
-func createMultiAssetLedgerChannel(t *testing.T, utils TestUtils) directfund.ObjectiveResponse {
-	outcomeEth := CreateLedgerOutcome(*utils.nodeA.Address, *utils.nodeB.Address, ledgerChannelDeposit, ledgerChannelDeposit+10, common.Address{})
-
-	outcomeCustomToken := CreateLedgerOutcome(*utils.nodeA.Address, *utils.nodeB.Address, ledgerChannelDeposit+20, ledgerChannelDeposit+30, utils.infra.anvilChain.ContractAddresses.TokenAddresses[0])
-
-	outcomeCustomToken2 := CreateLedgerOutcome(*utils.nodeA.Address, *utils.nodeB.Address, ledgerChannelDeposit+40, ledgerChannelDeposit+50, utils.infra.anvilChain.ContractAddresses.TokenAddresses[1])
-
-	multiAssetOutcome := append(outcomeEth, outcomeCustomToken...)
-	multiAssetOutcome = append(multiAssetOutcome, outcomeCustomToken2...)
+func createMultiAssetLedgerChannel(t *testing.T, nodeA, nodeB node.Node, assetAddresses []common.Address, challengeDuration uint32) directfund.ObjectiveResponse {
+	var multiAssetOutcome outcome.Exit
+	for _, assetAddress := range assetAddresses {
+		assetOutcome := CreateLedgerOutcome(*nodeA.Address, *nodeB.Address, ledgerChannelDeposit, ledgerChannelDeposit, assetAddress)
+		multiAssetOutcome = append(multiAssetOutcome, assetOutcome...)
+	}
 
 	// Create ledger channel
-	ledgerResponse, err := utils.nodeA.CreateLedgerChannel(*utils.nodeB.Address, uint32(utils.tc.ChallengeDuration), multiAssetOutcome)
+	ledgerResponse, err := nodeA.CreateLedgerChannel(*nodeB.Address, challengeDuration, multiAssetOutcome)
 	if err != nil {
 		t.Fatal("error creating ledger channel", err)
 	}
 
 	t.Log("Waiting for direct-fund objective to complete...")
 
-	chA := utils.nodeA.ObjectiveCompleteChan(ledgerResponse.Id)
-	chB := utils.nodeB.ObjectiveCompleteChan(ledgerResponse.Id)
+	chA := nodeA.ObjectiveCompleteChan(ledgerResponse.Id)
+	chB := nodeB.ObjectiveCompleteChan(ledgerResponse.Id)
 	<-chA
 	<-chB
 	t.Logf("Ledger channel %v created", ledgerResponse.ChannelId)
 	return ledgerResponse
 }
 
-func closeSwapChannel(t *testing.T, utils TestUtils, swapChannelId types.Destination) {
-	res, err := utils.nodeA.CloseSwapChannel(swapChannelId)
+func closeSwapChannel(t *testing.T, nodeA, nodeB node.Node, swapChannelId types.Destination) {
+	res, err := nodeA.CloseSwapChannel(swapChannelId)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -111,16 +118,16 @@ func closeSwapChannel(t *testing.T, utils TestUtils, swapChannelId types.Destina
 	t.Log("Started swap-defund objective", "objectiveId", res)
 
 	// Wait for swap-defund objectives to complete
-	chA := utils.nodeA.ObjectiveCompleteChan(res)
-	chB := utils.nodeB.ObjectiveCompleteChan(res)
+	chA := nodeA.ObjectiveCompleteChan(res)
+	chB := nodeB.ObjectiveCompleteChan(res)
 	<-chA
 	<-chB
 
 	t.Log("Completed swap-defund objective")
 }
 
-func closeMultiAssetLedgerChannel(t *testing.T, utils TestUtils, ledgerChannelId types.Destination) {
-	res, err := utils.nodeA.CloseLedgerChannel(ledgerChannelId, false)
+func closeMultiAssetLedgerChannel(t *testing.T, nodeA, nodeB node.Node, ledgerChannelId types.Destination) {
+	res, err := nodeA.CloseLedgerChannel(ledgerChannelId, false)
 	if err != nil {
 		t.Log(err)
 	}
@@ -128,8 +135,8 @@ func closeMultiAssetLedgerChannel(t *testing.T, utils TestUtils, ledgerChannelId
 	t.Log("Started direct-defund objective", "objectiveId", res)
 
 	// Wait for direct defund objectives to complete
-	chA := utils.nodeA.ObjectiveCompleteChan(res)
-	chB := utils.nodeB.ObjectiveCompleteChan(res)
+	chA := nodeA.ObjectiveCompleteChan(res)
+	chB := nodeA.ObjectiveCompleteChan(res)
 	<-chA
 	<-chB
 
@@ -230,11 +237,13 @@ func performSwap(t *testing.T, sender *node.Node, receiver *node.Node, swapSende
 }
 
 func TestStorageOfLastNSwap(t *testing.T) {
-	utils, cleanup := initializeNodesAndInfra(t)
+	utils, cleanup := initializeNodesAndInfra(t, false)
 	defer cleanup()
 
-	ledgerChannelResponse := createMultiAssetLedgerChannel(t, utils)
-	defer closeMultiAssetLedgerChannel(t, utils, ledgerChannelResponse.ChannelId)
+	ledgerChannelResponse := createMultiAssetLedgerChannel(t, utils.nodeA, utils.nodeB, []common.Address{
+		{}, utils.infra.anvilChain.ContractAddresses.TokenAddresses[0], utils.infra.anvilChain.ContractAddresses.TokenAddresses[1],
+	}, 0)
+	defer closeMultiAssetLedgerChannel(t, utils.nodeA, utils.nodeB, ledgerChannelResponse.ChannelId)
 
 	swapChannelResponse, expectedInitialOutcome := createSwapChannel(t, utils)
 	checkSwapChannel(t, swapChannelResponse.ChannelId, expectedInitialOutcome, query.Open, utils.nodeA, utils.nodeB)
@@ -301,11 +310,13 @@ func TestStorageOfLastNSwap(t *testing.T) {
 func TestParallelSwapCreation(t *testing.T) {
 	// Currently parallel swap creations are allowed
 	t.Skip()
-	utils, cleanup := initializeNodesAndInfra(t)
+	utils, cleanup := initializeNodesAndInfra(t, false)
 	defer cleanup()
 
-	ledgerChannelResponse := createMultiAssetLedgerChannel(t, utils)
-	defer closeMultiAssetLedgerChannel(t, utils, ledgerChannelResponse.ChannelId)
+	ledgerChannelResponse := createMultiAssetLedgerChannel(t, utils.nodeA, utils.nodeB, []common.Address{
+		{}, utils.infra.anvilChain.ContractAddresses.TokenAddresses[0], utils.infra.anvilChain.ContractAddresses.TokenAddresses[1],
+	}, 0)
+	defer closeMultiAssetLedgerChannel(t, utils.nodeA, utils.nodeB, ledgerChannelResponse.ChannelId)
 
 	swapChannelResponse, _ := createSwapChannel(t, utils)
 	defer closeSwapChannel(t, utils, swapChannelResponse.ChannelId)
@@ -490,4 +501,109 @@ func TestSwapTillEmptyBalance(t *testing.T) {
 		expectedLedgerOutcome := createExpectedLedgerOutcome(ledgerStateBeforeSdf.State().Outcome, expectedInitialOutcome)
 		checkLedgerChannel(t, ledgerChannelResponse.ChannelId, expectedLedgerOutcome, query.Open, channel.Open, utils.nodeA, utils.nodeB)
 	})
+}
+
+func TestSwapFundWithIntermediary(t *testing.T) {
+	utils, cleanup := initializeNodesAndInfra(t, true)
+	defer cleanup()
+
+	ledgerChannel1Response := createMultiAssetLedgerChannel(t, utils.nodeB, utils.nodeA, []common.Address{
+		{}, utils.infra.anvilChain.ContractAddresses.TokenAddresses[0], utils.infra.anvilChain.ContractAddresses.TokenAddresses[1],
+	}, 0)
+	defer closeMultiAssetLedgerChannel(t, utils.nodeB, utils.nodeA, ledgerChannel1Response.ChannelId)
+
+	t.Logf("Ledger channel 1 created %v", ledgerChannel1Response.ChannelId)
+
+	ledgerChannel2Response := createMultiAssetLedgerChannel(t, utils.nodeC, utils.nodeA, []common.Address{
+		{}, utils.infra.anvilChain.ContractAddresses.TokenAddresses[0], utils.infra.anvilChain.ContractAddresses.TokenAddresses[1],
+	}, 0)
+	defer closeMultiAssetLedgerChannel(t, utils.nodeC, utils.nodeA, ledgerChannel2Response.ChannelId)
+	t.Logf("Ledger channel 2 created %v", ledgerChannel2Response.ChannelId)
+
+	multiassetSwapChannelOutcome := outcome.Exit{
+		outcome.SingleAssetExit{
+			Asset: common.Address{},
+			Allocations: outcome.Allocations{
+				outcome.Allocation{
+					Destination: types.AddressToDestination(*utils.nodeB.Address),
+					Amount:      big.NewInt(int64(1001)),
+				},
+				outcome.Allocation{
+					Destination: types.AddressToDestination(*utils.nodeC.Address),
+					Amount:      big.NewInt(int64(1002)),
+				},
+			},
+		},
+		outcome.SingleAssetExit{
+			Asset: utils.infra.anvilChain.ContractAddresses.TokenAddresses[0],
+			Allocations: outcome.Allocations{
+				outcome.Allocation{
+					Destination: types.AddressToDestination(*utils.nodeB.Address),
+					Amount:      big.NewInt(int64(501)),
+				},
+				outcome.Allocation{
+					Destination: types.AddressToDestination(*utils.nodeC.Address),
+					Amount:      big.NewInt(int64(502)),
+				},
+			},
+		},
+		outcome.SingleAssetExit{
+			Asset: utils.infra.anvilChain.ContractAddresses.TokenAddresses[1],
+			Allocations: outcome.Allocations{
+				outcome.Allocation{
+					Destination: types.AddressToDestination(*utils.nodeB.Address),
+					Amount:      big.NewInt(int64(601)),
+				},
+				outcome.Allocation{
+					Destination: types.AddressToDestination(*utils.nodeC.Address),
+					Amount:      big.NewInt(int64(602)),
+				},
+			},
+		},
+	}
+
+	swapChannelResponse, err := utils.nodeB.CreateSwapChannel(
+		[]common.Address{*utils.nodeA.Address},
+		*utils.nodeC.Address,
+		0,
+		multiassetSwapChannelOutcome,
+	)
+	if err != nil {
+		t.Fatal(err)
+	}
+	t.Log("Waiting for swap fund objective to complete")
+	defer closeSwapChannel(t, utils.nodeB, utils.nodeC, swapChannelResponse.ChannelId)
+
+	chB := utils.nodeB.ObjectiveCompleteChan(swapChannelResponse.Id)
+	chC := utils.nodeC.ObjectiveCompleteChan(swapChannelResponse.Id)
+	<-chB
+	<-chC
+
+	t.Log("Completed swap-fund objective")
+
+	swapIterations := 2
+	for i := 1; i <= swapIterations; i++ {
+
+		// Initiate swap from Bob
+		swapAssetResponse, err := utils.nodeB.SwapAssets(swapChannelResponse.ChannelId, utils.infra.anvilChain.ContractAddresses.TokenAddresses[0], utils.infra.anvilChain.ContractAddresses.TokenAddresses[1], big.NewInt(10), big.NewInt(20))
+		if err != nil {
+			t.Fatal(err)
+		}
+
+		// Wait for objective to wait for confirmation
+		time.Sleep(3 * time.Second)
+
+		pendingSwap, err := utils.nodeC.GetPendingSwapByChannelId(swapAssetResponse.ChannelId)
+		if err != nil {
+			t.Fatal(err)
+		}
+
+		// Accept the swap
+		err = utils.nodeC.ConfirmSwap(pendingSwap.Id, types.Accepted)
+		if err != nil {
+			t.Fatal(err)
+		}
+
+		<-utils.nodeB.ObjectiveCompleteChan(swapAssetResponse.Id)
+	}
 }
