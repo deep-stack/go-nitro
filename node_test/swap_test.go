@@ -64,6 +64,7 @@ func initializeNodesAndInfra(t *testing.T, initializeIntermediary bool) (TestUti
 		tc:            testCase,
 		nodeA:         nodeA,
 		nodeB:         nodeB,
+		nodeC:         nodeC,
 		chainServiceA: chainServiceA,
 		chainServiceB: chainServiceB,
 		storeA:        storeA,
@@ -136,7 +137,7 @@ func closeMultiAssetLedgerChannel(t *testing.T, nodeA, nodeB node.Node, ledgerCh
 
 	// Wait for direct defund objectives to complete
 	chA := nodeA.ObjectiveCompleteChan(res)
-	chB := nodeA.ObjectiveCompleteChan(res)
+	chB := nodeB.ObjectiveCompleteChan(res)
 	<-chA
 	<-chB
 
@@ -512,13 +513,10 @@ func TestSwapFundWithIntermediary(t *testing.T) {
 	}, 0)
 	defer closeMultiAssetLedgerChannel(t, utils.nodeB, utils.nodeA, ledgerChannel1Response.ChannelId)
 
-	t.Logf("Ledger channel 1 created %v", ledgerChannel1Response.ChannelId)
-
 	ledgerChannel2Response := createMultiAssetLedgerChannel(t, utils.nodeC, utils.nodeA, []common.Address{
 		{}, utils.infra.anvilChain.ContractAddresses.TokenAddresses[0], utils.infra.anvilChain.ContractAddresses.TokenAddresses[1],
 	}, 0)
 	defer closeMultiAssetLedgerChannel(t, utils.nodeC, utils.nodeA, ledgerChannel2Response.ChannelId)
-	t.Logf("Ledger channel 2 created %v", ledgerChannel2Response.ChannelId)
 
 	multiassetSwapChannelOutcome := outcome.Exit{
 		outcome.SingleAssetExit{
@@ -572,20 +570,22 @@ func TestSwapFundWithIntermediary(t *testing.T) {
 		t.Fatal(err)
 	}
 	t.Log("Waiting for swap fund objective to complete")
-	defer closeSwapChannel(t, utils.nodeB, utils.nodeC, swapChannelResponse.ChannelId)
 
 	chB := utils.nodeB.ObjectiveCompleteChan(swapChannelResponse.Id)
 	chC := utils.nodeC.ObjectiveCompleteChan(swapChannelResponse.Id)
 	<-chB
 	<-chC
-
 	t.Log("Completed swap-fund objective")
+	defer closeSwapChannel(t, utils.nodeB, utils.nodeC, swapChannelResponse.ChannelId)
+
+	checkSwapChannel(t, swapChannelResponse.ChannelId, multiassetSwapChannelOutcome, query.Open, utils.nodeB, utils.nodeC)
 
 	swapIterations := 2
+	modifiedOutcomeAfterSwap := multiassetSwapChannelOutcome
 	for i := 1; i <= swapIterations; i++ {
 
 		// Initiate swap from Bob
-		swapAssetResponse, err := utils.nodeB.SwapAssets(swapChannelResponse.ChannelId, utils.infra.anvilChain.ContractAddresses.TokenAddresses[0], utils.infra.anvilChain.ContractAddresses.TokenAddresses[1], big.NewInt(10), big.NewInt(20))
+		swapAssetResponse, err := utils.nodeB.SwapAssets(swapChannelResponse.ChannelId, utils.infra.anvilChain.ContractAddresses.TokenAddresses[0], utils.infra.anvilChain.ContractAddresses.TokenAddresses[1], big.NewInt(100), big.NewInt(200))
 		if err != nil {
 			t.Fatal(err)
 		}
@@ -605,5 +605,7 @@ func TestSwapFundWithIntermediary(t *testing.T) {
 		}
 
 		<-utils.nodeB.ObjectiveCompleteChan(swapAssetResponse.Id)
+		modifiedOutcomeAfterSwap = modifyOutcomeWithSwap(modifiedOutcomeAfterSwap, pendingSwap, 0)
+		checkSwapChannel(t, swapChannelResponse.ChannelId, modifiedOutcomeAfterSwap, query.Open, utils.nodeB, utils.nodeC)
 	}
 }
