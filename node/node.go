@@ -524,7 +524,12 @@ func (n *Node) ConfirmSwap(swapId types.Destination, action types.SwapStatus) er
 		return fmt.Errorf("swap with ID %s is not approved", swapId.String())
 	}
 
-	if o.C.MyIndex == o.SwapSenderIndex {
+	myIndex, err := o.MyIndexInAllocations()
+	if err != nil {
+		return err
+	}
+
+	if myIndex == o.SwapSenderIndex {
 		return fmt.Errorf("swap cannot be confirmed by swap sender")
 	}
 

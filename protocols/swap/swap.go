@@ -89,7 +89,7 @@ func NewObjective(request ObjectiveRequest, preApprove bool, isSwapSender bool, 
 }
 
 func (o *Objective) determineSwapSenderIndex(isSwapSender bool) (uint, error) {
-	myIndex, err := o.myIndexInAllocations()
+	myIndex, err := o.MyIndexInAllocations()
 	if err != nil {
 		return 0, err
 	}
@@ -239,7 +239,7 @@ func (o *Objective) Crank(secretKey *[]byte) (protocols.Objective, protocols.Sid
 		return &updated, sideEffects, WaitingForNothing, protocols.ErrNotApproved
 	}
 
-	myIndex, err := o.myIndexInAllocations()
+	myIndex, err := o.MyIndexInAllocations()
 	if err != nil {
 		return &updated, sideEffects, WaitingForNothing, err
 	}
@@ -560,7 +560,7 @@ func (o *Objective) counterPartyAddress() common.Address {
 	return o.C.Participants[counterPartyIndex]
 }
 
-func (o *Objective) myIndexInAllocations() (uint, error) {
+func (o *Objective) MyIndexInAllocations() (uint, error) {
 	myAddress := o.C.Participants[o.C.MyIndex]
 	state, _ := o.C.LatestSupportedState()
 	for i, allocation := range state.Outcome[0].Allocations {
