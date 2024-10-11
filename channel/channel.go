@@ -24,7 +24,7 @@ type OnChainData struct {
 
 type OffChainData struct {
 	SignedStateForTurnNum       map[uint64]state.SignedState // Longer term, we should have a more efficient and smart mechanism to store states https://github.com/statechannels/go-nitro/issues/106
-	LatestSupportedStateTurnNum uint64
+	LatestSupportedStateTurnNum uint64                       // largest uint64 value reserved for "no supported state"
 }
 
 // Channel contains states and metadata and exposes convenience methods.

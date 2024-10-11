@@ -22,9 +22,8 @@ type Swap struct {
 	Id        types.Destination
 	ChannelId types.Destination
 	Exchange  Exchange
-	// TODO: Check to use participant index
-	Sigs  map[uint]state.Signature // Map of swap channel allocation array index to the swap signature
-	Nonce uint64
+	Sigs      map[uint]state.Signature // keyed by participant index in swap channel
+	Nonce     uint64
 }
 
 func NewSwap(channelId types.Destination, tokenIn, tokenOut common.Address, amountIn, amountOut *big.Int, nonce uint64) Swap {
@@ -118,7 +117,6 @@ func (s Swap) Sign(secretKey []byte) (state.Signature, error) {
 
 func (s Swap) AddSignature(sig state.Signature, myIndex uint) error {
 	s.Sigs[myIndex] = sig
-
 	return nil
 }
 

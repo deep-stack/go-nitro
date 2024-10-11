@@ -252,12 +252,12 @@ func TestStorageOfLastNSwap(t *testing.T) {
 	utils, cleanup := initializeNodesAndInfra(t)
 	defer cleanup()
 
-	ledgerChannelResponse, _ := createMultiAssetLedgerChannel(t, utils.nodeB, utils.nodeC, []common.Address{
+	ledgerChannelResponse, _ := createMultiAssetLedgerChannel(t, utils.nodeA, utils.nodeB, []common.Address{
 		{}, utils.infra.anvilChain.ContractAddresses.TokenAddresses[0], utils.infra.anvilChain.ContractAddresses.TokenAddresses[1],
 	}, 0)
-	defer closeMultiAssetLedgerChannel(t, utils.nodeB, utils.nodeC, ledgerChannelResponse.ChannelId)
+	defer closeMultiAssetLedgerChannel(t, utils.nodeA, utils.nodeB, ledgerChannelResponse.ChannelId)
 
-	swapChannelResponse, expectedInitialOutcome := createSwapChannel(t, utils.nodeB, utils.nodeC, utils)
+	swapChannelResponse, expectedInitialOutcome := createSwapChannel(t, utils.nodeA, utils.nodeB, utils)
 	checkSwapChannel(t, swapChannelResponse.ChannelId, expectedInitialOutcome, query.Open, utils.nodeA, utils.nodeB)
 
 	t.Run("Ensure that only the most recent n swaps are being stored ", func(t *testing.T) {
@@ -273,7 +273,7 @@ func TestStorageOfLastNSwap(t *testing.T) {
 				AmountOut: big.NewInt(20),
 			}
 
-			out, swapId, err := performSwap(t, &utils.nodeB, &utils.nodeA, 1, exchange, swapChannelResponse.ChannelId, expectedInitialOutcome, types.Accepted)
+			out, swapId, err := performSwap(t, &utils.nodeA, &utils.nodeB, 0, exchange, swapChannelResponse.ChannelId, expectedInitialOutcome, types.Accepted)
 			if err != nil {
 				t.Fatal(err)
 			}
@@ -282,7 +282,7 @@ func TestStorageOfLastNSwap(t *testing.T) {
 			swapsIds = append(swapsIds, swapId)
 		}
 
-		storesToTest := []store.Store{utils.storeB, utils.storeC}
+		storesToTest := []store.Store{utils.storeA, utils.storeB}
 		for _, nodeStore := range storesToTest {
 			lastNSwaps, err := nodeStore.GetSwapsByChannelId(swapChannelResponse.ChannelId)
 			if err != nil {
@@ -312,7 +312,7 @@ func TestStorageOfLastNSwap(t *testing.T) {
 			t.Fatal(err)
 		}
 
-		closeSwapChannel(t, utils.nodeB, utils.nodeC, swapChannelResponse.ChannelId)
+		closeSwapChannel(t, utils.nodeA, utils.nodeB, swapChannelResponse.ChannelId)
 
 		expectedLedgerOutcome := createExpectedLedgerOutcome(ledgerStateBeforeSdf.State().Outcome, expectedInitialOutcome)
 		checkLedgerChannel(t, ledgerChannelResponse.ChannelId, expectedLedgerOutcome, query.Open, channel.Open, utils.nodeA, utils.nodeB)
@@ -350,10 +350,12 @@ func TestSwapFund(t *testing.T) {
 	utils, cleanup := initializeNodesAndInfra(t)
 	defer cleanup()
 
-	ledgerChannelResponse := createMultiAssetLedgerChannel(t, utils)
-	defer closeMultiAssetLedgerChannel(t, utils, ledgerChannelResponse.ChannelId)
+	ledgerChannelResponse, _ := createMultiAssetLedgerChannel(t, utils.nodeA, utils.nodeB, []common.Address{
+		{}, utils.infra.anvilChain.ContractAddresses.TokenAddresses[0], utils.infra.anvilChain.ContractAddresses.TokenAddresses[1],
+	}, 0)
+	defer closeMultiAssetLedgerChannel(t, utils.nodeA, utils.nodeB, ledgerChannelResponse.ChannelId)
 
-	swapChannelResponse, expectedInitialOutcome := createSwapChannel(t, utils)
+	swapChannelResponse, expectedInitialOutcome := createSwapChannel(t, utils.nodeA, utils.nodeB, utils)
 	checkSwapChannel(t, swapChannelResponse.ChannelId, expectedInitialOutcome, query.Open, utils.nodeA, utils.nodeB)
 
 	t.Run("Test multiple swaps from both nodes", func(t *testing.T) {
@@ -403,7 +405,7 @@ func TestSwapFund(t *testing.T) {
 			t.Fatal(err)
 		}
 
-		closeSwapChannel(t, utils, swapChannelResponse.ChannelId)
+		closeSwapChannel(t, utils.nodeA, utils.nodeB, swapChannelResponse.ChannelId)
 
 		expectedLedgerOutcome := createExpectedLedgerOutcome(ledgerStateBeforeSdf.State().Outcome, expectedInitialOutcome)
 		checkLedgerChannel(t, ledgerChannelResponse.ChannelId, expectedLedgerOutcome, query.Open, channel.Open, utils.nodeA, utils.nodeB)
@@ -414,10 +416,12 @@ func TestSwapTillEmptyBalance(t *testing.T) {
 	utils, cleanup := initializeNodesAndInfra(t)
 	defer cleanup()
 
-	ledgerChannelResponse := createMultiAssetLedgerChannel(t, utils)
-	defer closeMultiAssetLedgerChannel(t, utils, ledgerChannelResponse.ChannelId)
+	ledgerChannelResponse, _ := createMultiAssetLedgerChannel(t, utils.nodeA, utils.nodeB, []common.Address{
+		{}, utils.infra.anvilChain.ContractAddresses.TokenAddresses[0], utils.infra.anvilChain.ContractAddresses.TokenAddresses[1],
+	}, 0)
+	defer closeMultiAssetLedgerChannel(t, utils.nodeA, utils.nodeB, ledgerChannelResponse.ChannelId)
 
-	swapChannelResponse, expectedInitialOutcome := createSwapChannel(t, utils)
+	swapChannelResponse, expectedInitialOutcome := createSwapChannel(t, utils.nodeA, utils.nodeB, utils)
 	checkSwapChannel(t, swapChannelResponse.ChannelId, expectedInitialOutcome, query.Open, utils.nodeA, utils.nodeB)
 
 	t.Run("Test performing swaps until balance becomes zero", func(t *testing.T) {
@@ -508,7 +512,7 @@ func TestSwapTillEmptyBalance(t *testing.T) {
 			t.Fatal(err)
 		}
 
-		closeSwapChannel(t, utils, swapChannelResponse.ChannelId)
+		closeSwapChannel(t, utils.nodeA, utils.nodeB, swapChannelResponse.ChannelId)
 
 		expectedLedgerOutcome := createExpectedLedgerOutcome(ledgerStateBeforeSdf.State().Outcome, expectedInitialOutcome)
 		checkLedgerChannel(t, ledgerChannelResponse.ChannelId, expectedLedgerOutcome, query.Open, channel.Open, utils.nodeA, utils.nodeB)

@@ -76,7 +76,9 @@ func NewObjective(request ObjectiveRequest, preApprove bool, isSwapSender bool, 
 	}
 	obj.SwapSenderIndex = index
 
-	isValid := obj.isValidSwap(request.swap)
+	s := obj.C.LatestSupportedSwapChannelState()
+
+	isValid := IsValidSwap(s, request.swap, obj.SwapSenderIndex)
 	if !isValid {
 		return obj, fmt.Errorf("swap objective creation failed: %w", ErrInvalidSwap)
 	}
@@ -102,7 +104,7 @@ func (o *Objective) determineSwapSenderIndex(isSwapSender bool) (uint, error) {
 	return swapSenderIndex, nil
 }
 
-func (o *Objective) isValidSwap(swap payments.Swap) bool {
+func IsValidSwap(s state.State, swap payments.Swap, swapSenderIndex uint) bool {
 	tokenIn := swap.Exchange.TokenIn
 	tokenOut := swap.Exchange.TokenOut
 
@@ -114,13 +116,12 @@ func (o *Objective) isValidSwap(swap payments.Swap) bool {
 		return false
 	}
 
-	s := o.C.LatestSupportedSwapChannelState()
 	updateSupportedState := s.Clone()
 	updateOutcome := updateSupportedState.Outcome.Clone()
 
 	for _, assetOutcome := range updateOutcome {
-		swapSenderAllocation := assetOutcome.Allocations[o.SwapSenderIndex]
-		swapReceiverAllocation := assetOutcome.Allocations[1-o.SwapSenderIndex]
+		swapSenderAllocation := assetOutcome.Allocations[swapSenderIndex]
+		swapReceiverAllocation := assetOutcome.Allocations[1-swapSenderIndex]
 
 		if assetOutcome.Asset == tokenIn {
 			res := swapSenderAllocation.Amount.Sub(swapSenderAllocation.Amount, swap.Exchange.AmountIn)
@@ -192,11 +193,7 @@ func (o *Objective) Update(raw protocols.ObjectivePayload) (protocols.Objective,
 		return &updated, fmt.Errorf("swap does not match")
 	}
 
-	myIndex, err := o.myIndexInAllocations()
-	if err != nil {
-		return &updated, err
-	}
-	counterPartySig := swapPayload.Swap.Sigs[1-myIndex]
+	counterPartySig := swapPayload.Swap.Sigs[uint(o.counterPartyIndexInParticipants())]
 	counterPartyAddress, err := o.Swap.RecoverSigner(counterPartySig)
 	if err != nil {
 		return &updated, err
@@ -262,11 +259,7 @@ func (o *Objective) Crank(secretKey *[]byte) (protocols.Objective, protocols.Sid
 			return &updated, sideEffects, WaitingForConsensus, err
 		}
 
-		index, err := o.myIndexInAllocations()
-		if err != nil {
-			return &updated, protocols.SideEffects{}, WaitingForConsensus, err
-		}
-		err = updated.Swap.AddSignature(sig, index)
+		err = updated.Swap.AddSignature(sig, updated.C.MyIndex)
 		if err != nil {
 			return &updated, sideEffects, WaitingForConsensus, err
 		}
@@ -404,11 +397,7 @@ func (o *Objective) HasAllSignatures() bool {
 
 // HasSignatureForParticipant returns true if the participant (at participantIndex) has a valid signature.
 func (o *Objective) HasSignatureForParticipant() bool {
-	myIndex, err := o.myIndexInAllocations()
-	if err != nil {
-		return false
-	}
-	_, found := o.Swap.Sigs[myIndex]
+	_, found := o.Swap.Sigs[o.C.MyIndex]
 	return found
 }
 
