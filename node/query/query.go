@@ -235,6 +235,10 @@ func GetAllLedgerChannels(store store.Store, consensusAppDefinition types.Addres
 		return []LedgerChannelInfo{}, err
 	}
 	for _, c := range allChannels {
+		if c.Type != types.Ledger {
+			continue
+		}
+
 		l, err := ConstructLedgerInfoFromChannel(c, myAddress)
 		if err != nil {
 			return []LedgerChannelInfo{}, err
