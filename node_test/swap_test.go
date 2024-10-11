@@ -519,7 +519,7 @@ func TestSwapTillEmptyBalance(t *testing.T) {
 	})
 }
 
-func TestSwapFundWithIntermediary(t *testing.T) {
+func TestSwapsWithIntermediary(t *testing.T) {
 	utils, cleanup := initializeNodesAndInfra(t)
 	defer cleanup()
 

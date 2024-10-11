@@ -264,11 +264,7 @@ func (o *Objective) Crank(secretKey *[]byte) (protocols.Objective, protocols.Sid
 			return &updated, sideEffects, WaitingForConsensus, err
 		}
 
-		err = updated.Swap.AddSignature(sig, updated.C.MyIndex)
-		if err != nil {
-			return &updated, sideEffects, WaitingForConsensus, err
-		}
-
+		updated.Swap.AddSignature(sig, updated.C.MyIndex)
 		updatedState, err := updated.GetUpdatedSwapState()
 		if err != nil {
 			return &updated, protocols.SideEffects{}, WaitingForConsensus, fmt.Errorf("error creating updated swap channel state %w", err)

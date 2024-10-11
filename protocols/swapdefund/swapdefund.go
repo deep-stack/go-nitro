@@ -536,6 +536,7 @@ func getRequestFinalStatePayload(b []byte) (types.Destination, error) {
 	return cId, nil
 }
 
+// TODO: Use virtual defund validation pattern
 // isSignedStateValidForIntermediary checks if the signed state in the incoming message is valid for the intermediary
 func (o *Objective) isSignedStateValidForIntermediary(ss state.SignedState) (bool, error) {
 	existingSwapChannelSignedState, err := o.S.LatestSupportedSignedState()

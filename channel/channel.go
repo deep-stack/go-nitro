@@ -147,7 +147,6 @@ func (c *Channel) Clone() *Channel {
 	}
 	d, _ := New(c.PreFundState().Clone(), c.MyIndex, c.Type)
 	d.OffChain.LatestSupportedStateTurnNum = c.OffChain.LatestSupportedStateTurnNum
-
 	for i, ss := range c.OffChain.SignedStateForTurnNum {
 		d.OffChain.SignedStateForTurnNum[i] = ss.Clone()
 	}

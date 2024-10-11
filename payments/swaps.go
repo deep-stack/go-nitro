@@ -115,9 +115,8 @@ func (s Swap) Sign(secretKey []byte) (state.Signature, error) {
 	return nc.SignEthereumMessage(hash.Bytes(), secretKey)
 }
 
-func (s Swap) AddSignature(sig state.Signature, myIndex uint) error {
+func (s Swap) AddSignature(sig state.Signature, myIndex uint) {
 	s.Sigs[myIndex] = sig
-	return nil
 }
 
 // RecoverSigner computes the Ethereum address which generated Signature sig on Swap
