@@ -85,6 +85,8 @@ func NewObjective(request ObjectiveRequest,
 	alice := S.Participants[0]
 	bob := S.Participants[len(S.Participants)-1]
 
+	// TODO: Ensure TurnNum does not exceed MaxTurnNum
+
 	// Determine final turnNum
 	finalTurnNum := channel.PostFundTurnNum
 	if myAddress == alice || myAddress == bob {
@@ -534,6 +536,7 @@ func getRequestFinalStatePayload(b []byte) (types.Destination, error) {
 	return cId, nil
 }
 
+// isSignedStateValidForIntermediary checks if the signed state in the incoming message is valid for the intermediary
 func (o *Objective) isSignedStateValidForIntermediary(ss state.SignedState) (bool, error) {
 	existingSwapChannelSignedState, err := o.S.LatestSupportedSignedState()
 	if err != nil {
@@ -587,6 +590,7 @@ func (o *Objective) Update(op protocols.ObjectivePayload) (protocols.Objective, 
 		}
 		updated := o.clone()
 
+		// TODO: Check signed state validation in virtual defund
 		if updated.FinalTurnNum == channel.PostFundTurnNum {
 			ok, err := o.isSignedStateValidForIntermediary(ss)
 			if err != nil {

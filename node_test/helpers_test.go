@@ -569,7 +569,9 @@ func createExpectedLedgerOutcome(initialLedgerOutcome outcome.Exit, swapChannelO
 	return finalOutcome
 }
 
+// createFinalLedgerOutcome creates final ledger outcome based on final swap channel state
 func createFinalLedgerOutcome(initialLedgerOutcome outcome.Exit, initialSwapChannelOutcome, finalSwapChannelOutcome outcome.Exit, intermediary common.Address) outcome.Exit {
+	// Calculate net swap channel outcome
 	netSwapChannelOutcome := initialSwapChannelOutcome.Clone()
 	intermediaryAddress := types.AddressToDestination(intermediary)
 	for i, initialAssetOutcome := range netSwapChannelOutcome {
@@ -578,16 +580,18 @@ func createFinalLedgerOutcome(initialLedgerOutcome outcome.Exit, initialSwapChan
 		initialAssetOutcome.Allocations[1].Amount.Sub(finalAssetOutcome.Allocations[1].Amount, initialAssetOutcome.Allocations[1].Amount)
 	}
 
+	// Add net swap channel outcome to initial ledger channel outcome
+	finalLedgerChannelOutcome := initialLedgerOutcome.Clone()
 	for _, netAssetOutcome := range netSwapChannelOutcome {
 		for _, netAllocation := range netAssetOutcome.Allocations {
-			isAdded := findAndAddAllocation(initialLedgerOutcome, netAssetOutcome.Asset, netAllocation.Destination, netAllocation.Amount)
+			isAdded := findAndAddAllocation(finalLedgerChannelOutcome, netAssetOutcome.Asset, netAllocation.Destination, netAllocation.Amount)
 			if !isAdded && !intermediaryAddress.IsZero() {
-				findAndAddAllocation(initialLedgerOutcome, netAssetOutcome.Asset, intermediaryAddress, netAllocation.Amount)
+				findAndAddAllocation(finalLedgerChannelOutcome, netAssetOutcome.Asset, intermediaryAddress, netAllocation.Amount)
 			}
 		}
 	}
 
-	return initialLedgerOutcome
+	return finalLedgerChannelOutcome
 }
 
 func findAndAddAllocation(ledgerOutcome outcome.Exit, targetAssetAddress common.Address, targetDestination types.Destination, netAmount *big.Int) bool {

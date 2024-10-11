@@ -2,7 +2,6 @@ package channel
 
 import (
 	"errors"
-	"math"
 
 	"github.com/statechannels/go-nitro/channel/state"
 	"github.com/statechannels/go-nitro/types"
@@ -39,14 +38,16 @@ func (v *SwapChannel) Clone() *SwapChannel {
 	return &w
 }
 
-// HasParticipantSignatures checks whether all major participants of the swap channel have signed the state
-func (v *SwapChannel) HasParticipantSignatures(ss state.SignedState) bool {
+// HasSwapParticipantSignatures checks whether all end participants of the swap channel have signed the state
+func (v *SwapChannel) HasSwapParticipantSignatures(ss state.SignedState) bool {
 	sigs := ss.Signatures()
 	count := 0
-	for _, sig := range sigs {
-		if !sig.IsEmpty() {
-			count++
-		}
+
+	if !sigs[0].IsEmpty() {
+		count++
+	}
+	if !sigs[len(sigs)-1].IsEmpty() {
+		count++
 	}
 
 	return count == 2
@@ -54,30 +55,23 @@ func (v *SwapChannel) HasParticipantSignatures(ss state.SignedState) bool {
 
 // AddSignedSwapChannelState adds a signed swap channel state to the channel if all major participants of swap channel have signed it
 func (v *SwapChannel) AddSignedSwapChannelState(ss state.SignedState) bool {
-	if !v.HasParticipantSignatures(ss) {
+	if !v.HasSwapParticipantSignatures(ss) {
 		return false
 	}
 
-	if !v.Channel.AddSignedState(ss) {
-		return false
-	}
-
-	v.Channel.OffChain.LatestSupportedSwapChannelStateTurnNum = ss.State().TurnNum
-	return true
+	return v.Channel.AddSignedState(ss)
 }
 
 // LatestSupportedSwapChannelState fetches the lalest supported swap channel state
 func (v *SwapChannel) LatestSupportedSwapChannelState() state.State {
-	if v.Channel.OffChain.LatestSupportedStateTurnNum == MaxTurnNum {
-		return state.State{}
+	latestTurn := v.Channel.OffChain.LatestSupportedStateTurnNum
+
+	for turnNum, ss := range v.Channel.OffChain.SignedStateForTurnNum {
+		if turnNum > latestTurn && v.HasSwapParticipantSignatures(ss) {
+			latestTurn = turnNum
+		}
 	}
 
-	if v.Channel.OffChain.LatestSupportedSwapChannelStateTurnNum == MaxTurnNum {
-		return v.Channel.OffChain.SignedStateForTurnNum[v.Channel.OffChain.LatestSupportedStateTurnNum].State()
-	}
-
-	maxTurnNum := math.Max(float64(v.Channel.OffChain.LatestSupportedStateTurnNum), float64(v.Channel.OffChain.LatestSupportedSwapChannelStateTurnNum))
-
-	ss := v.Channel.OffChain.SignedStateForTurnNum[uint64(maxTurnNum)]
+	ss := v.Channel.OffChain.SignedStateForTurnNum[latestTurn]
 	return ss.State()
 }

@@ -23,9 +23,8 @@ type OnChainData struct {
 }
 
 type OffChainData struct {
-	SignedStateForTurnNum                  map[uint64]state.SignedState // Longer term, we should have a more efficient and smart mechanism to store states https://github.com/statechannels/go-nitro/issues/106
-	LatestSupportedStateTurnNum            uint64
-	LatestSupportedSwapChannelStateTurnNum uint64
+	SignedStateForTurnNum       map[uint64]state.SignedState // Longer term, we should have a more efficient and smart mechanism to store states https://github.com/statechannels/go-nitro/issues/106
+	LatestSupportedStateTurnNum uint64
 }
 
 // Channel contains states and metadata and exposes convenience methods.
@@ -73,7 +72,6 @@ func New(s state.State, myIndex uint, channelType types.ChannelType) (*Channel, 
 	c.OnChain.ChannelMode = Open
 	c.FixedPart = s.FixedPart().Clone()
 	c.OffChain.LatestSupportedStateTurnNum = MaxTurnNum // largest uint64 value reserved for "no supported state"
-	c.OffChain.LatestSupportedSwapChannelStateTurnNum = MaxTurnNum
 
 	// Store prefund
 	c.OffChain.SignedStateForTurnNum = make(map[uint64]state.SignedState)
@@ -149,7 +147,6 @@ func (c *Channel) Clone() *Channel {
 	}
 	d, _ := New(c.PreFundState().Clone(), c.MyIndex, c.Type)
 	d.OffChain.LatestSupportedStateTurnNum = c.OffChain.LatestSupportedStateTurnNum
-	d.OffChain.LatestSupportedSwapChannelStateTurnNum = c.OffChain.LatestSupportedSwapChannelStateTurnNum
 
 	for i, ss := range c.OffChain.SignedStateForTurnNum {
 		d.OffChain.SignedStateForTurnNum[i] = ss.Clone()
