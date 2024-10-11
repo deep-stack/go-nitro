@@ -239,8 +239,13 @@ func (o *Objective) Crank(secretKey *[]byte) (protocols.Objective, protocols.Sid
 		return &updated, sideEffects, WaitingForNothing, protocols.ErrNotApproved
 	}
 
-	// Swap receiver check whether to accept or reject
-	if updated.SwapSenderIndex != o.C.MyIndex && updated.SwapStatus != types.Accepted {
+	myIndex, err := o.myIndexInAllocations()
+	if err != nil {
+		return &updated, sideEffects, WaitingForNothing, err
+	}
+
+	// Swap receiver checks whether to accept or reject
+	if updated.SwapSenderIndex != myIndex && updated.SwapStatus != types.Accepted {
 		if updated.SwapStatus == types.PendingConfirmation {
 			return &updated, sideEffects, WaitingForConfirmation, nil
 		} else {
@@ -299,7 +304,7 @@ func (o *Objective) Crank(secretKey *[]byte) (protocols.Objective, protocols.Sid
 	}
 
 	// If all signatures are available, update the swap channel according to the swap
-	err := updated.UpdateSwapChannelState()
+	err = updated.UpdateSwapChannelState()
 	if err != nil {
 		return &updated, protocols.SideEffects{}, WaitingForConsensus, fmt.Errorf("error updating swap channel state %w", err)
 	}
