@@ -10,6 +10,7 @@ import (
 	"time"
 
 	"github.com/ethereum/go-ethereum/common"
+	"github.com/statechannels/go-nitro/channel"
 	"github.com/statechannels/go-nitro/channel/state"
 	"github.com/statechannels/go-nitro/channel/state/outcome"
 	"github.com/statechannels/go-nitro/internal/safesync"
@@ -283,10 +284,15 @@ func (n *Node) SwapAssets(channelId types.Destination, tokenIn common.Address, t
 		return swap.ObjectiveResponse{}, err
 	}
 
+	myIndex, err := swap.MyIndexInAllocations(&channel.SwapChannel{Channel: *swapChannel})
+	if err != nil {
+		return swap.ObjectiveResponse{}, err
+	}
+
 	nonce := rand.Uint64()
 	newSwap := payments.NewSwap(channelId, tokenIn, tokenOut, amountIn, amountOut, nonce)
 
-	isSwapValid := swap.IsValidSwap(swapState, newSwap, swapChannel.MyIndex)
+	isSwapValid := swap.IsValidSwap(swapState, newSwap, myIndex)
 	if !isSwapValid {
 		return swap.ObjectiveResponse{}, swap.ErrInvalidSwap
 	}
@@ -533,7 +539,7 @@ func (n *Node) ConfirmSwap(swapId types.Destination, action types.SwapStatus) er
 		return fmt.Errorf("swap with ID %s is not approved", swapId.String())
 	}
 
-	myIndex, err := o.MyIndexInAllocations()
+	myIndex, err := swap.MyIndexInAllocations(o.C)
 	if err != nil {
 		return err
 	}
