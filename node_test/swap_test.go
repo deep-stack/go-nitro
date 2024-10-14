@@ -88,10 +88,12 @@ func initializeNodesAndInfra(t *testing.T) (TestUtils, func()) {
 	}
 
 	cleanup := func() {
-		nodeA.Close()
+		removeTempFolder()
+
 		nodeB.Close()
 		nodeC.Close()
-		removeTempFolder()
+		nodeA.Close()
+
 		infra.Close(t)
 	}
 
