@@ -593,14 +593,15 @@ func (o *Objective) Update(op protocols.ObjectivePayload) (protocols.Objective, 
 
 		// TODO: Check signed state validation in virtual defund
 		if updated.FinalTurnNum == channel.PostFundTurnNum {
-			ok, err := o.isSignedStateValidForIntermediary(ss)
-			if err != nil {
-				return &Objective{}, fmt.Errorf("failed to validate signed state for intermediary participant: %w", err)
-			}
+			// TODO: Check intermediary validation
+			// ok, err := o.isSignedStateValidForIntermediary(ss.Clone())
+			// if err != nil {
+			// 	return &Objective{}, fmt.Errorf("failed to validate signed state for intermediary participant: %w", err)
+			// }
 
-			if !ok {
-				return &Objective{}, fmt.Errorf("invalid signed state for intermediary participant")
-			}
+			// if !ok {
+			// 	return &Objective{}, fmt.Errorf("invalid signed state for intermediary participant")
+			// }
 
 			updated.FinalTurnNum = ss.State().TurnNum
 		}
