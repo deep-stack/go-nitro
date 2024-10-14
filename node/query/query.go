@@ -192,9 +192,9 @@ func GetSwapChannelInfo(id types.Destination, store store.Store) (string, error)
 	}
 
 	c, channelFound := store.GetChannelById(id)
-
+	swapChannnel := channel.SwapChannel{Channel: *c}
 	if channelFound {
-		SwapChannelInfo, err := ConstructSwapInfo(c, *store.GetAddress())
+		SwapChannelInfo, err := ConstructSwapInfo(swapChannnel, *store.GetAddress())
 		if err != nil {
 			return "", err
 		}
@@ -235,6 +235,10 @@ func GetAllLedgerChannels(store store.Store, consensusAppDefinition types.Addres
 		return []LedgerChannelInfo{}, err
 	}
 	for _, c := range allChannels {
+		if c.Type != types.Ledger {
+			continue
+		}
+
 		l, err := ConstructLedgerInfoFromChannel(c, myAddress)
 		if err != nil {
 			return []LedgerChannelInfo{}, err
@@ -361,13 +365,10 @@ func ConstructPaymentInfo(c *channel.Channel, paid, remaining *big.Int) (Payment
 	}, nil
 }
 
-func ConstructSwapInfo(c *channel.Channel, myAddress common.Address) (SwapChannelInfo, error) {
-	status := getStatusFromChannel(c)
+func ConstructSwapInfo(c channel.SwapChannel, myAddress common.Address) (SwapChannelInfo, error) {
+	status := getStatusFromChannel(&c.Channel)
 
-	latest, err := getLatestSupportedOrPreFund(c)
-	if err != nil {
-		return SwapChannelInfo{}, err
-	}
+	latest := c.LatestSupportedSwapChannelState()
 	balances, err := getSwapChannelBalances(c.Participants, latest.Outcome, myAddress)
 	if err != nil {
 		return SwapChannelInfo{}, err

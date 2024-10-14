@@ -32,8 +32,6 @@ const (
 	RequestFinalStatePayload protocols.PayloadType = "RequestFinalStatePayload"
 )
 
-var FinalTurnNum = 0
-
 // Objective contains relevant information for the defund objective
 type Objective struct {
 	Status protocols.ObjectiveStatus
@@ -48,6 +46,8 @@ type Objective struct {
 	// 1...n is Irene, Ivan, ... (the n intermediaries)
 	// n+1 is Bob
 	MyRole uint
+
+	FinalTurnNum uint64
 }
 
 const ObjectivePrefix = "SwapDefund-"
@@ -80,17 +80,19 @@ func NewObjective(request ObjectiveRequest,
 		return Objective{}, fmt.Errorf("could not find channel %s", request.ChannelId)
 	}
 
-	latestSupportedSignedState, err := c.LatestSupportedSignedState()
-	if err != nil {
-		return Objective{}, err
-	}
-
-	FinalTurnNum = int(latestSupportedSignedState.State().TurnNum) + 1
-
 	S := &channel.SwapChannel{Channel: *c}
 
 	alice := S.Participants[0]
 	bob := S.Participants[len(S.Participants)-1]
+
+	// TODO: Ensure TurnNum does not exceed MaxTurnNum
+
+	// Determine final turnNum
+	finalTurnNum := channel.PostFundTurnNum
+	if myAddress == alice || myAddress == bob {
+		latestSupportedSwapChannelState := S.LatestSupportedSwapChannelState()
+		finalTurnNum = latestSupportedSwapChannelState.TurnNum + 1
+	}
 
 	var leftLedger, rightLedger *consensus_channel.ConsensusChannel
 	var ok bool
@@ -139,11 +141,12 @@ func NewObjective(request ObjectiveRequest,
 	}
 
 	return Objective{
-		Status:    status,
-		S:         S,
-		MyRole:    S.MyIndex,
-		ToMyLeft:  leftLedger,
-		ToMyRight: rightLedger,
+		Status:       status,
+		S:            S,
+		MyRole:       S.MyIndex,
+		ToMyLeft:     leftLedger,
+		ToMyRight:    rightLedger,
+		FinalTurnNum: finalTurnNum,
 	}, nil
 }
 
@@ -185,16 +188,12 @@ func IsSwapDefundObjective(id protocols.ObjectiveId) bool {
 
 // finalState returns the final state for the swap channel
 func (o *Objective) finalState() state.State {
-	return o.S.OffChain.SignedStateForTurnNum[uint64(FinalTurnNum)].State()
+	return o.S.OffChain.SignedStateForTurnNum[o.FinalTurnNum].State()
 }
 
 func (o *Objective) initialOutcome() (outcome.Exit, error) {
-	latestSupportedState, err := o.S.LatestSupportedState()
-	if err != nil {
-		return outcome.Exit{}, err
-	}
-
-	return latestSupportedState.Outcome, nil
+	latestSwapChannelState := o.S.LatestSupportedSwapChannelState()
+	return latestSwapChannelState.Outcome, nil
 }
 
 // finalState returns the final state for the swap channel
@@ -203,7 +202,8 @@ func (o *Objective) generateFinalState() (state.State, error) {
 	if err != nil {
 		return state.State{}, err
 	}
-	vp := state.VariablePart{Outcome: exit, TurnNum: uint64(FinalTurnNum), IsFinal: true}
+
+	vp := state.VariablePart{Outcome: exit, TurnNum: o.FinalTurnNum, IsFinal: true}
 	return state.StateFromFixedAndVariablePart(o.S.FixedPart, vp), nil
 }
 
@@ -270,6 +270,7 @@ func (o *Objective) clone() Objective {
 	clone.S = o.S.Clone()
 
 	clone.MyRole = o.MyRole
+	clone.FinalTurnNum = o.FinalTurnNum
 
 	// TODO: Properly clone the consensus channels
 	if o.ToMyLeft != nil {
@@ -294,7 +295,11 @@ func (o *Objective) otherParticipants() []types.Address {
 }
 
 func (o *Objective) hasFinalStateFromAlice() bool {
-	ss, ok := o.S.OffChain.SignedStateForTurnNum[uint64(FinalTurnNum)]
+	if o.FinalTurnNum == channel.PostFundTurnNum {
+		return false
+	}
+
+	ss, ok := o.S.OffChain.SignedStateForTurnNum[o.FinalTurnNum]
 	return ok && ss.State().IsFinal && !isZero(ss.Signatures()[0])
 }
 
@@ -405,7 +410,7 @@ func (o *Objective) ledgerProposal(ledger *consensus_channel.ConsensusChannel) [
 			continue
 		}
 
-		for _, swapOut := range o.S.OffChain.SignedStateForTurnNum[uint64(FinalTurnNum)].State().Outcome {
+		for _, swapOut := range o.S.OffChain.SignedStateForTurnNum[o.FinalTurnNum].State().Outcome {
 			if ledgerOut.AsOutcome()[0].Asset == swapOut.Asset {
 				left := swapOut.Allocations[0].Amount
 				p := consensus_channel.NewRemoveProposal(ledger.Id, o.VId(), left, swapOut.Asset)
@@ -531,6 +536,47 @@ func getRequestFinalStatePayload(b []byte) (types.Destination, error) {
 	return cId, nil
 }
 
+// TODO: Use virtual defund validation pattern
+// TODO: Fix intermediary validation
+// isSignedStateValidForIntermediary checks if the signed state in the incoming message is valid for the intermediary
+// func (o *Objective) isSignedStateValidForIntermediary(ss state.SignedState) (bool, error) {
+// 	existingSwapChannelSignedState, err := o.S.LatestSupportedSignedState()
+// 	if err != nil {
+// 		return false, err
+// 	}
+
+// 	if ss.ChannelId() != existingSwapChannelSignedState.ChannelId() {
+// 		return false, fmt.Errorf("channel ID mismatch: expected %s, got %s", existingSwapChannelSignedState.ChannelId(), ss.ChannelId())
+// 	}
+
+// 	incomingOutcomes := ss.State().Outcome
+// 	for i, exisingOutcome := range existingSwapChannelSignedState.State().Outcome {
+// 		incomingOutcome := incomingOutcomes[i]
+// 		if !isAssetOutcomeValidForIntermediary(exisingOutcome, incomingOutcome) {
+// 			return false, fmt.Errorf("invalid outcome in incoming signed state")
+// 		}
+// 	}
+
+// 	return true, nil
+// }
+
+// func isAssetOutcomeValidForIntermediary(existingOutcome, incomingOutcome outcome.SingleAssetExit) bool {
+// 	if existingOutcome.Asset != incomingOutcome.Asset && existingOutcome.AssetMetadata.AssetType != incomingOutcome.AssetMetadata.AssetType {
+// 		return false
+// 	}
+
+// 	existingAllocationAmountTotal := common.Big0
+// 	incomingAllocationAmountTotal := common.Big0
+
+// 	for i, existingAllocation := range existingOutcome.Allocations {
+// 		incomingAllocation := incomingOutcome.Allocations[i]
+// 		existingAllocationAmountTotal = existingAllocationAmountTotal.Add(existingAllocationAmountTotal, existingAllocation.Amount)
+// 		incomingAllocationAmountTotal = incomingAllocationAmountTotal.Add(incomingAllocationAmountTotal, incomingAllocation.Amount)
+// 	}
+
+// 	return existingAllocationAmountTotal == incomingAllocationAmountTotal
+// }
+
 // Update receives an protocols.ObjectiveEvent, applies all applicable event data to the SwapDefundObjective,
 // and returns the updated state.
 func (o *Objective) Update(op protocols.ObjectivePayload) (protocols.Objective, error) {
@@ -545,6 +591,21 @@ func (o *Objective) Update(op protocols.ObjectivePayload) (protocols.Objective, 
 			return &Objective{}, err
 		}
 		updated := o.clone()
+
+		// TODO: Check signed state validation in virtual defund
+		if updated.FinalTurnNum == channel.PostFundTurnNum {
+			// TODO: Fix intermediary validation
+			// ok, err := o.isSignedStateValidForIntermediary(ss.Clone())
+			// if err != nil {
+			// 	return &Objective{}, fmt.Errorf("failed to validate signed state for intermediary participant: %w", err)
+			// }
+
+			// if !ok {
+			// 	return &Objective{}, fmt.Errorf("invalid signed state for intermediary participant")
+			// }
+
+			updated.FinalTurnNum = ss.State().TurnNum
+		}
 
 		ok := updated.S.AddSignedState(ss)
 		if !ok {
