@@ -537,44 +537,45 @@ func getRequestFinalStatePayload(b []byte) (types.Destination, error) {
 }
 
 // TODO: Use virtual defund validation pattern
+// TODO: Fix intermediary validation
 // isSignedStateValidForIntermediary checks if the signed state in the incoming message is valid for the intermediary
-func (o *Objective) isSignedStateValidForIntermediary(ss state.SignedState) (bool, error) {
-	existingSwapChannelSignedState, err := o.S.LatestSupportedSignedState()
-	if err != nil {
-		return false, err
-	}
+// func (o *Objective) isSignedStateValidForIntermediary(ss state.SignedState) (bool, error) {
+// 	existingSwapChannelSignedState, err := o.S.LatestSupportedSignedState()
+// 	if err != nil {
+// 		return false, err
+// 	}
 
-	if ss.ChannelId() != existingSwapChannelSignedState.ChannelId() {
-		return false, fmt.Errorf("channel ID mismatch: expected %s, got %s", existingSwapChannelSignedState.ChannelId(), ss.ChannelId())
-	}
+// 	if ss.ChannelId() != existingSwapChannelSignedState.ChannelId() {
+// 		return false, fmt.Errorf("channel ID mismatch: expected %s, got %s", existingSwapChannelSignedState.ChannelId(), ss.ChannelId())
+// 	}
 
-	incomingOutcomes := ss.State().Outcome
-	for i, exisingOutcome := range existingSwapChannelSignedState.State().Outcome {
-		incomingOutcome := incomingOutcomes[i]
-		if !isAssetOutcomeValidForIntermediary(exisingOutcome, incomingOutcome) {
-			return false, fmt.Errorf("invalid outcome in incoming signed state")
-		}
-	}
+// 	incomingOutcomes := ss.State().Outcome
+// 	for i, exisingOutcome := range existingSwapChannelSignedState.State().Outcome {
+// 		incomingOutcome := incomingOutcomes[i]
+// 		if !isAssetOutcomeValidForIntermediary(exisingOutcome, incomingOutcome) {
+// 			return false, fmt.Errorf("invalid outcome in incoming signed state")
+// 		}
+// 	}
 
-	return true, nil
-}
+// 	return true, nil
+// }
 
-func isAssetOutcomeValidForIntermediary(existingOutcome, incomingOutcome outcome.SingleAssetExit) bool {
-	if existingOutcome.Asset != incomingOutcome.Asset && existingOutcome.AssetMetadata.AssetType != incomingOutcome.AssetMetadata.AssetType {
-		return false
-	}
+// func isAssetOutcomeValidForIntermediary(existingOutcome, incomingOutcome outcome.SingleAssetExit) bool {
+// 	if existingOutcome.Asset != incomingOutcome.Asset && existingOutcome.AssetMetadata.AssetType != incomingOutcome.AssetMetadata.AssetType {
+// 		return false
+// 	}
 
-	existingAllocationAmountTotal := common.Big0
-	incomingAllocationAmountTotal := common.Big0
+// 	existingAllocationAmountTotal := common.Big0
+// 	incomingAllocationAmountTotal := common.Big0
 
-	for i, existingAllocation := range existingOutcome.Allocations {
-		incomingAllocation := incomingOutcome.Allocations[i]
-		existingAllocationAmountTotal = existingAllocationAmountTotal.Add(existingAllocationAmountTotal, existingAllocation.Amount)
-		incomingAllocationAmountTotal = incomingAllocationAmountTotal.Add(incomingAllocationAmountTotal, incomingAllocation.Amount)
-	}
+// 	for i, existingAllocation := range existingOutcome.Allocations {
+// 		incomingAllocation := incomingOutcome.Allocations[i]
+// 		existingAllocationAmountTotal = existingAllocationAmountTotal.Add(existingAllocationAmountTotal, existingAllocation.Amount)
+// 		incomingAllocationAmountTotal = incomingAllocationAmountTotal.Add(incomingAllocationAmountTotal, incomingAllocation.Amount)
+// 	}
 
-	return existingAllocationAmountTotal == incomingAllocationAmountTotal
-}
+// 	return existingAllocationAmountTotal == incomingAllocationAmountTotal
+// }
 
 // Update receives an protocols.ObjectiveEvent, applies all applicable event data to the SwapDefundObjective,
 // and returns the updated state.
@@ -593,7 +594,7 @@ func (o *Objective) Update(op protocols.ObjectivePayload) (protocols.Objective, 
 
 		// TODO: Check signed state validation in virtual defund
 		if updated.FinalTurnNum == channel.PostFundTurnNum {
-			// TODO: Check intermediary validation
+			// TODO: Fix intermediary validation
 			// ok, err := o.isSignedStateValidForIntermediary(ss.Clone())
 			// if err != nil {
 			// 	return &Objective{}, fmt.Errorf("failed to validate signed state for intermediary participant: %w", err)
