@@ -66,6 +66,7 @@ const (
 	LedgerChannelUpdated  NotificationMethod = "ledger_channel_updated"
 	PaymentChannelUpdated NotificationMethod = "payment_channel_updated"
 	MirrorChannelCreated  NotificationMethod = "mirror_channel_created"
+	SwapUpdated           NotificationMethod = "swap_updated"
 )
 
 type NotificationOrRequest interface {
@@ -197,6 +198,7 @@ type NotificationPayload interface {
 	protocols.ObjectiveId |
 		query.PaymentChannelInfo |
 		query.LedgerChannelInfo |
+		query.SwapInfo |
 		types.Destination
 }
 
