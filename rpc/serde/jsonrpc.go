@@ -41,6 +41,7 @@ const (
 	GetAllLedgerChannelsMethod        RequestMethod = "get_all_ledger_channels"
 	GetNodeInfoRequestMethod          RequestMethod = "get_node_info"
 	GetPendingSwapRequestMethod       RequestMethod = "get_pending_swap"
+	GetRecentSwapsRequestMethod       RequestMethod = "get_recent_swaps"
 	CreateVoucherRequestMethod        RequestMethod = "create_voucher"
 	ReceiveVoucherRequestMethod       RequestMethod = "receive_voucher"
 	CounterChallengeRequestMethod     RequestMethod = "counter_challenge"

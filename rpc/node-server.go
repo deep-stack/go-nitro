@@ -197,6 +197,20 @@ func (nrs *NodeRpcServer) registerHandlers() (err error) {
 
 				return string(swapJson), nil
 			})
+		case serde.GetRecentSwapsRequestMethod:
+			return processRequest(nrs.BaseRpcServer, permSign, requestData, func(req serde.GetSwapChannelRequest) (string, error) {
+				swaps, err := nrs.node.GetRecentSwapsByChannelId(req.Id)
+				if err != nil {
+					return "", err
+				}
+
+				swapJson, err := json.Marshal(swaps)
+				if err != nil {
+					return "", err
+				}
+
+				return string(swapJson), nil
+			})
 		case serde.PayRequestMethod:
 			return processRequest(nrs.BaseRpcServer, permSign, requestData, func(req serde.PaymentRequest) (serde.PaymentRequest, error) {
 				if err := serde.ValidatePaymentRequest(req); err != nil {

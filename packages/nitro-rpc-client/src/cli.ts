@@ -826,6 +826,33 @@ yargs(hideBin(process.argv))
     }
   )
   .command(
+    "get-recent-swaps <channelId>",
+    "Gets recent swaps for this swap channel",
+    (yargsBuilder) => {
+      return yargsBuilder.positional("channelId", {
+        describe: "The channel ID of the payment channel",
+        type: "string",
+        demandOption: true,
+      });
+    },
+    async (yargs) => {
+      const rpcPort = yargs.p;
+      const rpcHost = yargs.h;
+      const isSecure = yargs.s;
+
+      const rpcClient = await NitroRpcClient.CreateHttpNitroClient(
+        getRPCUrl(rpcHost, rpcPort),
+        isSecure
+      );
+
+      // TODO: Generate JSON schema for get current swap
+      const recentSwaps = await rpcClient.GetRecentSwaps(yargs.channelId);
+      console.log(JSON.parse(recentSwaps));
+      await rpcClient.Close();
+      process.exit(0);
+    }
+  )
+  .command(
     "swap-initiate <channelId>",
     "Swaps assets on a given swap channel",
     (yargsBuilder) => {
@@ -865,8 +892,6 @@ yargs(hideBin(process.argv))
       );
 
       console.log(swapInfo);
-      const confirmedSwap = await rpcClient.WaitForSwapStatus(yargs.channelId);
-      console.log("Response:\n", confirmedSwap);
       await rpcClient.Close();
       process.exit(0);
     }
