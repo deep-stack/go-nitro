@@ -9,7 +9,7 @@ import (
 	"github.com/statechannels/go-nitro/protocols"
 )
 
-// swapListeners is a struct that holds a list of listeners for swap channel info.
+// swapListeners is a struct that holds a list of listeners for swap info.
 type swapListeners struct {
 	// listeners is a list of listeners for swap info that we need to notify.
 	listeners []chan query.SwapInfo

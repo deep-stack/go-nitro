@@ -865,7 +865,6 @@ yargs(hideBin(process.argv))
       );
 
       console.log(swapInfo);
-      // TODO: Add channel Id in swapInfo
       const confirmedSwap = await rpcClient.WaitForSwapStatus(yargs.channelId);
       console.log("Response:\n", confirmedSwap);
       await rpcClient.Close();
