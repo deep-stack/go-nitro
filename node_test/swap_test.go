@@ -381,26 +381,20 @@ func TestSwapFund(t *testing.T) {
 			t.Fatal(err)
 		}
 
-		expectedInitialOutcome = out
-
 		// Bob initiates swap and Alice accepts
-		out, _, err = performSwap(t, &utils.nodeB, &utils.nodeA, 1, exchange, swapChannelResponse.ChannelId, expectedInitialOutcome, types.Accepted)
+		out, _, err = performSwap(t, &utils.nodeB, &utils.nodeA, 1, exchange, swapChannelResponse.ChannelId, out, types.Accepted)
 		if err != nil {
 			t.Fatal(err)
 		}
-
-		expectedInitialOutcome = out
 
 		// Alice initiates swap and Bob rejects
-		out, _, err = performSwap(t, &utils.nodeA, &utils.nodeB, 0, exchange, swapChannelResponse.ChannelId, expectedInitialOutcome, types.Rejected)
+		out, _, err = performSwap(t, &utils.nodeA, &utils.nodeB, 0, exchange, swapChannelResponse.ChannelId, out, types.Rejected)
 		if err != nil {
 			t.Fatal(err)
 		}
 
-		expectedInitialOutcome = out
-
 		// Alice initiates swap and Bob accepts
-		out, _, err = performSwap(t, &utils.nodeA, &utils.nodeB, 0, exchange, swapChannelResponse.ChannelId, expectedInitialOutcome, types.Accepted)
+		out, _, err = performSwap(t, &utils.nodeA, &utils.nodeB, 0, exchange, swapChannelResponse.ChannelId, out, types.Accepted)
 		if err != nil {
 			t.Fatal(err)
 		}
@@ -546,11 +540,11 @@ func TestSwapsWithIntermediary(t *testing.T) {
 			Allocations: outcome.Allocations{
 				outcome.Allocation{
 					Destination: types.AddressToDestination(*utils.nodeB.Address),
-					Amount:      big.NewInt(int64(1001)),
+					Amount:      big.NewInt(int64(1000)),
 				},
 				outcome.Allocation{
 					Destination: types.AddressToDestination(*utils.nodeC.Address),
-					Amount:      big.NewInt(int64(1002)),
+					Amount:      big.NewInt(int64(1000)),
 				},
 			},
 		},
@@ -559,11 +553,11 @@ func TestSwapsWithIntermediary(t *testing.T) {
 			Allocations: outcome.Allocations{
 				outcome.Allocation{
 					Destination: types.AddressToDestination(*utils.nodeB.Address),
-					Amount:      big.NewInt(int64(501)),
+					Amount:      big.NewInt(int64(500)),
 				},
 				outcome.Allocation{
 					Destination: types.AddressToDestination(*utils.nodeC.Address),
-					Amount:      big.NewInt(int64(502)),
+					Amount:      big.NewInt(int64(500)),
 				},
 			},
 		},
@@ -572,11 +566,11 @@ func TestSwapsWithIntermediary(t *testing.T) {
 			Allocations: outcome.Allocations{
 				outcome.Allocation{
 					Destination: types.AddressToDestination(*utils.nodeB.Address),
-					Amount:      big.NewInt(int64(601)),
+					Amount:      big.NewInt(int64(600)),
 				},
 				outcome.Allocation{
 					Destination: types.AddressToDestination(*utils.nodeC.Address),
-					Amount:      big.NewInt(int64(602)),
+					Amount:      big.NewInt(int64(600)),
 				},
 			},
 		},
@@ -639,4 +633,121 @@ func TestSwapsWithIntermediary(t *testing.T) {
 
 	finalLedgerChannel2Outcome := createFinalLedgerOutcome(initialLedger2Outcome, initialSwapChannelOutcome, modifiedOutcomeAfterSwap, *utils.nodeA.Address)
 	checkLedgerChannel(t, ledgerChannel2Response.ChannelId, finalLedgerChannel2Outcome, query.Complete, channel.Finalized, utils.nodeA, utils.nodeC)
+}
+
+func TestSwapWithEqualAssetAmounts(t *testing.T) {
+	utils, cleanup := initializeNodesAndInfra(t)
+	defer cleanup()
+
+	ledgerChannelResponse, _ := createMultiAssetLedgerChannel(t, utils.nodeA, utils.nodeB, []common.Address{
+		{}, utils.infra.anvilChain.ContractAddresses.TokenAddresses[0], utils.infra.anvilChain.ContractAddresses.TokenAddresses[1],
+	}, 0)
+	defer closeMultiAssetLedgerChannel(t, utils.nodeA, utils.nodeB, ledgerChannelResponse.ChannelId)
+
+	multiassetSwapChannelOutcome := outcome.Exit{
+		outcome.SingleAssetExit{
+			Asset: common.Address{},
+			Allocations: outcome.Allocations{
+				outcome.Allocation{
+					Destination: types.AddressToDestination(*utils.nodeA.Address),
+					Amount:      big.NewInt(int64(500)),
+				},
+				outcome.Allocation{
+					Destination: types.AddressToDestination(*utils.nodeB.Address),
+					Amount:      big.NewInt(int64(500)),
+				},
+			},
+		},
+		outcome.SingleAssetExit{
+			Asset: utils.infra.anvilChain.ContractAddresses.TokenAddresses[0],
+			Allocations: outcome.Allocations{
+				outcome.Allocation{
+					Destination: types.AddressToDestination(*utils.nodeA.Address),
+					Amount:      big.NewInt(int64(500)),
+				},
+				outcome.Allocation{
+					Destination: types.AddressToDestination(*utils.nodeB.Address),
+					Amount:      big.NewInt(int64(500)),
+				},
+			},
+		},
+		outcome.SingleAssetExit{
+			Asset: utils.infra.anvilChain.ContractAddresses.TokenAddresses[1],
+			Allocations: outcome.Allocations{
+				outcome.Allocation{
+					Destination: types.AddressToDestination(*utils.nodeA.Address),
+					Amount:      big.NewInt(int64(500)),
+				},
+				outcome.Allocation{
+					Destination: types.AddressToDestination(*utils.nodeB.Address),
+					Amount:      big.NewInt(int64(500)),
+				},
+			},
+		},
+	}
+
+	swapChannelResponse, err := utils.nodeA.CreateSwapChannel(
+		nil,
+		*utils.nodeB.Address,
+		0,
+		multiassetSwapChannelOutcome,
+	)
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	chB := utils.nodeB.ObjectiveCompleteChan(swapChannelResponse.Id)
+	<-utils.nodeA.ObjectiveCompleteChan(swapChannelResponse.Id)
+	<-chB
+
+	t.Log("Completed swap-fund objective")
+
+	checkSwapChannel(t, swapChannelResponse.ChannelId, multiassetSwapChannelOutcome, query.Open, utils.nodeA, utils.nodeB)
+
+	t.Run("Test multiple swaps from both nodes", func(t *testing.T) {
+		exchange := payments.Exchange{
+			TokenIn:   common.Address{},
+			TokenOut:  utils.infra.anvilChain.ContractAddresses.TokenAddresses[0],
+			AmountIn:  big.NewInt(20),
+			AmountOut: big.NewInt(10),
+		}
+
+		// Alice initiates swap and Bob accepts
+		out, _, err := performSwap(t, &utils.nodeA, &utils.nodeB, 0, exchange, swapChannelResponse.ChannelId, multiassetSwapChannelOutcome, types.Accepted)
+		if err != nil {
+			t.Fatal(err)
+		}
+
+		// Bob initiates swap and Alice accepts
+		out, _, err = performSwap(t, &utils.nodeB, &utils.nodeA, 1, exchange, swapChannelResponse.ChannelId, out, types.Accepted)
+		if err != nil {
+			t.Fatal(err)
+		}
+
+		// Alice initiates swap and Bob rejects
+		out, _, err = performSwap(t, &utils.nodeA, &utils.nodeB, 0, exchange, swapChannelResponse.ChannelId, out, types.Rejected)
+		if err != nil {
+			t.Fatal(err)
+		}
+
+		// Alice initiates swap and Bob accepts
+		out, _, err = performSwap(t, &utils.nodeA, &utils.nodeB, 0, exchange, swapChannelResponse.ChannelId, out, types.Accepted)
+		if err != nil {
+			t.Fatal(err)
+		}
+
+		multiassetSwapChannelOutcome = out
+	})
+
+	t.Run("Check ledger channel after swapdefund", func(t *testing.T) {
+		ledgerStateBeforeSdf, err := utils.nodeA.GetSignedState(ledgerChannelResponse.ChannelId)
+		if err != nil {
+			t.Fatal(err)
+		}
+
+		closeSwapChannel(t, utils.nodeA, utils.nodeB, swapChannelResponse.ChannelId)
+
+		expectedLedgerOutcome := createExpectedLedgerOutcome(ledgerStateBeforeSdf.State().Outcome, multiassetSwapChannelOutcome)
+		checkLedgerChannel(t, ledgerChannelResponse.ChannelId, expectedLedgerOutcome, query.Open, channel.Open, utils.nodeA, utils.nodeB)
+	})
 }
