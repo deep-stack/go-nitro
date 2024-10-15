@@ -266,7 +266,7 @@ func (n *Node) CreatePaymentChannel(Intermediaries []types.Address, CounterParty
 }
 
 func (n *Node) SwapAssets(channelId types.Destination, tokenIn common.Address, tokenOut common.Address, amountIn *big.Int, amountOut *big.Int) (swap.ObjectiveResponse, error) {
-	swapChannel, ok := n.store.GetChannelById(channelId)
+	ch, ok := n.store.GetChannelById(channelId)
 	if !ok {
 		return swap.ObjectiveResponse{}, fmt.Errorf("no swap channel found for channel ID %v", channelId)
 	}
@@ -280,12 +280,10 @@ func (n *Node) SwapAssets(channelId types.Destination, tokenIn common.Address, t
 		return swap.ObjectiveResponse{}, fmt.Errorf("%w: channel Id %+v", swap.ErrSwapExists, channelId)
 	}
 
-	swapState, err := swapChannel.LatestSupportedState()
-	if err != nil {
-		return swap.ObjectiveResponse{}, err
-	}
+	swapChannel := &channel.SwapChannel{Channel: *ch}
+	swapState := swapChannel.LatestSupportedSwapChannelState()
 
-	myIndex, err := swap.MyIndexInAllocations(&channel.SwapChannel{Channel: *swapChannel})
+	myIndex, err := swap.MyIndexInAllocations(swapChannel)
 	if err != nil {
 		return swap.ObjectiveResponse{}, err
 	}
