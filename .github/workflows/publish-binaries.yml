@@ -1,0 +1,58 @@
+name: Publish binaries to Github
+
+on:
+  release:
+    types: [published]
+
+jobs:
+  build:
+    runs-on: ubuntu-latest
+
+    steps:
+    - name: Checkout repository
+      uses: actions/checkout@v2
+
+    - name: Set up Go
+      uses: actions/setup-go@v2
+      with:
+        go-version: 1.22
+
+    - name: Install dependencies
+      run: go mod tidy
+
+    - name: Build binaries for nitro and bridge
+      run: |
+        go build -v -o nitro .
+        go build -o nitro-bridge cmd/start-bridge/main.go
+
+    - name: Upload build artifacts
+      uses: actions/upload-artifact@v4
+      with:
+        name: nitro-and-bridge-binaries
+        path: |
+          nitro
+          nitro-bridge
+
+  publish:
+    needs: build
+    runs-on: ubuntu-latest
+
+    steps:
+    - name: Checkout repository
+      uses: actions/checkout@v2
+
+    - name: Download build artifacts
+      uses: actions/download-artifact@v4
+      with:
+        name: nitro-and-bridge-binaries
+        path: downloaded-artifacts
+
+    - name: Rename nitro-bridge to bridge
+      run: mv downloaded-artifacts/nitro-bridge downloaded-artifacts/bridge
+
+    - name: Upload binaries to GitHub release
+      uses: softprops/action-gh-release@v2
+      with:
+        files: |
+          downloaded-artifacts/nitro
+          downloaded-artifacts/bridge
