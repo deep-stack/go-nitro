@@ -223,6 +223,12 @@ export type GetPendingSwapRequest = JsonRpcRequest<
   "get_pending_swap",
   GetPendingSwap
 >;
+export type GetRecentSwapsRequest = JsonRpcRequest<
+  "get_recent_swaps",
+  {
+    Id: string;
+  }
+>;
 export type GetPaymentChannelsByLedgerRequest = JsonRpcRequest<
   "get_payment_channels_by_ledger",
   GetByLedgerRequest
@@ -293,6 +299,7 @@ export type GetPaymentChannelResponse = JsonRpcResponse<PaymentChannelInfo>;
 export type GetSwapChannelResponse = JsonRpcResponse<SwapChannelInfo>;
 export type GetVoucherResponse = JsonRpcResponse<Voucher>;
 export type GetPendingSwapResponse = JsonRpcResponse<string>;
+export type GetRecentSwapsResponse = JsonRpcResponse<string>;
 export type PaymentResponse = JsonRpcResponse<PaymentPayload>;
 export type SwapResponse = JsonRpcResponse<SwapInitiatePayload>;
 export type CounterChallengeResponse = JsonRpcResponse<CounterChallengeResult>;
@@ -346,6 +353,7 @@ export type RPCRequestAndResponses = {
   get_swap_channel: [GetSwapChannelRequest, GetSwapChannelResponse];
   get_voucher: [GetVoucherRequest, GetVoucherResponse];
   get_pending_swap: [GetPendingSwapRequest, GetPendingSwapResponse];
+  get_recent_swaps: [GetRecentSwapsRequest, GetRecentSwapsResponse];
   pay: [PaymentRequest, PaymentResponse];
   swap_initiate: [SwapRequest, SwapResponse];
   confirm_swap: [ConfirmSwapRequest, ConfirmSwapResponse];

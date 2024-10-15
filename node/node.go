@@ -437,6 +437,10 @@ func (n *Node) GetPendingSwapByChannelId(swapChannelId types.Destination) (*paym
 	return n.store.GetPendingSwapByChannelId(swapChannelId)
 }
 
+func (n *Node) GetRecentSwapsByChannelId(swapChannelId types.Destination) ([]payments.Swap, error) {
+	return n.store.GetSwapsByChannelId(swapChannelId)
+}
+
 func (n *Node) GetVoucher(id types.Destination) payments.Voucher {
 	var voucher payments.Voucher
 	voucherInfo, voucherFound := n.vm.GetVoucherIfAmountPresent(id)

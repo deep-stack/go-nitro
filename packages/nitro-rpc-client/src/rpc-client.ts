@@ -215,6 +215,13 @@ export class NitroRpcClient implements RpcClientApi {
     return this.sendRequest("get_pending_swap", payload);
   }
 
+  public async GetRecentSwaps(channelId: string): Promise<string> {
+    const payload = {
+      Id: channelId,
+    };
+    return this.sendRequest("get_recent_swaps", payload);
+  }
+
   public async CreatePaymentChannel(
     counterParty: string,
     intermediaries: string[],
