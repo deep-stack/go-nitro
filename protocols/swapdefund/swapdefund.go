@@ -536,8 +536,8 @@ func getRequestFinalStatePayload(b []byte) (types.Destination, error) {
 	return cId, nil
 }
 
-// isSignedStateValidForIntermediary checks if the signed state in the incoming message is valid for the intermediary
-func isSignedStateValidForIntermediary(existingSwapChannelSignedState, incomingSwapChannelState state.SignedState) (bool, error) {
+// validateFinalSingnedState checks if the signed state in the incoming message is valid
+func validateFinalSingnedState(existingSwapChannelSignedState, incomingSwapChannelState state.SignedState) (bool, error) {
 	if incomingSwapChannelState.ChannelId() != existingSwapChannelSignedState.ChannelId() {
 		return false, fmt.Errorf("channel ID mismatch: expected %s, got %s", existingSwapChannelSignedState.ChannelId(), incomingSwapChannelState.ChannelId())
 	}
@@ -546,7 +546,7 @@ func isSignedStateValidForIntermediary(existingSwapChannelSignedState, incomingS
 	incomingOutcomes := incomingSwapChannelState.State().Outcome.Clone()
 	for i, exisingOutcome := range existingSwapChannelState.Outcome {
 		incomingOutcome := incomingOutcomes[i]
-		if !isAssetOutcomeValidForIntermediary(exisingOutcome, incomingOutcome) {
+		if !validateFinalOutcome(exisingOutcome, incomingOutcome) {
 			return false, fmt.Errorf("invalid outcome in incoming signed state")
 		}
 	}
@@ -554,7 +554,7 @@ func isSignedStateValidForIntermediary(existingSwapChannelSignedState, incomingS
 	return true, nil
 }
 
-func isAssetOutcomeValidForIntermediary(existingOutcome, incomingOutcome outcome.SingleAssetExit) bool {
+func validateFinalOutcome(existingOutcome, incomingOutcome outcome.SingleAssetExit) bool {
 	if existingOutcome.Asset != incomingOutcome.Asset && existingOutcome.AssetMetadata.AssetType != incomingOutcome.AssetMetadata.AssetType {
 		return false
 	}
@@ -586,12 +586,13 @@ func (o *Objective) Update(op protocols.ObjectivePayload) (protocols.Objective, 
 		}
 		updated := o.clone()
 
+		// This condition will be true only for intermediaries since after performing swaps, the turn num for end participants will change
 		if updated.FinalTurnNum == channel.PostFundTurnNum {
 			existingSwapChannelSignedState, err := updated.S.LatestSupportedSignedState()
 			if err != nil {
 				return &Objective{}, err
 			}
-			ok, err := isSignedStateValidForIntermediary(existingSwapChannelSignedState, ss)
+			ok, err := validateFinalSingnedState(existingSwapChannelSignedState, ss)
 			if err != nil {
 				return &Objective{}, fmt.Errorf("failed to validate signed state for intermediary participant: %w", err)
 			}
