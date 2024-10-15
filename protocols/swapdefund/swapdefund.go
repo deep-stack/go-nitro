@@ -536,46 +536,40 @@ func getRequestFinalStatePayload(b []byte) (types.Destination, error) {
 	return cId, nil
 }
 
-// TODO: Use virtual defund validation pattern
-// TODO: Fix intermediary validation
-// isSignedStateValidForIntermediary checks if the signed state in the incoming message is valid for the intermediary
-// func (o *Objective) isSignedStateValidForIntermediary(ss state.SignedState) (bool, error) {
-// 	existingSwapChannelSignedState, err := o.S.LatestSupportedSignedState()
-// 	if err != nil {
-// 		return false, err
-// 	}
+// validateFinalSingnedState checks if the signed state in the incoming message is valid
+func validateFinalSingnedState(existingSwapChannelSignedState, incomingSwapChannelState state.SignedState) (bool, error) {
+	if incomingSwapChannelState.ChannelId() != existingSwapChannelSignedState.ChannelId() {
+		return false, fmt.Errorf("channel ID mismatch: expected %s, got %s", existingSwapChannelSignedState.ChannelId(), incomingSwapChannelState.ChannelId())
+	}
 
-// 	if ss.ChannelId() != existingSwapChannelSignedState.ChannelId() {
-// 		return false, fmt.Errorf("channel ID mismatch: expected %s, got %s", existingSwapChannelSignedState.ChannelId(), ss.ChannelId())
-// 	}
+	existingSwapChannelState := existingSwapChannelSignedState.State().Clone()
+	incomingOutcomes := incomingSwapChannelState.State().Outcome.Clone()
+	for i, exisingOutcome := range existingSwapChannelState.Outcome {
+		incomingOutcome := incomingOutcomes[i]
+		if !validateFinalOutcome(exisingOutcome, incomingOutcome) {
+			return false, fmt.Errorf("invalid outcome in incoming signed state")
+		}
+	}
 
-// 	incomingOutcomes := ss.State().Outcome
-// 	for i, exisingOutcome := range existingSwapChannelSignedState.State().Outcome {
-// 		incomingOutcome := incomingOutcomes[i]
-// 		if !isAssetOutcomeValidForIntermediary(exisingOutcome, incomingOutcome) {
-// 			return false, fmt.Errorf("invalid outcome in incoming signed state")
-// 		}
-// 	}
+	return true, nil
+}
 
-// 	return true, nil
-// }
+func validateFinalOutcome(existingOutcome, incomingOutcome outcome.SingleAssetExit) bool {
+	if existingOutcome.Asset != incomingOutcome.Asset && existingOutcome.AssetMetadata.AssetType != incomingOutcome.AssetMetadata.AssetType {
+		return false
+	}
 
-// func isAssetOutcomeValidForIntermediary(existingOutcome, incomingOutcome outcome.SingleAssetExit) bool {
-// 	if existingOutcome.Asset != incomingOutcome.Asset && existingOutcome.AssetMetadata.AssetType != incomingOutcome.AssetMetadata.AssetType {
-// 		return false
-// 	}
+	existingAllocationAmountTotal := new(big.Int)
+	incomingAllocationAmountTotal := new(big.Int)
 
-// 	existingAllocationAmountTotal := common.Big0
-// 	incomingAllocationAmountTotal := common.Big0
+	for i, existingAllocation := range existingOutcome.Allocations {
+		incomingAllocation := incomingOutcome.Allocations[i]
+		existingAllocationAmountTotal.Add(existingAllocationAmountTotal, existingAllocation.Amount)
+		incomingAllocationAmountTotal.Add(incomingAllocationAmountTotal, incomingAllocation.Amount)
+	}
 
-// 	for i, existingAllocation := range existingOutcome.Allocations {
-// 		incomingAllocation := incomingOutcome.Allocations[i]
-// 		existingAllocationAmountTotal = existingAllocationAmountTotal.Add(existingAllocationAmountTotal, existingAllocation.Amount)
-// 		incomingAllocationAmountTotal = incomingAllocationAmountTotal.Add(incomingAllocationAmountTotal, incomingAllocation.Amount)
-// 	}
-
-// 	return existingAllocationAmountTotal == incomingAllocationAmountTotal
-// }
+	return existingAllocationAmountTotal.Cmp(incomingAllocationAmountTotal) == 0
+}
 
 // Update receives an protocols.ObjectiveEvent, applies all applicable event data to the SwapDefundObjective,
 // and returns the updated state.
@@ -592,17 +586,20 @@ func (o *Objective) Update(op protocols.ObjectivePayload) (protocols.Objective, 
 		}
 		updated := o.clone()
 
-		// TODO: Check signed state validation in virtual defund
+		// This condition will be true only for intermediaries since after performing swaps, the turn num for end participants will change
 		if updated.FinalTurnNum == channel.PostFundTurnNum {
-			// TODO: Fix intermediary validation
-			// ok, err := o.isSignedStateValidForIntermediary(ss.Clone())
-			// if err != nil {
-			// 	return &Objective{}, fmt.Errorf("failed to validate signed state for intermediary participant: %w", err)
-			// }
+			existingSwapChannelSignedState, err := updated.S.LatestSupportedSignedState()
+			if err != nil {
+				return &Objective{}, err
+			}
+			ok, err := validateFinalSingnedState(existingSwapChannelSignedState, ss)
+			if err != nil {
+				return &Objective{}, fmt.Errorf("failed to validate signed state for intermediary participant: %w", err)
+			}
 
-			// if !ok {
-			// 	return &Objective{}, fmt.Errorf("invalid signed state for intermediary participant")
-			// }
+			if !ok {
+				return &Objective{}, fmt.Errorf("invalid signed state for intermediary participant")
+			}
 
 			updated.FinalTurnNum = ss.State().TurnNum
 		}
