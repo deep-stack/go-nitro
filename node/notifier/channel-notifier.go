@@ -14,6 +14,7 @@ const ALL_NOTIFICATIONS = "all"
 type ChannelNotifier struct {
 	ledgerListeners  *safesync.Map[*ledgerChannelListeners]
 	paymentListeners *safesync.Map[*paymentChannelListeners]
+	swapListeners    *safesync.Map[*swapListeners]
 	store            store.Store
 	vm               *payments.VoucherManager
 }
@@ -23,6 +24,7 @@ func NewChannelNotifier(store store.Store, vm *payments.VoucherManager) *Channel
 	return &ChannelNotifier{
 		ledgerListeners:  &safesync.Map[*ledgerChannelListeners]{},
 		paymentListeners: &safesync.Map[*paymentChannelListeners]{},
+		swapListeners:    &safesync.Map[*swapListeners]{},
 		store:            store,
 		vm:               vm,
 	}
@@ -52,6 +54,12 @@ func (cn *ChannelNotifier) RegisterForPaymentChannelUpdates(cId types.Destinatio
 	return li.createNewListener()
 }
 
+// RegisterForAllSwapUpdates returns a buffered channel that will receive updates for all swaps.
+func (cn *ChannelNotifier) RegisterForAllSwapUpdates() <-chan query.SwapInfo {
+	li, _ := cn.swapListeners.LoadOrStore(ALL_NOTIFICATIONS, newSwapListeners())
+	return li.getOrCreateListener()
+}
+
 // NotifyLedgerUpdated notifies all listeners of a ledger channel update.
 // It should be called whenever a ledger channel is updated.
 func (cn *ChannelNotifier) NotifyLedgerUpdated(info query.LedgerChannelInfo) error {
@@ -75,6 +83,16 @@ func (cn *ChannelNotifier) NotifyPaymentUpdated(info query.PaymentChannelInfo) e
 	return nil
 }
 
+func (cn *ChannelNotifier) NotifySwapUpdated(info query.SwapInfo) error {
+	li, _ := cn.swapListeners.LoadOrStore(info.Id.String(), newSwapListeners())
+	li.Notify(info)
+
+	allLi, _ := cn.swapListeners.LoadOrStore(ALL_NOTIFICATIONS, newSwapListeners())
+	allLi.Notify(info)
+
+	return nil
+}
+
 // Close closes the notifier and all listeners.
 func (cn *ChannelNotifier) Close() error {
 	var err error
@@ -83,6 +101,10 @@ func (cn *ChannelNotifier) Close() error {
 		return err == nil
 	})
 	cn.paymentListeners.Range(func(k string, v *paymentChannelListeners) bool {
+		err = v.Close()
+		return err == nil
+	})
+	cn.swapListeners.Range(func(k string, v *swapListeners) bool {
 		err = v.Close()
 		return err == nil
 	})

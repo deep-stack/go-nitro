@@ -500,6 +500,12 @@ export type AssetMetadata = {
 
 export type ChannelStatus = "Proposed" | "Open" | "Closing" | "Complete";
 
+export enum SwapStatus {
+  PendingConfirmation,
+  Accepted,
+  Rejected,
+}
+
 export enum ChannelMode {
   Open,
   Challenge,

@@ -9,6 +9,69 @@ import (
 	"github.com/statechannels/go-nitro/protocols"
 )
 
+// swapListeners is a struct that holds a list of listeners for swap channel info.
+type swapListeners struct {
+	// listeners is a list of listeners for swap info that we need to notify.
+	listeners []chan query.SwapInfo
+	// prev is the previous swap channel info that was sent to the listeners.
+	prev query.SwapInfo
+	// listenersLock is used to protect against concurrent access to to sibling struct members.
+	listenersLock *sync.Mutex
+}
+
+// newSwapListeners constructs a new swap listeners struct.
+func newSwapListeners() *swapListeners {
+	return &swapListeners{listeners: []chan query.SwapInfo{}, listenersLock: &sync.Mutex{}}
+}
+
+// Notify notifies all listeners of a swap update.
+// It only notifies listeners if the new info is different from the previous info.
+func (li *swapListeners) Notify(info query.SwapInfo) {
+	li.listenersLock.Lock()
+	defer li.listenersLock.Unlock()
+	if li.prev.Id == info.Id && li.prev.ChannelId == info.ChannelId {
+		return
+	}
+
+	for _, list := range li.listeners {
+		list <- info
+	}
+	li.prev = info
+}
+
+// createNewListener creates a new listener and adds it to the list of listeners.
+func (li *swapListeners) createNewListener() <-chan query.SwapInfo {
+	li.listenersLock.Lock()
+	defer li.listenersLock.Unlock()
+	// Use a buffered channel to avoid blocking the notifier.
+	listener := make(chan query.SwapInfo, 1000)
+	li.listeners = append(li.listeners, listener)
+	return listener
+}
+
+// getOrCreateListener returns the first listener, creating one if none exist.
+func (li *swapListeners) getOrCreateListener() <-chan query.SwapInfo {
+	li.listenersLock.Lock()
+	if len(li.listeners) != 0 {
+		l := li.listeners[0]
+		li.listenersLock.Unlock()
+		return l
+	}
+	li.listenersLock.Unlock()
+	return li.createNewListener()
+}
+
+// Close closes any active listeners.
+func (li *swapListeners) Close() error {
+	li.listenersLock.Lock()
+	defer li.listenersLock.Unlock()
+	for _, c := range li.listeners {
+		close(c)
+	}
+
+	return nil
+}
+
 // paymentChannelListeners is a struct that holds a list of listeners for payment channel info.
 type paymentChannelListeners struct {
 	// listeners is a list of listeners for payment channel info that we need to notify.

@@ -130,6 +130,8 @@ type EngineEvent struct {
 	LedgerChannelUpdates []query.LedgerChannelInfo
 	// PaymentChannelUpdates contains channel info for payment channels that have been updated
 	PaymentChannelUpdates []query.PaymentChannelInfo
+	// SwapUpdates contains info for updates in swap
+	SwapUpdates []query.SwapInfo
 }
 
 // IsEmpty returns true if the EngineEvent contains no changes
@@ -138,7 +140,8 @@ func (ee *EngineEvent) IsEmpty() bool {
 		len(ee.FailedObjectives) == 0 &&
 		len(ee.ReceivedVouchers) == 0 &&
 		len(ee.LedgerChannelUpdates) == 0 &&
-		len(ee.PaymentChannelUpdates) == 0
+		len(ee.PaymentChannelUpdates) == 0 &&
+		len(ee.SwapUpdates) == 0
 }
 
 func (ee *EngineEvent) Merge(other EngineEvent) {
@@ -147,6 +150,7 @@ func (ee *EngineEvent) Merge(other EngineEvent) {
 	ee.ReceivedVouchers = append(ee.ReceivedVouchers, other.ReceivedVouchers...)
 	ee.LedgerChannelUpdates = append(ee.LedgerChannelUpdates, other.LedgerChannelUpdates...)
 	ee.PaymentChannelUpdates = append(ee.PaymentChannelUpdates, other.PaymentChannelUpdates...)
+	ee.SwapUpdates = append(ee.SwapUpdates, other.SwapUpdates...)
 }
 
 type CompletedObjectiveEvent struct {
@@ -1075,10 +1079,15 @@ func (e *Engine) generateNotifications(o protocols.Objective) (EngineEvent, erro
 				return outgoing, err
 			}
 			outgoing.LedgerChannelUpdates = append(outgoing.LedgerChannelUpdates, l)
+		case *payments.Swap:
+			swapInfo := query.SwapInfo{
+				Id:        c.Id,
+				ChannelId: c.ChannelId,
+			}
+
+			outgoing.SwapUpdates = append(outgoing.SwapUpdates, swapInfo)
 		case *channel.SwapChannel:
 			// TODO: Add notification for swap channel
-		case *payments.Swap:
-			// Do nothing
 		default:
 			return outgoing, fmt.Errorf("handleNotifications: Unknown related type %T", c)
 		}
