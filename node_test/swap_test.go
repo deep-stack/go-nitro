@@ -359,27 +359,41 @@ func TestParallelSwaps(t *testing.T) {
 			t.Fatal(err)
 		}
 
-		nodeASwapInfo := <-nodeASwapUpdates
-		nodeBSwapInfo := <-nodeBSwapUpdates
-
-		fmt.Println("nodeA", nodeASwapInfo.Id)
-		fmt.Println("nodeB", nodeBSwapInfo.Id)
-
-		var errorsArr []error
+		swapInfoFromNodeA := <-nodeASwapUpdates
+		swapInfoFromNodeB := <-nodeBSwapUpdates
 
 		// Wait for swap channel leader (node A) to make a decision (Which swap to accept and which one to reject)
-		// Swap channel follower (Node B) does not generate any notifications since it will simply reject the swap based on message from leader
-		<-nodeASwapUpdates
+		<-nodeBSwapUpdates
+
+		select {
+		case <-utils.nodeB.ObjectiveCompleteChan(nodeASwapAssetResponse.Id):
+		case <-utils.nodeB.ObjectiveCompleteChan(nodeBSwapAssetResponse.Id):
+		}
+
+		nodeAPendingSwap, err := utils.nodeA.GetPendingSwapByChannelId(nodeASwapAssetResponse.ChannelId)
+		if err != nil {
+			t.Fatal(err)
+		}
+		fmt.Println("NODE A PENDING SWAP ID", nodeAPendingSwap.Id)
+
+		var nodeBErr, nodeAErr error
+		if nodeAPendingSwap.Id == swapInfoFromNodeA.Id {
+			fmt.Println("IN SCENARIO 1")
+			nodeBErr = utils.nodeB.ConfirmSwap(swapInfoFromNodeA.Id, types.Accepted)
+			nodeAErr = utils.nodeA.ConfirmSwap(swapInfoFromNodeB.Id, types.Accepted)
+		}
+		if nodeAPendingSwap.Id == swapInfoFromNodeB.Id {
+			fmt.Println("IN SCENARIO 2")
+			nodeAErr = utils.nodeA.ConfirmSwap(swapInfoFromNodeB.Id, types.Accepted)
+			nodeBErr = utils.nodeB.ConfirmSwap(swapInfoFromNodeA.Id, types.Accepted)
+		}
 
 		// Try to confirm both swaps and assert that one of them passes and one of them fails
-		nodeAErr := utils.nodeA.ConfirmSwap(nodeBSwapInfo.Id, types.Accepted)
-		nodeBErr := utils.nodeB.ConfirmSwap(nodeASwapInfo.Id, types.Accepted)
-
-		errorsArr = append(errorsArr, nodeAErr, nodeBErr)
 
 		var objToWaitFor protocols.ObjectiveId
 		nilErrs := 0
-
+		var errorsArr []error
+		errorsArr = append(errorsArr, nodeAErr, nodeBErr)
 		for _, err := range errorsArr {
 			if err == nil {
 				nilErrs++
@@ -394,8 +408,11 @@ func TestParallelSwaps(t *testing.T) {
 
 		testhelpers.Assert(t, nilErrs == 1, "Expected only one of the swaps to fail")
 
-		<-utils.nodeA.ObjectiveCompleteChan(objToWaitFor)
-		<-utils.nodeB.ObjectiveCompleteChan(objToWaitFor)
+		chA := utils.nodeA.ObjectiveCompleteChan(objToWaitFor)
+		chB := utils.nodeB.ObjectiveCompleteChan(objToWaitFor)
+
+		<-chA
+		<-chB
 	})
 }
 

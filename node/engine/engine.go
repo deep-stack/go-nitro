@@ -356,6 +356,53 @@ func (e *Engine) handleMessage(message protocols.Message) (EngineEvent, error) {
 						return EngineEvent{}, err
 					}
 				}
+
+				so, ok := objective.(*swap.Objective)
+				if ok {
+					swapChannel := so.C
+
+					pendingSwap, err := e.store.GetPendingSwapByChannelId(so.C.Id)
+					if err != nil {
+						return EngineEvent{}, err
+					}
+
+					if pendingSwap != nil && strings.Compare(pendingSwap.Id.String(), so.Swap.SwapId().String()) != 0 && swapChannel.MyIndex == 0 {
+						isCurrentRejected, err := e.RejectLowerSwapObjective(so)
+						if err != nil {
+							return EngineEvent{}, err
+						}
+						if isCurrentRejected {
+							allCompleted.CompletedObjectives = append(allCompleted.CompletedObjectives, so)
+							so, sideEffects := so.Reject()
+							err = e.store.SetObjective(so)
+							if err != nil {
+								return EngineEvent{}, err
+							}
+
+							err = e.executeSideEffects(sideEffects)
+							if err != nil {
+								return EngineEvent{}, err
+							}
+							return allCompleted, nil
+						}
+						pendingSwapObjective, err := e.store.GetObjectiveById(protocols.ObjectiveId(swap.ObjectivePrefix + pendingSwap.Id.String()))
+						if err != nil {
+							return EngineEvent{}, err
+						}
+						pendingSwapObjective, sideEffects := pendingSwapObjective.Reject()
+						err = e.store.SetObjective(pendingSwapObjective)
+						if err != nil {
+							return EngineEvent{}, err
+						}
+
+						err = e.executeSideEffects(sideEffects)
+						if err != nil {
+							return EngineEvent{}, err
+						}
+						allCompleted.CompletedObjectives = append(allCompleted.CompletedObjectives, pendingSwapObjective)
+					}
+				}
+
 			} else {
 				objective, sideEffects := objective.Reject()
 				err = e.store.SetObjective(objective)
@@ -716,6 +763,14 @@ func (e *Engine) handleObjectiveRequest(or protocols.ObjectiveRequest) (EngineEv
 			return failedEngineEvent, fmt.Errorf("handleAPIEvent: Could not create swap objective for %+v: %w", request, err)
 		}
 
+		pendingSwap, err := e.store.GetPendingSwapByChannelId(so.C.Id)
+		if err != nil {
+			return EngineEvent{}, err
+		}
+
+		if pendingSwap != nil {
+			return failedEngineEvent, fmt.Errorf("objective already exists")
+		}
 		return e.attemptProgress(&so)
 
 	case swapfund.ObjectiveRequest:
@@ -989,22 +1044,6 @@ func (e *Engine) attemptProgress(objective protocols.Objective) (outgoing Engine
 	var crankedObjective protocols.Objective
 	var sideEffects protocols.SideEffects
 	var waitingFor protocols.WaitingFor
-
-	// Compare with pending swap and reject one of the objective by lexically comparing hash of swap ID, from address and to address
-	swapObj, ok := objective.(*swap.Objective)
-	if ok {
-		obj, err := e.RejectLowerSwapObjective(swapObj)
-		if err != nil {
-			if err == errWaitingForSwapChannelLeader {
-				return outgoing, nil
-			}
-
-			return EngineEvent{}, err
-		}
-
-		objective = obj
-	}
-
 	crankedObjective, sideEffects, waitingFor, err = objective.Crank(secretKey)
 	if err != nil {
 		return
@@ -1475,47 +1514,23 @@ func (e *Engine) getChannelTypeById(channelId types.Destination) (types.ChannelT
 	return -1, fmt.Errorf("could not find channel for given channel ID: %v", channelId)
 }
 
-func (e *Engine) RejectLowerSwapObjective(currentSwapObjective *swap.Objective) (protocols.Objective, error) {
-	var objectiveToAccept protocols.Objective
-
-	swapChannel := currentSwapObjective.C
-
+func (e *Engine) RejectLowerSwapObjective(currentSwapObjective *swap.Objective) (bool, error) {
 	pendingSwap, err := e.store.GetPendingSwapByChannelId(currentSwapObjective.C.Id)
 	if err != nil {
-		return objectiveToAccept, err
+		return false, err
 	}
 
-	if pendingSwap != nil && strings.Compare(pendingSwap.Id.String(), currentSwapObjective.Swap.SwapId().String()) != 0 {
-		if swapChannel.MyIndex != 0 {
-			return currentSwapObjective, errWaitingForSwapChannelLeader
-		}
-		var objectiveToReject protocols.Objective
-		pendingSwapObjective, err := e.store.GetObjectiveById(protocols.ObjectiveId(swap.ObjectivePrefix + pendingSwap.Id.String()))
-		if err != nil {
-			return objectiveToAccept, err
-		}
+	var isCurrentRejected bool
 
-		if strings.Compare(pendingSwap.Id.String(), currentSwapObjective.Swap.SwapId().String()) < 0 {
-			objectiveToReject = pendingSwapObjective
-			objectiveToAccept = currentSwapObjective
-		} else {
-			objectiveToReject = currentSwapObjective
-			objectiveToAccept = pendingSwapObjective
-		}
-
-		objectiveToReject, sideEffects := objectiveToReject.Reject()
-		err = e.store.SetObjective(objectiveToReject)
-		if err != nil {
-			return objectiveToAccept, err
-		}
-
-		err = e.executeSideEffects(sideEffects)
-		if err != nil {
-			return objectiveToAccept, err
-		}
-
-		return objectiveToAccept, nil
+	if strings.Compare(pendingSwap.Id.String(), currentSwapObjective.Swap.SwapId().String()) < 0 {
+		isCurrentRejected = false
 	} else {
-		return currentSwapObjective, nil
+		isCurrentRejected = true
 	}
+
+	if err != nil {
+		return false, err
+	}
+
+	return isCurrentRejected, nil
 }
