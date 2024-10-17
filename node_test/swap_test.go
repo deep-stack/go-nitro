@@ -4,7 +4,6 @@ import (
 	"encoding/json"
 	"fmt"
 	"math/big"
-	"strings"
 	"testing"
 
 	"github.com/ethereum/go-ethereum/common"
@@ -334,85 +333,69 @@ func TestStorageOfLastNSwap(t *testing.T) {
 	})
 }
 
-func TestParallelSwapCreation(t *testing.T) {
-	// Currently parallel swap creations are allowed
+func TestParallelSwaps(t *testing.T) {
 	utils, cleanup := initializeNodesAndInfra(t)
 	defer cleanup()
 
-	createMultiAssetLedgerChannel(t, utils.nodeA, utils.nodeB, []common.Address{
+	ledgerChannelResponse, _ := createMultiAssetLedgerChannel(t, utils.nodeA, utils.nodeB, []common.Address{
 		{}, utils.infra.anvilChain.ContractAddresses.TokenAddresses[0], utils.infra.anvilChain.ContractAddresses.TokenAddresses[1],
 	}, 0)
-	// defer closeMultiAssetLedgerChannel(t, utils.nodeA, utils.nodeB, ledgerChannelResponse.ChannelId)
+	defer closeMultiAssetLedgerChannel(t, utils.nodeA, utils.nodeB, ledgerChannelResponse.ChannelId)
 
-	swapChannelResponse, expectedInitialOutcome := createSwapChannel(t, utils.nodeA, utils.nodeB, utils)
-	// defer closeSwapChannel(t, utils.nodeA, utils.nodeB, swapChannelResponse.ChannelId)
+	swapChannelResponse, _ := createSwapChannel(t, utils.nodeA, utils.nodeB, utils)
+	defer closeSwapChannel(t, utils.nodeA, utils.nodeB, swapChannelResponse.ChannelId)
 
 	t.Run("Ensure parallel swaps are not allowed ", func(t *testing.T) {
-		nodes := []node.Node{utils.nodeA, utils.nodeB}
+		nodeASwapUpdates := utils.nodeA.SwapUpdates()
+		nodeBSwapUpdates := utils.nodeB.SwapUpdates()
 
-		var swapAssetResponse swap.ObjectiveResponse
-		var swapAssetResponses []swap.ObjectiveResponse
-		var swapIds []string
-
-		for i, node := range nodes {
-			s, err := node.SwapAssets(swapChannelResponse.ChannelId, common.Address{}, utils.infra.anvilChain.ContractAddresses.TokenAddresses[0], big.NewInt(10), big.NewInt(20))
-
-			trimmed := strings.TrimPrefix(swap.ObjectivePrefix, string(s.Id))
-			swapAssetResponses = append(swapAssetResponses, s)
-			swapIds = append(swapIds, trimmed)
-			if i == 0 {
-				continue
-			}
-
-			if err != nil {
-				t.Fatal(err)
-			}
-		}
-
-		var receiver node.Node
-		var sender node.Node
-		var swapSenderIndex int
-
-		if strings.Compare(swapIds[0], swapIds[1]) < 0 {
-			swapAssetResponse = swapAssetResponses[1]
-			swapSenderIndex = 1
-			sender = nodes[1]
-			receiver = nodes[0]
-		} else {
-			swapAssetResponse = swapAssetResponses[0]
-			swapSenderIndex = 0
-			sender = nodes[0]
-			receiver = nodes[1]
-		}
-
-		fmt.Println("Waiting for obj to complete ", swapAssetResponse.Id)
-
-		// Wait for objective to wait for confirmation
-		for {
-			swapDetails := <-receiver.SwapUpdates()
-			if protocols.ObjectiveId(swap.ObjectivePrefix+swapDetails.Id.String()) == swapAssetResponse.Id {
-				break
-			}
-		}
-
-		pendingSwap, err := receiver.GetPendingSwapByChannelId(swapAssetResponse.ChannelId)
-		if err != nil {
-			fmt.Println("ERROR FROM PENDING SWAP", err)
-			t.Fatal(err)
-		}
-
-		fmt.Println("PENDING SWAP BY CHANNEL ID", pendingSwap.Id)
-
-		// Accept / reject the swap
-		err = receiver.ConfirmSwap(pendingSwap.Id, types.Accepted)
+		nodeASwapAssetResponse, err := utils.nodeA.SwapAssets(swapChannelResponse.ChannelId, common.Address{}, utils.infra.anvilChain.ContractAddresses.TokenAddresses[0], big.NewInt(10), big.NewInt(20))
 		if err != nil {
 			t.Fatal(err)
 		}
 
-		<-sender.ObjectiveCompleteChan(swapAssetResponse.Id)
+		nodeBSwapAssetResponse, err := utils.nodeB.SwapAssets(swapChannelResponse.ChannelId, common.Address{}, utils.infra.anvilChain.ContractAddresses.TokenAddresses[0], big.NewInt(10), big.NewInt(20))
+		if err != nil {
+			t.Fatal(err)
+		}
 
-		expectedInitialOutcome = modifyOutcomeWithSwap(expectedInitialOutcome, pendingSwap, swapSenderIndex)
-		checkSwapChannel(t, swapChannelResponse.ChannelId, expectedInitialOutcome, query.Open, utils.nodeB, utils.nodeA)
+		nodeASwapInfo := <-nodeASwapUpdates
+		nodeBSwapInfo := <-nodeBSwapUpdates
+
+		fmt.Println("nodeA", nodeASwapInfo.Id)
+		fmt.Println("nodeB", nodeBSwapInfo.Id)
+
+		var errorsArr []error
+
+		// Wait for swap channel leader (node A) to make a decision (Which swap to accept and which one to reject)
+		// Swap channel follower (Node B) does not generate any notifications since it will simply reject the swap based on message from leader
+		<-nodeASwapUpdates
+
+		// Try to confirm both swaps and assert that one of them passes and one of them fails
+		nodeAErr := utils.nodeA.ConfirmSwap(nodeBSwapInfo.Id, types.Accepted)
+		nodeBErr := utils.nodeB.ConfirmSwap(nodeASwapInfo.Id, types.Accepted)
+
+		errorsArr = append(errorsArr, nodeAErr, nodeBErr)
+
+		var objToWaitFor protocols.ObjectiveId
+		nilErrs := 0
+
+		for _, err := range errorsArr {
+			if err == nil {
+				nilErrs++
+			} else {
+				if err == nodeAErr {
+					objToWaitFor = nodeASwapAssetResponse.Id
+				} else {
+					objToWaitFor = nodeBSwapAssetResponse.Id
+				}
+			}
+		}
+
+		testhelpers.Assert(t, nilErrs == 1, "Expected only one of the swaps to fail")
+
+		<-utils.nodeA.ObjectiveCompleteChan(objToWaitFor)
+		<-utils.nodeB.ObjectiveCompleteChan(objToWaitFor)
 	})
 }
 

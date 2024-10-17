@@ -40,7 +40,10 @@ import (
 	"github.com/statechannels/go-nitro/types"
 )
 
-var errEmptyDroppedEvent error = errors.New("no dropped events yet")
+var (
+	errEmptyDroppedEvent           error = errors.New("no dropped events yet")
+	errWaitingForSwapChannelLeader error = errors.New("waiting for swap channel leader to decide")
+)
 
 // ErrUnhandledChainEvent is an engine error when the the engine cannot process a chain event
 type ErrUnhandledChainEvent struct {
@@ -990,9 +993,12 @@ func (e *Engine) attemptProgress(objective protocols.Objective) (outgoing Engine
 	// Compare with pending swap and reject one of the objective by lexically comparing hash of swap ID, from address and to address
 	swapObj, ok := objective.(*swap.Objective)
 	if ok {
-
 		obj, err := e.RejectLowerSwapObjective(swapObj)
 		if err != nil {
+			if err == errWaitingForSwapChannelLeader {
+				return outgoing, nil
+			}
+
 			return EngineEvent{}, err
 		}
 
@@ -1472,12 +1478,17 @@ func (e *Engine) getChannelTypeById(channelId types.Destination) (types.ChannelT
 func (e *Engine) RejectLowerSwapObjective(currentSwapObjective *swap.Objective) (protocols.Objective, error) {
 	var objectiveToAccept protocols.Objective
 
+	swapChannel := currentSwapObjective.C
+
 	pendingSwap, err := e.store.GetPendingSwapByChannelId(currentSwapObjective.C.Id)
 	if err != nil {
 		return objectiveToAccept, err
 	}
 
 	if pendingSwap != nil && strings.Compare(pendingSwap.Id.String(), currentSwapObjective.Swap.SwapId().String()) != 0 {
+		if swapChannel.MyIndex != 0 {
+			return currentSwapObjective, errWaitingForSwapChannelLeader
+		}
 		var objectiveToReject protocols.Objective
 		pendingSwapObjective, err := e.store.GetObjectiveById(protocols.ObjectiveId(swap.ObjectivePrefix + pendingSwap.Id.String()))
 		if err != nil {
@@ -1492,8 +1503,13 @@ func (e *Engine) RejectLowerSwapObjective(currentSwapObjective *swap.Objective) 
 			objectiveToAccept = pendingSwapObjective
 		}
 
-		objectiveToReject, _ = objectiveToReject.Reject()
+		objectiveToReject, sideEffects := objectiveToReject.Reject()
 		err = e.store.SetObjective(objectiveToReject)
+		if err != nil {
+			return objectiveToAccept, err
+		}
+
+		err = e.executeSideEffects(sideEffects)
 		if err != nil {
 			return objectiveToAccept, err
 		}
