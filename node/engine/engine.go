@@ -9,6 +9,7 @@ import (
 	"fmt"
 	"log/slog"
 	"math/big"
+	"strings"
 	"sync"
 	"time"
 
@@ -986,6 +987,18 @@ func (e *Engine) attemptProgress(objective protocols.Objective) (outgoing Engine
 	var sideEffects protocols.SideEffects
 	var waitingFor protocols.WaitingFor
 
+	// Compare with pending swap and reject one of the objective by lexically comparing hash of swap ID, from address and to address
+	swapObj, ok := objective.(*swap.Objective)
+	if ok {
+
+		obj, err := e.RejectLowerSwapObjective(swapObj)
+		if err != nil {
+			return EngineEvent{}, err
+		}
+
+		objective = obj
+	}
+
 	crankedObjective, sideEffects, waitingFor, err = objective.Crank(secretKey)
 	if err != nil {
 		return
@@ -1454,4 +1467,39 @@ func (e *Engine) getChannelTypeById(channelId types.Destination) (types.ChannelT
 	}
 
 	return -1, fmt.Errorf("could not find channel for given channel ID: %v", channelId)
+}
+
+func (e *Engine) RejectLowerSwapObjective(currentSwapObjective *swap.Objective) (protocols.Objective, error) {
+	var objectiveToAccept protocols.Objective
+
+	pendingSwap, err := e.store.GetPendingSwapByChannelId(currentSwapObjective.C.Id)
+	if err != nil {
+		return objectiveToAccept, err
+	}
+
+	if pendingSwap != nil && strings.Compare(pendingSwap.Id.String(), currentSwapObjective.Swap.SwapId().String()) != 0 {
+		var objectiveToReject protocols.Objective
+		pendingSwapObjective, err := e.store.GetObjectiveById(protocols.ObjectiveId(swap.ObjectivePrefix + pendingSwap.Id.String()))
+		if err != nil {
+			return objectiveToAccept, err
+		}
+
+		if strings.Compare(pendingSwap.Id.String(), currentSwapObjective.Swap.SwapId().String()) < 0 {
+			objectiveToReject = pendingSwapObjective
+			objectiveToAccept = currentSwapObjective
+		} else {
+			objectiveToReject = currentSwapObjective
+			objectiveToAccept = pendingSwapObjective
+		}
+
+		objectiveToReject, _ = objectiveToReject.Reject()
+		err = e.store.SetObjective(objectiveToReject)
+		if err != nil {
+			return objectiveToAccept, err
+		}
+
+		return objectiveToAccept, nil
+	} else {
+		return currentSwapObjective, nil
+	}
 }

@@ -2,8 +2,9 @@ package node_test
 
 import (
 	"encoding/json"
-	"errors"
+	"fmt"
 	"math/big"
+	"strings"
 	"testing"
 
 	"github.com/ethereum/go-ethereum/common"
@@ -335,28 +336,83 @@ func TestStorageOfLastNSwap(t *testing.T) {
 
 func TestParallelSwapCreation(t *testing.T) {
 	// Currently parallel swap creations are allowed
-	t.Skip()
 	utils, cleanup := initializeNodesAndInfra(t)
 	defer cleanup()
 
-	ledgerChannelResponse, _ := createMultiAssetLedgerChannel(t, utils.nodeA, utils.nodeB, []common.Address{
+	createMultiAssetLedgerChannel(t, utils.nodeA, utils.nodeB, []common.Address{
 		{}, utils.infra.anvilChain.ContractAddresses.TokenAddresses[0], utils.infra.anvilChain.ContractAddresses.TokenAddresses[1],
 	}, 0)
-	defer closeMultiAssetLedgerChannel(t, utils.nodeA, utils.nodeB, ledgerChannelResponse.ChannelId)
+	// defer closeMultiAssetLedgerChannel(t, utils.nodeA, utils.nodeB, ledgerChannelResponse.ChannelId)
 
-	swapChannelResponse, _ := createSwapChannel(t, utils.nodeA, utils.nodeB, utils)
-	defer closeSwapChannel(t, utils.nodeA, utils.nodeB, swapChannelResponse.ChannelId)
+	swapChannelResponse, expectedInitialOutcome := createSwapChannel(t, utils.nodeA, utils.nodeB, utils)
+	// defer closeSwapChannel(t, utils.nodeA, utils.nodeB, swapChannelResponse.ChannelId)
 
 	t.Run("Ensure parallel swaps are not allowed ", func(t *testing.T) {
 		nodes := []node.Node{utils.nodeA, utils.nodeB}
 
+		var swapAssetResponse swap.ObjectiveResponse
+		var swapAssetResponses []swap.ObjectiveResponse
+		var swapIds []string
+
 		for i, node := range nodes {
-			_, err := node.SwapAssets(swapChannelResponse.ChannelId, common.Address{}, utils.infra.anvilChain.ContractAddresses.TokenAddresses[0], big.NewInt(10), big.NewInt(20))
+			s, err := node.SwapAssets(swapChannelResponse.ChannelId, common.Address{}, utils.infra.anvilChain.ContractAddresses.TokenAddresses[0], big.NewInt(10), big.NewInt(20))
+
+			trimmed := strings.TrimPrefix(swap.ObjectivePrefix, string(s.Id))
+			swapAssetResponses = append(swapAssetResponses, s)
+			swapIds = append(swapIds, trimmed)
 			if i == 0 {
 				continue
 			}
-			testhelpers.Assert(t, errors.Is(err, swap.ErrSwapExists), "expected error: %v", swap.ErrSwapExists)
+
+			if err != nil {
+				t.Fatal(err)
+			}
 		}
+
+		var receiver node.Node
+		var sender node.Node
+		var swapSenderIndex int
+
+		if strings.Compare(swapIds[0], swapIds[1]) < 0 {
+			swapAssetResponse = swapAssetResponses[1]
+			swapSenderIndex = 1
+			sender = nodes[1]
+			receiver = nodes[0]
+		} else {
+			swapAssetResponse = swapAssetResponses[0]
+			swapSenderIndex = 0
+			sender = nodes[0]
+			receiver = nodes[1]
+		}
+
+		fmt.Println("Waiting for obj to complete ", swapAssetResponse.Id)
+
+		// Wait for objective to wait for confirmation
+		for {
+			swapDetails := <-receiver.SwapUpdates()
+			if protocols.ObjectiveId(swap.ObjectivePrefix+swapDetails.Id.String()) == swapAssetResponse.Id {
+				break
+			}
+		}
+
+		pendingSwap, err := receiver.GetPendingSwapByChannelId(swapAssetResponse.ChannelId)
+		if err != nil {
+			fmt.Println("ERROR FROM PENDING SWAP", err)
+			t.Fatal(err)
+		}
+
+		fmt.Println("PENDING SWAP BY CHANNEL ID", pendingSwap.Id)
+
+		// Accept / reject the swap
+		err = receiver.ConfirmSwap(pendingSwap.Id, types.Accepted)
+		if err != nil {
+			t.Fatal(err)
+		}
+
+		<-sender.ObjectiveCompleteChan(swapAssetResponse.Id)
+
+		expectedInitialOutcome = modifyOutcomeWithSwap(expectedInitialOutcome, pendingSwap, swapSenderIndex)
+		checkSwapChannel(t, swapChannelResponse.ChannelId, expectedInitialOutcome, query.Open, utils.nodeB, utils.nodeA)
 	})
 }
 
