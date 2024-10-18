@@ -40,10 +40,7 @@ import (
 	"github.com/statechannels/go-nitro/types"
 )
 
-var (
-	errEmptyDroppedEvent           error = errors.New("no dropped events yet")
-	errWaitingForSwapChannelLeader error = errors.New("waiting for swap channel leader to decide")
-)
+var errEmptyDroppedEvent error = errors.New("no dropped events yet")
 
 // ErrUnhandledChainEvent is an engine error when the the engine cannot process a chain event
 type ErrUnhandledChainEvent struct {
@@ -372,6 +369,7 @@ func (e *Engine) handleMessage(message protocols.Message) (EngineEvent, error) {
 							return EngineEvent{}, err
 						}
 						if isCurrentRejected {
+							slog.Debug("DEBUG: Rejectiing current objective", "objectiveId", so.Id())
 							allCompleted.CompletedObjectives = append(allCompleted.CompletedObjectives, so)
 							so, sideEffects := so.Reject()
 							err = e.store.SetObjective(so)
@@ -389,6 +387,8 @@ func (e *Engine) handleMessage(message protocols.Message) (EngineEvent, error) {
 						if err != nil {
 							return EngineEvent{}, err
 						}
+
+						slog.Debug("DEBUG: Rejecting pending objective", "objectiveId", pendingSwapObjective.Id())
 						pendingSwapObjective, sideEffects := pendingSwapObjective.Reject()
 						err = e.store.SetObjective(pendingSwapObjective)
 						if err != nil {
@@ -1044,6 +1044,7 @@ func (e *Engine) attemptProgress(objective protocols.Objective) (outgoing Engine
 	var crankedObjective protocols.Objective
 	var sideEffects protocols.SideEffects
 	var waitingFor protocols.WaitingFor
+
 	crankedObjective, sideEffects, waitingFor, err = objective.Crank(secretKey)
 	if err != nil {
 		return

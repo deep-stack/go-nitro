@@ -29,6 +29,9 @@ func newSwapListeners() *swapListeners {
 func (li *swapListeners) Notify(info query.SwapInfo) {
 	li.listenersLock.Lock()
 	defer li.listenersLock.Unlock()
+	if li.prev.Id == info.Id && li.prev.ChannelId == info.ChannelId {
+		return
+	}
 
 	for _, list := range li.listeners {
 		list <- info

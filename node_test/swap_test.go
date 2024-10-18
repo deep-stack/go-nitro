@@ -2,7 +2,6 @@ package node_test
 
 import (
 	"encoding/json"
-	"fmt"
 	"math/big"
 	"testing"
 
@@ -346,8 +345,10 @@ func TestParallelSwaps(t *testing.T) {
 	defer closeSwapChannel(t, utils.nodeA, utils.nodeB, swapChannelResponse.ChannelId)
 
 	t.Run("Ensure parallel swaps are not allowed ", func(t *testing.T) {
+		// Register for swap updates and completed objectives
 		nodeASwapUpdates := utils.nodeA.SwapUpdates()
 		nodeBSwapUpdates := utils.nodeB.SwapUpdates()
+		nodeBCompletedObjectives := utils.nodeB.CompletedObjectives()
 
 		nodeASwapAssetResponse, err := utils.nodeA.SwapAssets(swapChannelResponse.ChannelId, common.Address{}, utils.infra.anvilChain.ContractAddresses.TokenAddresses[0], big.NewInt(10), big.NewInt(20))
 		if err != nil {
@@ -363,33 +364,27 @@ func TestParallelSwaps(t *testing.T) {
 		swapInfoFromNodeB := <-nodeBSwapUpdates
 
 		// Wait for swap channel leader (node A) to make a decision (Which swap to accept and which one to reject)
-		<-nodeBSwapUpdates
-
-		select {
-		case <-utils.nodeB.ObjectiveCompleteChan(nodeASwapAssetResponse.Id):
-		case <-utils.nodeB.ObjectiveCompleteChan(nodeBSwapAssetResponse.Id):
-		}
+		// The rejected objective will be completed
+		<-nodeBCompletedObjectives
 
 		nodeAPendingSwap, err := utils.nodeA.GetPendingSwapByChannelId(nodeASwapAssetResponse.ChannelId)
 		if err != nil {
 			t.Fatal(err)
 		}
-		fmt.Println("NODE A PENDING SWAP ID", nodeAPendingSwap.Id)
 
 		var nodeBErr, nodeAErr error
 		if nodeAPendingSwap.Id == swapInfoFromNodeA.Id {
-			fmt.Println("IN SCENARIO 1")
+			t.Log("Pending swap from node A")
 			nodeBErr = utils.nodeB.ConfirmSwap(swapInfoFromNodeA.Id, types.Accepted)
 			nodeAErr = utils.nodeA.ConfirmSwap(swapInfoFromNodeB.Id, types.Accepted)
 		}
 		if nodeAPendingSwap.Id == swapInfoFromNodeB.Id {
-			fmt.Println("IN SCENARIO 2")
+			t.Log("Pending swap from node B")
 			nodeAErr = utils.nodeA.ConfirmSwap(swapInfoFromNodeB.Id, types.Accepted)
 			nodeBErr = utils.nodeB.ConfirmSwap(swapInfoFromNodeA.Id, types.Accepted)
 		}
 
 		// Try to confirm both swaps and assert that one of them passes and one of them fails
-
 		var objToWaitFor protocols.ObjectiveId
 		nilErrs := 0
 		var errorsArr []error
