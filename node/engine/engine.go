@@ -9,6 +9,7 @@ import (
 	"fmt"
 	"log/slog"
 	"math/big"
+	"strings"
 	"sync"
 	"time"
 
@@ -39,7 +40,10 @@ import (
 	"github.com/statechannels/go-nitro/types"
 )
 
-var errEmptyDroppedEvent error = errors.New("no dropped events yet")
+var (
+	errEmptyDroppedEvent   error = errors.New("no dropped events yet")
+	errSwapObjectiveExists error = errors.New("swap objective already exists")
+)
 
 // ErrUnhandledChainEvent is an engine error when the the engine cannot process a chain event
 type ErrUnhandledChainEvent struct {
@@ -70,6 +74,7 @@ var nonFatalErrors = []error{
 	swapfund.ErrUpdatingLedgerFunding,
 	swapfund.ErrZeroFunds,
 	errEmptyDroppedEvent,
+	errSwapObjectiveExists,
 	swap.ErrInvalidSwap,
 }
 
@@ -352,6 +357,56 @@ func (e *Engine) handleMessage(message protocols.Message) (EngineEvent, error) {
 						return EngineEvent{}, err
 					}
 				}
+
+				so, ok := objective.(*swap.Objective)
+				if ok {
+					swapChannel := so.C
+
+					pendingSwap, err := e.store.GetPendingSwapByChannelId(so.C.Id)
+					if err != nil {
+						return EngineEvent{}, err
+					}
+
+					if pendingSwap != nil && strings.Compare(pendingSwap.Id.String(), so.Swap.SwapId().String()) != 0 && swapChannel.MyIndex == 0 {
+						isCurrentRejected, err := e.RejectLowerSwapObjective(so)
+						if err != nil {
+							return EngineEvent{}, err
+						}
+						if isCurrentRejected {
+							slog.Debug("DEBUG: Rejectiing current objective", "objectiveId", so.Id())
+							allCompleted.CompletedObjectives = append(allCompleted.CompletedObjectives, so)
+							so, sideEffects := so.Reject()
+							err = e.store.SetObjective(so)
+							if err != nil {
+								return EngineEvent{}, err
+							}
+
+							err = e.executeSideEffects(sideEffects)
+							if err != nil {
+								return EngineEvent{}, err
+							}
+							return allCompleted, nil
+						}
+						pendingSwapObjective, err := e.store.GetObjectiveById(protocols.ObjectiveId(swap.ObjectivePrefix + pendingSwap.Id.String()))
+						if err != nil {
+							return EngineEvent{}, err
+						}
+
+						slog.Debug("DEBUG: Rejecting pending objective", "objectiveId", pendingSwapObjective.Id())
+						pendingSwapObjective, sideEffects := pendingSwapObjective.Reject()
+						err = e.store.SetObjective(pendingSwapObjective)
+						if err != nil {
+							return EngineEvent{}, err
+						}
+
+						err = e.executeSideEffects(sideEffects)
+						if err != nil {
+							return EngineEvent{}, err
+						}
+						allCompleted.CompletedObjectives = append(allCompleted.CompletedObjectives, pendingSwapObjective)
+					}
+				}
+
 			} else {
 				objective, sideEffects := objective.Reject()
 				err = e.store.SetObjective(objective)
@@ -712,6 +767,14 @@ func (e *Engine) handleObjectiveRequest(or protocols.ObjectiveRequest) (EngineEv
 			return failedEngineEvent, fmt.Errorf("handleAPIEvent: Could not create swap objective for %+v: %w", request, err)
 		}
 
+		pendingSwap, err := e.store.GetPendingSwapByChannelId(so.C.Id)
+		if err != nil {
+			return EngineEvent{}, err
+		}
+
+		if pendingSwap != nil {
+			return failedEngineEvent, errSwapObjectiveExists
+		}
 		return e.attemptProgress(&so)
 
 	case swapfund.ObjectiveRequest:
@@ -1454,4 +1517,25 @@ func (e *Engine) getChannelTypeById(channelId types.Destination) (types.ChannelT
 	}
 
 	return -1, fmt.Errorf("could not find channel for given channel ID: %v", channelId)
+}
+
+func (e *Engine) RejectLowerSwapObjective(currentSwapObjective *swap.Objective) (bool, error) {
+	pendingSwap, err := e.store.GetPendingSwapByChannelId(currentSwapObjective.C.Id)
+	if err != nil {
+		return false, err
+	}
+
+	var isCurrentRejected bool
+
+	if strings.Compare(pendingSwap.Id.String(), currentSwapObjective.Swap.SwapId().String()) < 0 {
+		isCurrentRejected = false
+	} else {
+		isCurrentRejected = true
+	}
+
+	if err != nil {
+		return false, err
+	}
+
+	return isCurrentRejected, nil
 }
