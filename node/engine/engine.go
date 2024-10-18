@@ -40,7 +40,10 @@ import (
 	"github.com/statechannels/go-nitro/types"
 )
 
-var errEmptyDroppedEvent error = errors.New("no dropped events yet")
+var (
+	errEmptyDroppedEvent   error = errors.New("no dropped events yet")
+	errSwapObjectiveExists error = errors.New("swap objective already exists")
+)
 
 // ErrUnhandledChainEvent is an engine error when the the engine cannot process a chain event
 type ErrUnhandledChainEvent struct {
@@ -71,6 +74,7 @@ var nonFatalErrors = []error{
 	swapfund.ErrUpdatingLedgerFunding,
 	swapfund.ErrZeroFunds,
 	errEmptyDroppedEvent,
+	errSwapObjectiveExists,
 	swap.ErrInvalidSwap,
 }
 
@@ -769,7 +773,7 @@ func (e *Engine) handleObjectiveRequest(or protocols.ObjectiveRequest) (EngineEv
 		}
 
 		if pendingSwap != nil {
-			return failedEngineEvent, fmt.Errorf("objective already exists")
+			return failedEngineEvent, errSwapObjectiveExists
 		}
 		return e.attemptProgress(&so)
 
