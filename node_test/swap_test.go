@@ -3,6 +3,7 @@ package node_test
 import (
 	"encoding/json"
 	"math/big"
+	"sync"
 	"testing"
 
 	"github.com/ethereum/go-ethereum/common"
@@ -333,6 +334,7 @@ func TestStorageOfLastNSwap(t *testing.T) {
 }
 
 func TestParallelSwaps(t *testing.T) {
+	var wg sync.WaitGroup
 	utils, cleanup := initializeNodesAndInfra(t)
 	defer cleanup()
 
@@ -350,14 +352,29 @@ func TestParallelSwaps(t *testing.T) {
 		nodeBSwapUpdates := utils.nodeB.SwapUpdates()
 		nodeBCompletedObjectives := utils.nodeB.CompletedObjectives()
 
-		nodeASwapAssetResponse, err := utils.nodeA.SwapAssets(swapChannelResponse.ChannelId, common.Address{}, utils.infra.anvilChain.ContractAddresses.TokenAddresses[0], big.NewInt(10), big.NewInt(20))
-		if err != nil {
-			t.Fatal(err)
+		var nodeASwapAssetResponse, nodeBSwapAssetResponse swap.ObjectiveResponse
+		var errNodeA, errNodeB error
+
+		// Use go routines to create swaps parallely
+		wg.Add(2)
+		go func() {
+			defer wg.Done()
+			nodeASwapAssetResponse, errNodeA = utils.nodeA.SwapAssets(swapChannelResponse.ChannelId, common.Address{}, utils.infra.anvilChain.ContractAddresses.TokenAddresses[0], big.NewInt(10), big.NewInt(20))
+		}()
+
+		go func() {
+			defer wg.Done()
+			nodeBSwapAssetResponse, errNodeB = utils.nodeB.SwapAssets(swapChannelResponse.ChannelId, common.Address{}, utils.infra.anvilChain.ContractAddresses.TokenAddresses[0], big.NewInt(10), big.NewInt(20))
+		}()
+
+		wg.Wait()
+
+		if errNodeA != nil {
+			t.Fatal(errNodeA)
 		}
 
-		nodeBSwapAssetResponse, err := utils.nodeB.SwapAssets(swapChannelResponse.ChannelId, common.Address{}, utils.infra.anvilChain.ContractAddresses.TokenAddresses[0], big.NewInt(10), big.NewInt(20))
-		if err != nil {
-			t.Fatal(err)
+		if errNodeB != nil {
+			t.Fatal(errNodeB)
 		}
 
 		swapInfoFromNodeA := <-nodeASwapUpdates
