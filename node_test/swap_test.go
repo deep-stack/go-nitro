@@ -2,6 +2,7 @@ package node_test
 
 import (
 	"encoding/json"
+	"errors"
 	"math/big"
 	"sync"
 	"testing"
@@ -352,7 +353,7 @@ func TestParallelSwaps(t *testing.T) {
 		nodeBSwapUpdates := utils.nodeB.SwapUpdates()
 		nodeBCompletedObjectives := utils.nodeB.CompletedObjectives()
 
-		var nodeASwapAssetResponse, nodeBSwapAssetResponse swap.ObjectiveResponse
+		var nodeASwapAssetResponse swap.ObjectiveResponse
 		var errNodeA, errNodeB error
 
 		// Use go routines to create swaps parallely
@@ -364,7 +365,7 @@ func TestParallelSwaps(t *testing.T) {
 
 		go func() {
 			defer wg.Done()
-			nodeBSwapAssetResponse, errNodeB = utils.nodeB.SwapAssets(swapChannelResponse.ChannelId, common.Address{}, utils.infra.anvilChain.ContractAddresses.TokenAddresses[0], big.NewInt(10), big.NewInt(20))
+			_, errNodeB = utils.nodeB.SwapAssets(swapChannelResponse.ChannelId, common.Address{}, utils.infra.anvilChain.ContractAddresses.TokenAddresses[0], big.NewInt(10), big.NewInt(20))
 		}()
 
 		wg.Wait()
@@ -389,6 +390,8 @@ func TestParallelSwaps(t *testing.T) {
 			t.Fatal(err)
 		}
 
+		nodeACompletedObjectives := utils.nodeA.CompletedObjectives()
+
 		// Try to confirm both swaps and assert that one of them passes and one of them fails
 		var nodeBErr, nodeAErr error
 		if nodeAPendingSwap.Id == swapInfoFromNodeA.Id {
@@ -402,29 +405,22 @@ func TestParallelSwaps(t *testing.T) {
 			nodeBErr = utils.nodeB.ConfirmSwap(swapInfoFromNodeA.Id, types.Accepted)
 		}
 
-		var objToWaitFor protocols.ObjectiveId
 		nilErrs := 0
-		var errorsArr []error
-		errorsArr = append(errorsArr, nodeAErr, nodeBErr)
+		errorsArr := []error{nodeAErr, nodeBErr}
+		var errToCheck error
 		for _, err := range errorsArr {
 			if err == nil {
 				nilErrs++
 			} else {
-				if err == nodeAErr {
-					objToWaitFor = nodeASwapAssetResponse.Id
-				} else {
-					objToWaitFor = nodeBSwapAssetResponse.Id
-				}
+				errToCheck = err
 			}
 		}
 
 		testhelpers.Assert(t, nilErrs == 1, "Expected only one of the swaps to fail")
+		testhelpers.Assert(t, errors.Is(errToCheck, store.ErrNoSuchSwap), "Incorrect error")
 
-		chA := utils.nodeA.ObjectiveCompleteChan(objToWaitFor)
-		chB := utils.nodeB.ObjectiveCompleteChan(objToWaitFor)
-
-		<-chA
-		<-chB
+		<-nodeACompletedObjectives
+		<-nodeBCompletedObjectives
 	})
 }
 

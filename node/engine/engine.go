@@ -360,7 +360,7 @@ func (e *Engine) handleMessage(message protocols.Message) (EngineEvent, error) {
 
 				so, ok := objective.(*swap.Objective)
 				if ok {
-					rejectedObjective, err := e.GetRejectedObjective(so)
+					rejectedObjective, err := e.rejectSwapIfPendingExists(so)
 					if err != nil {
 						return EngineEvent{}, err
 					}
@@ -1486,7 +1486,7 @@ func (e *Engine) getChannelTypeById(channelId types.Destination) (types.ChannelT
 	return -1, fmt.Errorf("could not find channel for given channel ID: %v", channelId)
 }
 
-func (e *Engine) GetRejectedObjective(currentSwapObjective *swap.Objective) (protocols.Objective, error) {
+func (e *Engine) rejectSwapIfPendingExists(currentSwapObjective *swap.Objective) (protocols.Objective, error) {
 	swapChannel := currentSwapObjective.C
 
 	pendingSwap, err := e.store.GetPendingSwapByChannelId(swapChannel.Id)
@@ -1494,19 +1494,45 @@ func (e *Engine) GetRejectedObjective(currentSwapObjective *swap.Objective) (pro
 		return nil, err
 	}
 
-	if pendingSwap != nil && strings.Compare(pendingSwap.Id.String(), currentSwapObjective.Swap.SwapId().String()) != 0 && swapChannel.MyIndex == 0 {
+	o, err := e.store.GetObjectiveById(protocols.ObjectiveId(swap.ObjectivePrefix + pendingSwap.Id.String()))
+	if err != nil {
+		return nil, err
+	}
+
+	pendingSwapObjective, ok := o.(*swap.Objective)
+	if !ok {
+		return nil, fmt.Errorf("expected swap objective")
+	}
+
+	currentSwapWithSender := payments.SwapWithSender{
+		Swap:   currentSwapObjective.Swap,
+		Sender: currentSwapObjective.C.Participants[currentSwapObjective.SwapSenderIndex],
+	}
+
+	pendingSwapWithSender := payments.SwapWithSender{
+		Swap:   pendingSwapObjective.Swap,
+		Sender: pendingSwapObjective.C.Participants[currentSwapObjective.SwapSenderIndex],
+	}
+
+	currentHash, err := currentSwapWithSender.Hash()
+	if err != nil {
+		return nil, err
+	}
+
+	pendingHash, err := pendingSwapWithSender.Hash()
+	if err != nil {
+		return nil, err
+	}
+
+	// Do not enter if pending swap and current swap are same and this node is not the swap channel leader
+	if pendingSwap != nil && strings.Compare(pendingHash.String(), currentHash.String()) != 0 && swapChannel.MyIndex == 0 {
 		var objectiveToReject protocols.Objective
 
-		if strings.Compare(pendingSwap.Id.String(), currentSwapObjective.Swap.SwapId().String()) < 0 {
-			pendingSwapObjective, err := e.store.GetObjectiveById(protocols.ObjectiveId(swap.ObjectivePrefix + pendingSwap.Id.String()))
-			if err != nil {
-				return nil, err
-			}
-
-			slog.Debug("DEBUG: engine.go-GetRejectedObjective rejecting pending swap objective", "objectiveId", pendingSwapObjective.Id())
+		if strings.Compare(pendingHash.String(), currentHash.String()) < 0 {
+			slog.Debug("DEBUG: engine.go-rejectObjective rejecting pending swap objective", "objectiveId", pendingSwapObjective.Id())
 			objectiveToReject = pendingSwapObjective
 		} else {
-			slog.Debug("DEBUG: engine.go-GetRejectedObjective rejecting current swap objective", "objectiveId", currentSwapObjective.Id())
+			slog.Debug("DEBUG: engine.go-rejectObjective rejecting current swap objective", "objectiveId", currentSwapObjective.Id())
 			objectiveToReject = currentSwapObjective
 		}
 
