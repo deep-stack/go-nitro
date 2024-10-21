@@ -4,6 +4,7 @@ import (
 	"encoding/json"
 	"errors"
 	"math/big"
+	"sync"
 	"testing"
 
 	"github.com/ethereum/go-ethereum/common"
@@ -333,9 +334,8 @@ func TestStorageOfLastNSwap(t *testing.T) {
 	})
 }
 
-func TestParallelSwapCreation(t *testing.T) {
-	// Currently parallel swap creations are allowed
-	t.Skip()
+func TestParallelSwaps(t *testing.T) {
+	var wg sync.WaitGroup
 	utils, cleanup := initializeNodesAndInfra(t)
 	defer cleanup()
 
@@ -348,15 +348,79 @@ func TestParallelSwapCreation(t *testing.T) {
 	defer closeSwapChannel(t, utils.nodeA, utils.nodeB, swapChannelResponse.ChannelId)
 
 	t.Run("Ensure parallel swaps are not allowed ", func(t *testing.T) {
-		nodes := []node.Node{utils.nodeA, utils.nodeB}
+		// Register for swap updates and completed objectives
+		nodeASwapUpdates := utils.nodeA.SwapUpdates()
+		nodeBSwapUpdates := utils.nodeB.SwapUpdates()
+		nodeBCompletedObjectives := utils.nodeB.CompletedObjectives()
 
-		for i, node := range nodes {
-			_, err := node.SwapAssets(swapChannelResponse.ChannelId, common.Address{}, utils.infra.anvilChain.ContractAddresses.TokenAddresses[0], big.NewInt(10), big.NewInt(20))
-			if i == 0 {
-				continue
-			}
-			testhelpers.Assert(t, errors.Is(err, swap.ErrSwapExists), "expected error: %v", swap.ErrSwapExists)
+		var nodeASwapAssetResponse swap.ObjectiveResponse
+		var errNodeA, errNodeB error
+
+		// Use go routines to create swaps parallely
+		wg.Add(2)
+		go func() {
+			defer wg.Done()
+			nodeASwapAssetResponse, errNodeA = utils.nodeA.SwapAssets(swapChannelResponse.ChannelId, common.Address{}, utils.infra.anvilChain.ContractAddresses.TokenAddresses[0], big.NewInt(10), big.NewInt(20))
+		}()
+
+		go func() {
+			defer wg.Done()
+			_, errNodeB = utils.nodeB.SwapAssets(swapChannelResponse.ChannelId, common.Address{}, utils.infra.anvilChain.ContractAddresses.TokenAddresses[0], big.NewInt(10), big.NewInt(20))
+		}()
+
+		wg.Wait()
+
+		if errNodeA != nil {
+			t.Fatal(errNodeA)
 		}
+
+		if errNodeB != nil {
+			t.Fatal(errNodeB)
+		}
+
+		swapInfoFromNodeA := <-nodeASwapUpdates
+		swapInfoFromNodeB := <-nodeBSwapUpdates
+
+		// Wait for swap channel leader (node A) to make a decision (Which swap to accept and which one to reject)
+		// The rejected objective will be completed
+		<-nodeBCompletedObjectives
+
+		nodeAPendingSwap, err := utils.nodeA.GetPendingSwapByChannelId(nodeASwapAssetResponse.ChannelId)
+		if err != nil {
+			t.Fatal(err)
+		}
+
+		nodeACompletedObjectives := utils.nodeA.CompletedObjectives()
+
+		// Try to confirm both swaps and assert that one of them passes and one of them fails
+		var nodeBErr, nodeAErr error
+		if nodeAPendingSwap.Id == swapInfoFromNodeA.Id {
+			t.Log("Pending swap from node A")
+			nodeBErr = utils.nodeB.ConfirmSwap(swapInfoFromNodeA.Id, types.Accepted)
+			nodeAErr = utils.nodeA.ConfirmSwap(swapInfoFromNodeB.Id, types.Accepted)
+		}
+		if nodeAPendingSwap.Id == swapInfoFromNodeB.Id {
+			t.Log("Pending swap from node B")
+			nodeAErr = utils.nodeA.ConfirmSwap(swapInfoFromNodeB.Id, types.Accepted)
+			nodeBErr = utils.nodeB.ConfirmSwap(swapInfoFromNodeA.Id, types.Accepted)
+		}
+
+		nilErrs := 0
+		errorsArr := []error{nodeAErr, nodeBErr}
+		var errToCheck error
+		for _, err := range errorsArr {
+			if err == nil {
+				nilErrs++
+			} else {
+				errToCheck = err
+			}
+		}
+
+		testhelpers.Assert(t, nilErrs == 1, "Expected only one of the swaps to fail")
+		testhelpers.Assert(t, errors.Is(errToCheck, store.ErrNoSuchSwap), "Incorrect error")
+
+		<-nodeACompletedObjectives
+		<-nodeBCompletedObjectives
 	})
 }
 
