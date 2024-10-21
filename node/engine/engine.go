@@ -360,50 +360,17 @@ func (e *Engine) handleMessage(message protocols.Message) (EngineEvent, error) {
 
 				so, ok := objective.(*swap.Objective)
 				if ok {
-					swapChannel := so.C
-
-					pendingSwap, err := e.store.GetPendingSwapByChannelId(so.C.Id)
+					rejectedObjective, err := e.GetRejectedObjective(so)
 					if err != nil {
 						return EngineEvent{}, err
 					}
 
-					if pendingSwap != nil && strings.Compare(pendingSwap.Id.String(), so.Swap.SwapId().String()) != 0 && swapChannel.MyIndex == 0 {
-						isCurrentRejected, err := e.RejectLowerSwapObjective(so)
-						if err != nil {
-							return EngineEvent{}, err
-						}
-						if isCurrentRejected {
-							slog.Debug("DEBUG: Rejectiing current objective", "objectiveId", so.Id())
-							allCompleted.CompletedObjectives = append(allCompleted.CompletedObjectives, so)
-							so, sideEffects := so.Reject()
-							err = e.store.SetObjective(so)
-							if err != nil {
-								return EngineEvent{}, err
-							}
+					if rejectedObjective != nil {
+						allCompleted.CompletedObjectives = append(allCompleted.CompletedObjectives, rejectedObjective)
 
-							err = e.executeSideEffects(sideEffects)
-							if err != nil {
-								return EngineEvent{}, err
-							}
+						if rejectedObjective.Id() == so.Id() {
 							return allCompleted, nil
 						}
-						pendingSwapObjective, err := e.store.GetObjectiveById(protocols.ObjectiveId(swap.ObjectivePrefix + pendingSwap.Id.String()))
-						if err != nil {
-							return EngineEvent{}, err
-						}
-
-						slog.Debug("DEBUG: Rejecting pending objective", "objectiveId", pendingSwapObjective.Id())
-						pendingSwapObjective, sideEffects := pendingSwapObjective.Reject()
-						err = e.store.SetObjective(pendingSwapObjective)
-						if err != nil {
-							return EngineEvent{}, err
-						}
-
-						err = e.executeSideEffects(sideEffects)
-						if err != nil {
-							return EngineEvent{}, err
-						}
-						allCompleted.CompletedObjectives = append(allCompleted.CompletedObjectives, pendingSwapObjective)
 					}
 				}
 
@@ -1519,23 +1486,43 @@ func (e *Engine) getChannelTypeById(channelId types.Destination) (types.ChannelT
 	return -1, fmt.Errorf("could not find channel for given channel ID: %v", channelId)
 }
 
-func (e *Engine) RejectLowerSwapObjective(currentSwapObjective *swap.Objective) (bool, error) {
-	pendingSwap, err := e.store.GetPendingSwapByChannelId(currentSwapObjective.C.Id)
+func (e *Engine) GetRejectedObjective(currentSwapObjective *swap.Objective) (protocols.Objective, error) {
+	swapChannel := currentSwapObjective.C
+
+	pendingSwap, err := e.store.GetPendingSwapByChannelId(swapChannel.Id)
 	if err != nil {
-		return false, err
+		return nil, err
 	}
 
-	var isCurrentRejected bool
+	if pendingSwap != nil && strings.Compare(pendingSwap.Id.String(), currentSwapObjective.Swap.SwapId().String()) != 0 && swapChannel.MyIndex == 0 {
+		var objectiveToReject protocols.Objective
 
-	if strings.Compare(pendingSwap.Id.String(), currentSwapObjective.Swap.SwapId().String()) < 0 {
-		isCurrentRejected = false
-	} else {
-		isCurrentRejected = true
+		if strings.Compare(pendingSwap.Id.String(), currentSwapObjective.Swap.SwapId().String()) < 0 {
+			pendingSwapObjective, err := e.store.GetObjectiveById(protocols.ObjectiveId(swap.ObjectivePrefix + pendingSwap.Id.String()))
+			if err != nil {
+				return nil, err
+			}
+
+			slog.Debug("DEBUG: engine.go-GetRejectedObjective rejecting pending swap objective", "objectiveId", pendingSwapObjective.Id())
+			objectiveToReject = pendingSwapObjective
+		} else {
+			slog.Debug("DEBUG: engine.go-GetRejectedObjective rejecting current swap objective", "objectiveId", currentSwapObjective.Id())
+			objectiveToReject = currentSwapObjective
+		}
+
+		objectiveToReject, sideEffects := objectiveToReject.Reject()
+		err = e.store.SetObjective(objectiveToReject)
+		if err != nil {
+			return nil, err
+		}
+
+		err = e.executeSideEffects(sideEffects)
+		if err != nil {
+			return nil, err
+		}
+
+		return objectiveToReject, nil
 	}
 
-	if err != nil {
-		return false, err
-	}
-
-	return isCurrentRejected, nil
+	return nil, nil
 }

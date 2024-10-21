@@ -389,6 +389,7 @@ func TestParallelSwaps(t *testing.T) {
 			t.Fatal(err)
 		}
 
+		// Try to confirm both swaps and assert that one of them passes and one of them fails
 		var nodeBErr, nodeAErr error
 		if nodeAPendingSwap.Id == swapInfoFromNodeA.Id {
 			t.Log("Pending swap from node A")
@@ -401,7 +402,6 @@ func TestParallelSwaps(t *testing.T) {
 			nodeBErr = utils.nodeB.ConfirmSwap(swapInfoFromNodeA.Id, types.Accepted)
 		}
 
-		// Try to confirm both swaps and assert that one of them passes and one of them fails
 		var objToWaitFor protocols.ObjectiveId
 		nilErrs := 0
 		var errorsArr []error
