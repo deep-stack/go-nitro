@@ -165,6 +165,41 @@ func (s *Swap) UnmarshalJSON(data []byte) error {
 	return nil
 }
 
+type SwapWithSender struct {
+	Swap   Swap
+	Sender common.Address
+}
+
+func (s SwapWithSender) encode() (types.Bytes, error) {
+	return ethAbi.Arguments{
+		{Type: abi.Destination}, // channel id
+		{Type: abi.Address},     // tokenIn
+		{Type: abi.Address},     // tokenOut
+		{Type: abi.Uint256},     // amountIn
+		{Type: abi.Uint256},     // amountOut
+		{Type: abi.Uint256},     // nonce
+		{Type: abi.Address},     // swap sender address
+	}.Pack(
+		s.Swap.ChannelId,
+		s.Swap.Exchange.TokenIn,
+		s.Swap.Exchange.TokenOut,
+		s.Swap.Exchange.AmountIn,
+		s.Swap.Exchange.AmountOut,
+		new(big.Int).SetUint64(s.Swap.Nonce),
+		s.Sender,
+	)
+}
+
+// Hash returns the keccak256 hash of the State
+func (s SwapWithSender) Hash() (types.Bytes32, error) {
+	encoded, err := s.encode()
+	if err != nil {
+		return types.Bytes32{}, fmt.Errorf("failed to encode swap: %w", err)
+	}
+
+	return crypto.Keccak256Hash(encoded), nil
+}
+
 type Exchange struct {
 	TokenIn   common.Address
 	TokenOut  common.Address
