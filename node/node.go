@@ -367,7 +367,7 @@ func (n *Node) CreateBridgeChannel(Counterparty types.Address, ChallengeDuration
 	)
 
 	// Check store to see if there is an existing channel with this counterparty
-	channelExists, err := bridgedfund.ChannelsExistWithCounterparty(Counterparty, n.store.GetChannelsByParticipant, n.store.GetConsensusChannel)
+	channelExists, err := bridgedfund.OpenLedgerChannelsExistWithCounterparty(Counterparty, n.store.GetChannelsByParticipant, n.store.GetConsensusChannel)
 	if err != nil {
 		slog.Error("bridge fund error", "error", err)
 		return bridgedfund.ObjectiveResponse{}, fmt.Errorf("counterparty check failed: %w", err)
