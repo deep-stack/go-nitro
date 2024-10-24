@@ -261,6 +261,7 @@ export function getAndValidateResult<T extends RequestMethod>(
     case "close_swap_channel":
     case "get_pending_swap":
     case "get_recent_swaps":
+    case "get_swap_channels_by_ledger":
       return validateAndConvertResult(
         stringSchema,
         result,

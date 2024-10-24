@@ -6,6 +6,7 @@ import { readFileSync, writeFileSync } from "fs";
 
 import yargs from "yargs/yargs";
 import { hideBin } from "yargs/helpers";
+import JSONbig from "json-bigint";
 
 import { NitroRpcClient } from "./rpc-client";
 import {
@@ -758,6 +759,37 @@ yargs(hideBin(process.argv))
       );
       const swapChannelInfo = await rpcClient.GetSwapChannel(yargs.channelId);
       console.log(swapChannelInfo);
+      await rpcClient.Close();
+      process.exit(0);
+    }
+  )
+  .command(
+    "get-swap-channels-by-ledger <ledgerId>",
+    "Gets any swap channels funded by the given ledger",
+    (yargsBuilder) => {
+      return yargsBuilder.positional("ledgerId", {
+        describe: "The ID of the ledger channel",
+        type: "string",
+        demandOption: true,
+      });
+    },
+
+    async (yargs) => {
+      const rpcPort = yargs.p;
+      const rpcHost = yargs.h;
+      const isSecure = yargs.s;
+
+      const rpcClient = await NitroRpcClient.CreateHttpNitroClient(
+        getRPCUrl(rpcHost, rpcPort),
+        isSecure
+      );
+      const swapChannels = await rpcClient.GetSwapChannelsByLedger(
+        yargs.ledgerId
+      );
+
+      const parsedData = JSONbig.parse(swapChannels);
+      console.log(prettyJson(parsedData));
+
       await rpcClient.Close();
       process.exit(0);
     }

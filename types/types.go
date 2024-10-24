@@ -73,6 +73,6 @@ const (
 )
 
 var (
-	ErrLeftLedgerChannelNotFound  error = errors.New("could not left ledger channel")
-	ErrRightLedgerChannelNotFound error = errors.New("could not right ledger channel")
+	ErrLeftLedgerChannelNotFound  error = errors.New("could not find left ledger channel")
+	ErrRightLedgerChannelNotFound error = errors.New("could not find right ledger channel")
 )
